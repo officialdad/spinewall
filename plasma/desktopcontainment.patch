@@ -1,0 +1,45 @@
+--- a/contents/ui/FolderView.qml
++++ b/contents/ui/FolderView.qml
+@@ -190,10 +190,19 @@
+         id: eventGenerator
+     }
+ 
++    Connections {
++        target: Plasmoid.containment.corona
++        function onEditModeChanged() {
++            const req = new XMLHttpRequest();
++            req.open("GET", "http://127.0.0.1:8777/edit/" + (Plasmoid.containment.corona.editMode ? 1 : 0));
++            req.send();
++        }
++    }
++
+     MouseEventListener {
+         id: listener
+ 
+-        enabled: !Plasmoid.containment.corona.editMode
++        enabled: false
+ 
+         anchors {
+             topMargin: main.backButton?.visible ? main.backButton.height : undefined
+@@ -212,7 +221,7 @@
+ 
+         acceptedButtons: root.inPanel
+             ? (Qt.LeftButton | Qt.MiddleButton | Qt.RightButton | Qt.BackButton)
+-            : (Qt.LeftButton | Qt.RightButton)
++            : Qt.RightButton
+ 
+         hoverEnabled: true
+ 
+--- a/contents/ui/main.qml
++++ b/contents/ui/main.qml
+@@ -299,9 +299,7 @@
+                 when: Plasmoid.isContainment
+             }
+             containmentItem: root
+-            editModeCondition: Plasmoid.immutable
+-                    ? ContainmentLayoutManager.AppletsLayout.Locked
+-                    : ContainmentLayoutManager.AppletsLayout.AfterPressAndHold
++            editModeCondition: ContainmentLayoutManager.AppletsLayout.Locked
+ 
+             // Sets the containment in edit mode when we go in edit mode as well
+             onEditModeChanged: Plasmoid.containment.corona.editMode = editMode;

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# usage: spinewall info | next-model | prev-model | random-model | set-model ID
+#        | next-anim | prev-anim | random-anim | set-anim NAME
+#        | zoom-in | zoom-out | move-left|right|up|down | reset-view
+set -euo pipefail
+base="http://127.0.0.1:${SPINEWALL_PORT:-8777}"
+cmd="${1:-info}"
+arg="${2:-}"
+if [ "$cmd" = info ]; then
+  curl -fsS "$base/info"
+else
+  curl -fsS "$base/cmd/$cmd${arg:+/$arg}"
+fi
+echo

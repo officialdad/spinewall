@@ -1,0 +1,6 @@
+[Theme]
+name=spinewall
+description=Live Spine 2D animation wallpaper, controlled via the spinewall CLI
+author=officialdad
+version=0.1
+entry=index.html

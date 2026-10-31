@@ -1,0 +1,148 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="spine-player.css">
+<style>
+html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;overflow:hidden}
+#stage{position:absolute;inset:0;display:flex;justify-content:center}
+#p{height:100%;aspect-ratio:1/1;transform-origin:50% 50%;will-change:transform}
+.spine-player-controls{display:none!important}
+.spine-player,.spine-player-canvas{width:100%;height:100%;display:block}
+</style>
+<script src="spine-player40.js"></script>
+<script src="spine-player41.js"></script>
+</head><body><div id="stage"><div id="p"></div></div>
+<script>
+const API = "http://127.0.0.1:8777";
+const POLL_MS = 700;
+const CLICK_MAX_MS = 500;
+const CLICK_MAX_PX = 30;
+const SCALE_MIN = 0.3, SCALE_MAX = 8;
+
+// The Spine player global differs per runtime version, so each model picks its own.
+const RUNTIMES = {spine40: window.spine40, spine41: window.spine41};
+
+let models = [], player = null, anims = [];
+let state = {model: null, animation: null, rev: -1, vrev: -1};
+let editMode = false, dragging = false, click = null;
+let view = {scale: 1, x: 0, y: 0};
+let counts = {wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0};
+
+const post = (path, body) =>
+  fetch(`${API}${path}`, {method: "POST", body: JSON.stringify(body)}).catch(() => {});
+
+function applyView() {
+  document.getElementById("p").style.transform =
+    `translate(${view.x * innerWidth}px, ${view.y * innerHeight}px) scale(${view.scale})`;
+}
+
+let pushTimer = null;
+function pushView() {
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => post("/view", view), 120);
+}
+
+addEventListener("wheel", e => {
+  counts.wheel++;
+  if (!editMode) return;
+  view.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, view.scale * Math.exp(-e.deltaY * 0.0015)));
+  applyView(); pushView();
+}, {passive: true});
+
+addEventListener("pointerdown", e => {
+  counts.pointerdown++;
+  if (e.button !== 0) return;
+  if (editMode) { dragging = true; return; }
+  click = {x: e.clientX, y: e.clientY, t: performance.now()};
+});
+
+addEventListener("pointerup", e => {
+  counts.pointerup++;
+  if (e.button !== 0) return;
+  const isClick = click && !editMode
+    && performance.now() - click.t < CLICK_MAX_MS
+    && Math.hypot(e.clientX - click.x, e.clientY - click.y) < CLICK_MAX_PX;
+  if (isClick) {
+    counts.fired++;
+    fetch(`${API}/cmd/next-anim`).catch(() => {});
+  }
+  click = null;
+  dragging = false;
+});
+
+addEventListener("pointercancel", () => { click = null; dragging = false; });
+
+addEventListener("pointermove", e => {
+  counts.pointermove++;
+  if (!dragging || !editMode) return;
+  view.x += e.movementX / innerWidth;
+  view.y += e.movementY / innerHeight;
+  applyView(); pushView();
+});
+
+// The server counts raw input so `spinewall info` can show whether Plasma delivers pointer events.
+setInterval(() => {
+  if (!Object.values(counts).some(Boolean)) return;
+  const sent = counts;
+  counts = {wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0};
+  post("/input", sent);
+}, 2000);
+
+// The plugin pauses on fullscreen windows and the draw loop never restarts after resume.
+document.addEventListener("webwallpaper:resume", () => location.reload());
+
+let disposing = false;
+addEventListener("webglcontextlost", () => {
+  if (disposing) return;
+  setTimeout(() => location.reload(), 1500);
+}, true);
+
+function load(modelId, animation) {
+  const model = models.find(m => m.id === modelId) || models[0];
+  if (!model) return;
+  if (player) {
+    disposing = true;
+    try { player.dispose(); } catch (e) {}
+    document.getElementById("p").innerHTML = "";
+    setTimeout(() => { disposing = false; }, 1000);
+  }
+  const runtime = RUNTIMES[model.runtime];
+  const base = `${API}/${encodeURIComponent(model.id)}`;
+  player = new runtime.SpinePlayer("p", {
+    skelUrl: `${base}/${encodeURIComponent(model.skeleton)}`,
+    atlasUrl: `${base}/${encodeURIComponent(model.atlas)}`,
+    skin: model.skin,
+    backgroundColor: "#000000",
+    alpha: false,
+    mipmaps: false,
+    showControls: false,
+    success: p => {
+      anims = p.skeleton.data.animations.map(a => a.name);
+      const pick = [animation, model.defaultAnimation, "idle", anims[0]].find(n => anims.includes(n));
+      if (pick) p.animationState.setAnimation(0, pick, true);
+      post("/report", {model: model.id, animations: anims, playing: pick});
+    },
+    error: (p, msg) => console.log("spine load error", model.id, msg)
+  });
+}
+
+async function poll() {
+  try {
+    const s = await (await fetch(`${API}/state`)).json();
+    editMode = !!s.edit;
+    if (s.vrev !== state.vrev && !dragging) {
+      view = {scale: s.scale, x: s.x, y: s.y};
+      applyView();
+    }
+    state.vrev = s.vrev;
+    if (s.rev !== state.rev) {
+      const modelChanged = s.model !== state.model || state.rev === -1;
+      state = s;
+      if (modelChanged) load(s.model, s.animation);
+      else if (player && anims.includes(s.animation)) player.animationState.setAnimation(0, s.animation, true);
+    }
+  } catch (e) {}
+  setTimeout(poll, POLL_MS);
+}
+
+fetch(`${API}/models`).then(r => r.json()).then(list => { models = list; poll(); });
+</script></body></html>

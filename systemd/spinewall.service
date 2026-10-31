@@ -1,0 +1,9 @@
+[Unit]
+Description=Spinewall control server
+
+[Service]
+ExecStart=%h/.local/bin/spinewall-server
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

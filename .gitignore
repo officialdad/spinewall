@@ -1,0 +1,8 @@
+*.skel
+*.atlas
+*.bak.*
+node_modules/
+__pycache__/
+models/
+spine-player*.js
+spine-player*.css
