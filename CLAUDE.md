@@ -1,6 +1,6 @@
 # spinewall
 
-Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 4.0 or 4.1 model works. Do not add game-specific code or names.
+Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`.
 
 ## Layout
 
@@ -12,7 +12,11 @@ Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 4.0 or 4.1 model works. Do n
 | `plasma/desktopcontainment.patch` | Patch for a local copy of the Plasma desktop containment. |
 | `scripts/install.sh` | Installs theme, server, CLI, user service. Fetches the Spine runtimes from npm. |
 | `scripts/patch-plasmoid.sh` | Applies the patch to a local copy of the containment. |
+| `systemd/spinewall.service` | User service for the server. |
 | `docs/assets.md` | Model directory layout and `model.json` keys. |
+| `docs/credits.md` | Sources, tools, and test models. Add a row when you use a new source. |
+| `README.md` | Install steps, CLI, and the code map by function. Keep the code map in step with the code. |
+| `~/.local/state/spinewall/prefs.json` | Favorites, recents, layout, sort, variants. Server-owned, apart from `STATE`, never bumps `rev` or `vrev`. Endpoints: `GET /prefs`, `POST /prefs`, `POST /fav/<id>`. |
 
 ## Data flow
 
@@ -25,11 +29,18 @@ Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 4.0 or 4.1 model works. Do n
 ## Rules
 
 - Never commit models, `.skel`, `.atlas`, atlas images, or Spine runtime files. The runtime license forbids redistribution. The install script fetches it.
-- The two Spine players define the global `spine`. The install script renames them to `spine40` and `spine41`. Keep the theme and the script in step.
-- Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`. The page and server share them. Change both together.
-- The server scans models at start only. A new model needs a server restart until a rescan endpoint exists.
+- The Spine players define the global `spine`. The install script renames the 4.x players to `spine40`, `spine41`, and `spine42` with `sed`. It wraps the 3.8 player in a function that returns `spine38`, because that player names `spine` internally. Keep the theme and the script in step.
+- Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`, `characters`, `crev`. The page and server share them. Change both together.
+- `characters` is a list of `{uid, model, animation, x, y, scale}` in z order, last on top. `crev` bumps on each change. An empty list means single-character mode, which uses the old keys alone. The list persists in `layout.json` (env `SPINEWALL_LAYOUT`), apart from `STATE_FILE`.
+- Several characters share one canvas per Spine runtime. Layers stack by their topmost character, so characters of different runtimes interleave by layer only. Two overlapping characters of different versions can draw in the wrong order.
+- Removing down to one character folds it back into `model`, `animation`, `scale`, `x`, `y`.
+- A click changes only the topmost character under the pointer. Hit testing uses triangle tests on world vertices, so a transparent area does nothing.
+- The server scans models at start and on `GET /rescan` (`spinewall rescan`). A new model appears after a rescan.
+- `model.json` `kind` is `character` or `scene`. The server detects it from region names when absent. A scene draws first in multi mode and never takes a click. `hideSlots` removes backdrop slots from drawing, framing, thumbnails, and hit tests.
+- The picker filter `kind` (Characters, Scenes, All) lives in `prefs.json`.
 - Position `x` and `y` are fractions of the window size. Scale ranges from 0.3 to 8.
-- Normal mode takes left click only. Edit mode takes drag and wheel only. Keep the two apart.
+- In multi mode, edit-mode drag and wheel move the selected character. A press on a character selects it.
+- Normal mode takes left click only. Edit mode takes drag, wheel, and a short left click. A click moves under 30 px, so a drag never counts as one.
 
 ## Plasma constraints
 
@@ -48,11 +59,9 @@ Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 4.0 or 4.1 model works. Do n
 
 ## Next phase
 
-A model picker UI in edit mode. Plan:
-- Add a `/models` consumer in `theme/index.html` that shows only while `edit` is on.
-- Switch models with `GET /cmd/set-model/<id>`.
-- Keep the picker out of the normal mode view, so the wallpaper stays clean.
-- Add a server rescan endpoint so new models appear without a restart.
+- Check multi-character and the picker on the real desktop after each change.
+- Fetch the Nikke ids that are background-only, only where `hideSlots` can leave a character.
+- Add Spine 3.7 support, and an `additional_model_dirs` config.
 
 ## Style
 

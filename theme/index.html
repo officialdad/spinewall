@@ -7,10 +7,130 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #p{height:100%;aspect-ratio:1/1;transform-origin:50% 50%;will-change:transform}
 .spine-player-controls{display:none!important}
 .spine-player,.spine-player-canvas{width:100%;height:100%;display:block}
+#layers{position:absolute;inset:0;pointer-events:none}
+#layers canvas{position:absolute;inset:0;width:100%;height:100%}
+#selbox{position:fixed;display:none;box-sizing:border-box;border:3px dashed #ffd54a;pointer-events:none;z-index:2}
+#picker{position:fixed;z-index:3;top:16px;right:16px;bottom:16px;width:clamp(280px,24vw,440px);box-sizing:border-box;padding:12px;
+  display:none;flex-direction:column;gap:8px;
+  background:#000;color:#fff;border:2px solid #fff;border-radius:8px;
+  font:16px/1.4 system-ui,sans-serif}
+#picker.on{display:flex}
+#picker h2{margin:0;font-size:16px;font-weight:700}
+#picker .empty{margin:0;padding:8px 0}
+#picker button,#picker select,#picker input{font:inherit;color:#fff;background:#000;border:2px solid #767676;border-radius:6px;box-sizing:border-box}
+#picker button,#picker select{cursor:pointer;min-height:44px}
+#picker button:hover,#picker select:hover{border-color:#fff}
+#picker :focus-visible{outline:3px solid #ffd54a;outline-offset:2px}
+#picker input{min-height:44px;padding:4px 12px;width:100%}
+#picker input::placeholder{color:#cfcfcf}
+#picker button[aria-pressed="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
+#picker mark{background:#ffd54a;color:#000;border-radius:2px}
+.pane{display:flex;flex-direction:column;gap:8px;min-height:0}
+#models-pane{flex:1}
+#anims-pane{flex:none;max-height:30%;border-top:2px solid #767676;padding-top:8px}
+#chars-pane{flex:none;gap:6px}
+#chars-pane [hidden]{display:none}
+.charhead{display:flex;align-items:center;gap:8px}
+.charhead h2{flex:1;min-width:0}
+.charhead button{flex:none;padding:4px 12px}
+#chars{display:flex;flex-direction:column;gap:6px;max-height:144px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.6) transparent}
+.charrow{display:flex;gap:6px;flex:none}
+.charrow .sel{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 12px}
+.charrow .rm{flex:none;width:44px;padding:0;font-size:18px}
+#picker .warn{margin:0;padding:6px 8px;border:2px solid #ffd54a;border-radius:6px;font-size:14px}
+.tabs{display:none;gap:6px}
+.tabs button{flex:1}
+.row{display:flex;gap:6px;flex:none}
+.row>*{flex:1;min-width:0;padding:4px 8px}
+.row>.menu-wrap{flex:1.4;position:relative;padding:0}
+.menu-wrap>button{width:100%;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.menu{position:absolute;z-index:5;left:0;right:0;top:100%;margin-top:4px;max-height:264px;overflow-y:auto;
+  background:#000;border:2px solid #fff;border-radius:6px;padding:4px;display:flex;flex-direction:column;gap:4px}
+.menu[hidden]{display:none}
+/* Thin scrollbar. The thumb keeps a 14 px wide hit area with a 6 px visible bar, so it stays easy to grab. */
+#list,#anims,.menu{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.6) transparent}
+@supports selector(::-webkit-scrollbar){
+  #list,#anims,.menu{scrollbar-width:auto;scrollbar-color:auto}
+  #list::-webkit-scrollbar,#anims::-webkit-scrollbar,.menu::-webkit-scrollbar{width:14px}
+  #list::-webkit-scrollbar-track,#anims::-webkit-scrollbar-track,.menu::-webkit-scrollbar-track{background:transparent}
+  #list::-webkit-scrollbar-thumb,#anims::-webkit-scrollbar-thumb,.menu::-webkit-scrollbar-thumb{
+    background:rgba(255,255,255,.6);background-clip:padding-box;border:4px solid transparent;border-radius:7px;min-height:44px}
+  #list::-webkit-scrollbar-thumb:hover,#anims::-webkit-scrollbar-thumb:hover,.menu::-webkit-scrollbar-thumb:hover,
+  #list::-webkit-scrollbar-thumb:active,#anims::-webkit-scrollbar-thumb:active,.menu::-webkit-scrollbar-thumb:active{
+    background:rgba(255,255,255,.95);background-clip:padding-box}
+}
+.menu button{text-align:left;border-color:transparent}
+.menu button[aria-checked="true"]::before{content:"\2713\00a0"}
+.menu button:not([aria-checked="true"])::before{content:"\00a0\00a0\00a0"}
+.listbox{position:relative;display:flex;flex:1;min-height:0;gap:4px}
+#list{position:relative;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;touch-action:pan-y}
+#spacer{position:relative;width:100%}
+.cell{position:absolute;box-sizing:border-box;border:2px solid #767676;border-radius:6px;overflow:hidden;cursor:pointer}
+.cell:hover{border-color:#fff}
+.cell.active{outline:3px solid #ffd54a;outline-offset:-3px}
+/* A character card holds the playing model with a white bar. Only a playing model row fills white. */
+.cell.holds{box-shadow:inset 6px 0 0 #fff}
+.cell.list.holds{padding-left:16px}
+.cell[aria-current="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
+.cell.list{display:flex;align-items:center;gap:12px;padding:6px 52px 6px 6px}
+.cell.grid{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 4px}
+.cell.variant{border-style:dashed}
+.cell .txt{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cell.list .txt{flex:1}
+.cell.grid .txt{width:100%;text-align:center}
+.cell .meta{font-size:13px;line-height:1.25;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cell .meta:empty{display:none}
+.cell .meta .now{font-weight:700}
+.cell.list .meta .now::before{content:" \00b7 ";font-weight:400}
+.cell.grid .meta span{display:block;overflow:hidden;text-overflow:ellipsis}
+.cell.grid.group .name{-webkit-line-clamp:1}
+.cell .check{display:none;font-weight:700;flex:none}
+.cell[aria-current="true"] .check{display:inline-block}
+.cell.grid .check{position:absolute;left:8px;top:6px}
+.cell .chev{position:absolute;right:0;top:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:18px;pointer-events:none}
+.cell.list .chev{height:100%}
+.subhead{position:absolute;margin:0;box-sizing:border-box;left:6px;width:calc(100% - 6px);border-left:2px solid #767676;
+  padding-left:8px;font-size:13px;font-weight:400;line-height:32px;color:#cfcfcf;pointer-events:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.cell .th{width:48px;height:48px;flex:none;border-radius:4px;background:#2b2b2b;overflow:hidden;position:relative}
+.cell.grid .th{width:64px;height:64px}
+.cell .th::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#2b2b2b,#4a4a4a,#2b2b2b);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
+.cell .th[data-ready]::before{display:none}
+.cell .th img{position:absolute;inset:0;width:100%;height:100%;visibility:hidden}
+.cell .th[data-ready] img{visibility:visible}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.cell .th::before{animation:none}}
+.cell .name{overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:1.2}
+.cell.list .name{white-space:nowrap}
+.cell.grid .name{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-align:center;font-size:14px;width:100%}
+#picker .cell .star{position:absolute;right:0;top:0;width:44px;height:44px;min-height:44px;border:0;background:transparent;color:inherit;font-size:20px;padding:0}
+#picker .cell .star[aria-pressed="true"]{background:transparent;color:inherit;font-weight:400}
+#rail{display:flex;flex-direction:column;overflow:hidden;flex:none;width:44px;box-sizing:border-box;
+  border:2px solid #767676;border-radius:6px;touch-action:none;user-select:none;cursor:pointer}
+#rail[hidden]{display:none}
+#rail .rl{flex:1 1 0;min-height:0;display:flex;align-items:center;justify-content:center;font:700 13px/1 system-ui,sans-serif;color:#fff}
+#rail .rl.none{color:#767676;font-weight:400}
+#rail .rl.cur{background:#fff;color:#000;border-radius:4px}
+.bubble{position:absolute;right:56px;width:56px;height:56px;display:flex;align-items:center;justify-content:center;z-index:6;
+  background:#ffd54a;color:#000;border-radius:8px;font:700 28px/1 system-ui,sans-serif;pointer-events:none}
+.bubble[hidden]{display:none}
+#anims{display:flex;flex-direction:column;gap:6px;overflow-y:auto;min-height:0;touch-action:pan-y}
+#anims button{position:relative;min-height:44px;padding:4px 12px;text-align:left;flex:none}
+#anims button[aria-current="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700;padding-right:32px}
+#anims button[aria-current="true"]::after{content:"\2713";position:absolute;right:12px}
+@media (max-height:719px){
+  .tabs{display:flex}
+  .pane>h2{display:none}
+  #picker[data-tab="models"] #anims-pane,#picker[data-tab="anims"] #models-pane,#picker[data-tab="anims"] #chars-pane{display:none}
+  #chars{max-height:144px}
+  #anims-pane{max-height:none;flex:1;border-top:0;padding-top:0}
+}
 </style>
 <script src="spine-player40.js"></script>
 <script src="spine-player41.js"></script>
-</head><body><div id="stage"><div id="p"></div></div>
+<script src="spine-player42.js"></script>
+<script src="spine-player38.js"></script>
+</head><body><div id="stage"><div id="p"></div></div><div id="layers"></div><div id="selbox"></div>
+<nav id="picker" aria-label="Model picker"></nav>
 <script>
 const API = "http://127.0.0.1:8777";
 const POLL_MS = 700;
@@ -19,13 +139,23 @@ const CLICK_MAX_PX = 30;
 const SCALE_MIN = 0.3, SCALE_MAX = 8;
 
 // The Spine player global differs per runtime version, so each model picks its own.
-const RUNTIMES = {spine40: window.spine40, spine41: window.spine41};
+// The 3.8 runtime nests the renderer classes under `webgl` and has a different player API.
+// Flattening it lets the thumbnail code treat every runtime alike. `legacy` marks the API differences.
+const RUNTIMES = {
+  spine40: window.spine40,
+  spine41: window.spine41,
+  spine42: window.spine42,
+  spine38: window.spine38 && {...window.spine38, ...window.spine38.webgl, legacy: true},
+};
 
 let models = [], player = null, anims = [];
+// Several characters share one stage. `layout` mirrors the server list, and an empty list means the single player.
+let multi = false, layout = [], selectedUid = null, crev = -1, layoutPending = false;
+const WARN_ABOVE = 25;
 let state = {model: null, animation: null, rev: -1, vrev: -1};
 let editMode = false, dragging = false, click = null;
 let view = {scale: 1, x: 0, y: 0};
-let counts = {wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0};
+let counts = {wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0};
 
 const post = (path, body) =>
   fetch(`${API}${path}`, {method: "POST", body: JSON.stringify(body)}).catch(() => {});
@@ -44,6 +174,11 @@ function pushView() {
 addEventListener("wheel", e => {
   counts.wheel++;
   if (!editMode) return;
+  if (multi) {
+    const c = selectedChar() || hitTest(e.clientX, e.clientY);
+    if (c) { c.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, c.scale * Math.exp(-e.deltaY * 0.0015))); layoutMoved(); }
+    return;
+  }
   view.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, view.scale * Math.exp(-e.deltaY * 0.0015)));
   applyView(); pushView();
 }, {passive: true});
@@ -51,17 +186,28 @@ addEventListener("wheel", e => {
 addEventListener("pointerdown", e => {
   counts.pointerdown++;
   if (e.button !== 0) return;
-  if (editMode) { dragging = true; return; }
+  if (editMode) dragging = true;
+  if (multi && editMode) {
+    const hit = hitTest(e.clientX, e.clientY);
+    if (hit) selectChar(hit.uid);
+  }
   click = {x: e.clientX, y: e.clientY, t: performance.now()};
 });
 
 addEventListener("pointerup", e => {
   counts.pointerup++;
   if (e.button !== 0) return;
-  const isClick = click && !editMode
+  const isClick = click
     && performance.now() - click.t < CLICK_MAX_MS
     && Math.hypot(e.clientX - click.x, e.clientY - click.y) < CLICK_MAX_PX;
-  if (isClick) {
+  if (isClick && multi) {
+    // Only the topmost character under the pointer reacts. Empty space does nothing.
+    const hit = hitTest(e.clientX, e.clientY);
+    if (hit) {
+      counts.fired++;
+      fetch(`${API}/cmd/next-char-anim/${hit.uid}`).catch(() => {});
+    }
+  } else if (isClick) {
     counts.fired++;
     fetch(`${API}/cmd/next-anim`).catch(() => {});
   }
@@ -74,16 +220,941 @@ addEventListener("pointercancel", () => { click = null; dragging = false; });
 addEventListener("pointermove", e => {
   counts.pointermove++;
   if (!dragging || !editMode) return;
+  if (multi) {
+    const c = selectedChar();
+    if (c) { c.x += e.movementX / innerWidth; c.y += e.movementY / innerHeight; layoutMoved(); }
+    return;
+  }
   view.x += e.movementX / innerWidth;
   view.y += e.movementY / innerHeight;
   applyView(); pushView();
 });
 
+const picker = document.getElementById("picker");
+
+// Edit mode owns drag and wheel on the window, so the panel must keep its events to itself.
+["pointerdown", "pointerup", "pointermove", "wheel"].forEach(type =>
+  picker.addEventListener(type, e => e.stopPropagation()));
+
+const NO_GROUP = "Other";
+const RECENT_SHOWN = 6;
+const KINDS = [["character", "Characters"], ["scene", "Scenes"], ["all", "All"]];
+const groupOf = m => m.group || NO_GROUP;
+
+// Favorites, recents, layout, and sort live on the server so a plasmashell restart keeps them.
+let prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true};
+let query = "";
+let sourceSel = new Set();
+let expanded = new Set();
+let items = [];
+let activeKey = null;
+let matchInfo = new Map();
+
+const savePrefs = patch => {
+  Object.assign(prefs, patch);
+  post("/prefs", patch);
+};
+
+async function refreshPrefs() {
+  try { prefs = {...prefs, ...(await (await fetch(`${API}/prefs`)).json())}; } catch (e) {}
+}
+
+// Subsequence match. Consecutive letters and word starts score higher, so "ar" finds "aru" before "bare".
+function fuzzy(q, text) {
+  const needle = q.toLowerCase(), hay = text.toLowerCase();
+  const idx = [];
+  let score = 0, from = 0, last = -2;
+  for (const ch of needle) {
+    if (ch === " ") continue;
+    const at = hay.indexOf(ch, from);
+    if (at < 0) return null;
+    score += at === last + 1 ? 8 : 1;
+    if (at === 0 || /[\s_\-.]/.test(hay[at - 1])) score += 6;
+    idx.push(at);
+    last = at;
+    from = at + 1;
+  }
+  return {score: score - hay.length * 0.05, idx};
+}
+
+function matchModel(q, m) {
+  const byName = fuzzy(q, m.name);
+  if (byName) return {score: byName.score + 4, idx: byName.idx};
+  const other = [m.id, m.character].map(t => t && fuzzy(q, t)).filter(Boolean);
+  return other.length ? {score: Math.max(...other.map(o => o.score)), idx: []} : null;
+}
+
+function highlight(el, text, idx) {
+  el.replaceChildren();
+  if (!idx.length) { el.textContent = text; return; }
+  const hit = new Set(idx);
+  let run = "", marked = false;
+  const flush = () => {
+    if (!run) return;
+    if (marked) { const mk = document.createElement("mark"); mk.textContent = run; el.append(mk); }
+    else el.append(run);
+    run = "";
+  };
+  [...text].forEach((ch, i) => {
+    const on = hit.has(i);
+    if (on !== marked) { flush(); marked = on; }
+    run += ch;
+  });
+  flush();
+}
+
+const byName = (a, b) => a.name.localeCompare(b.name);
+const recentRank = id => { const i = prefs.recent.indexOf(id); return i < 0 ? Infinity : i; };
+
+function comparator(a, b) {
+  if (query) return (matchInfo.get(b.id).score - matchInfo.get(a.id).score) || byName(a, b);
+  if (prefs.sort === "recent") return (recentRank(a.id) - recentRank(b.id)) || byName(a, b);
+  if (prefs.sort === "source")
+    return ((groupOf(a) === NO_GROUP) - (groupOf(b) === NO_GROUP)) || groupOf(a).localeCompare(groupOf(b)) || byName(a, b);
+  return byName(a, b);
+}
+
+function buildItems() {
+  const q = query.trim();
+  matchInfo = new Map();
+  let pool = models.filter(m => (!sourceSel.size || sourceSel.has(groupOf(m))) && (prefs.kind === "all" || m.kind === prefs.kind));
+  if (q) pool = pool.filter(m => { const r = matchModel(q, m); if (r) matchInfo.set(m.id, r); return !!r; });
+  const out = [];
+  const card = (m, extra) => out.push({k: "c", m, count: 1, ...extra});
+  if (!q) {
+    const favs = pool.filter(m => prefs.favorites.includes(m.id)).sort(byName);
+    const recents = prefs.recent.map(id => pool.find(m => m.id === id)).filter(Boolean).slice(0, RECENT_SHOWN);
+    if (favs.length) { out.push({k: "h", label: "Favorites"}); favs.forEach(m => card(m, {section: "fav"})); }
+    if (recents.length) { out.push({k: "h", label: "Recent"}); recents.forEach(m => card(m, {section: "recent"})); }
+    if (favs.length || recents.length) out.push({k: "h", label: "All models"});
+  }
+  const sorted = [...pool].sort(comparator);
+  if (!prefs.variants) { sorted.forEach(m => card(m, {})); return out; }
+  const groups = new Map();
+  for (const m of sorted) {
+    if (!groups.has(m.character)) groups.set(m.character, []);
+    groups.get(m.character).push(m);
+  }
+  for (const [character, members] of groups) {
+    members.sort(byName);
+    const rep = members.find(m => m.id === character) || members[0];
+    if (members.length === 1) { card(rep, {}); continue; }
+    const open = expanded.has(character);
+    out.push({k: "c", m: rep, count: members.length, character, open, members});
+    if (open) {
+      out.push({k: "s", character, count: members.length});
+      members.forEach(m => card(m, {variant: true, parent: rep.name}));
+    }
+  }
+  return out;
+}
+
+const itemKey = it => it.k === "h" ? `h:${it.label}` : it.k === "s" ? `s:${it.character}` : `c:${it.section || ""}:${it.variant ? "v" : ""}${it.count > 1 ? "g" : ""}:${it.m.id}`;
+
+const GAP = 8, LIST_H = 64, GRID_MIN = 96, GRID_H = 136, HEAD_H = 32, SUB_INDENT = 16;
+let ui = null, pos = [], cellEls = new Map(), keyIds = new Map(), thumbCancels = new Map();
+let renderQueued = false;
+
+const el = (tag, props = {}, ...kids) => {
+  const e = Object.assign(document.createElement(tag), props);
+  e.append(...kids);
+  return e;
+};
+
+function ensureChrome() {
+  if (ui) return;
+  const search = el("input", {type: "search", placeholder: "Search models", autocomplete: "off", spellcheck: false});
+  search.setAttribute("role", "combobox");
+  search.setAttribute("aria-label", "Search models");
+  search.setAttribute("aria-controls", "list");
+  search.setAttribute("aria-expanded", "true");
+  const sourceBtn = el("button", {type: "button"});
+  sourceBtn.setAttribute("aria-haspopup", "menu");
+  sourceBtn.setAttribute("aria-expanded", "false");
+  const menu = el("div", {className: "menu", hidden: true});
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", "Filter by source");
+  const sortSel = el("select", {}, ...[["name", "Sort: Name"], ["recent", "Sort: Recent"], ["source", "Sort: Source"]]
+    .map(([v, t]) => el("option", {value: v, textContent: t})));
+  sortSel.setAttribute("aria-label", "Sort models");
+  const gridBtn = el("button", {type: "button", textContent: "Grid"});
+  const listBtn = el("button", {type: "button", textContent: "List"});
+  const varBtn = el("button", {type: "button", textContent: "Variants"});
+  const kindBtns = KINDS.map(() => el("button", {type: "button"}));
+  const kindRow = el("div", {className: "row"}, ...kindBtns);
+  kindRow.setAttribute("role", "group");
+  kindRow.setAttribute("aria-label", "Model kind");
+  const list = el("div", {id: "list"});
+  list.setAttribute("role", "listbox");
+  list.setAttribute("aria-label", "Models");
+  const spacer = el("div", {id: "spacer"});
+  list.append(spacer);
+  const rail = el("div", {id: "rail", title: "Jump to letter. Press or drag to scroll the list."});
+  rail.setAttribute("role", "group");
+  rail.setAttribute("aria-label", "Jump to letter");
+  const bubble = el("div", {className: "bubble", hidden: true});
+  bubble.setAttribute("aria-hidden", "true");
+  const listbox = el("div", {className: "listbox"}, list, rail, bubble);
+  const empty = el("p", {className: "empty", hidden: true});
+  const modelsPane = el("div", {className: "pane", id: "models-pane"},
+    el("h2", {textContent: "Models"}), search,
+    el("div", {className: "row"}, el("div", {className: "menu-wrap"}, sourceBtn, menu), sortSel),
+    kindRow,
+    el("div", {className: "row"}, gridBtn, listBtn, varBtn),
+    empty, listbox);
+  const animSearch = el("input", {type: "search", placeholder: "Search animations", autocomplete: "off", spellcheck: false});
+  animSearch.setAttribute("aria-label", "Search animations");
+  const animGroupSel = el("select", {});
+  animGroupSel.setAttribute("aria-label", "Animation group");
+  const animList = el("div", {id: "anims"});
+  const animsPane = el("div", {className: "pane", id: "anims-pane"},
+    el("h2", {textContent: "Animations"}), animSearch, animGroupSel, animList);
+  const charsTitle = el("h2", {textContent: "Characters"});
+  const addBtn = el("button", {type: "button", textContent: "Add character"});
+  addBtn.setAttribute("aria-label", "Add the highlighted model as another character");
+  const charsWarn = el("p", {className: "warn", hidden: true});
+  charsWarn.setAttribute("role", "status");
+  const charsList = el("div", {id: "chars", hidden: true});
+  charsList.setAttribute("role", "group");
+  charsList.setAttribute("aria-label", "Characters on screen");
+  const charsPane = el("div", {className: "pane", id: "chars-pane"},
+    el("div", {className: "charhead"}, charsTitle, addBtn), charsWarn, charsList);
+  const tabModels = el("button", {type: "button", textContent: "Models"});
+  const tabAnims = el("button", {type: "button", textContent: "Animations"});
+  const tabs = el("div", {className: "tabs"}, tabModels, tabAnims);
+  picker.replaceChildren(tabs, charsPane, modelsPane, animsPane);
+  picker.dataset.tab = "models";
+  ui = {kindBtns, search, sourceBtn, menu, sortSel, gridBtn, listBtn, varBtn, list, spacer, rail, bubble, listbox, empty, modelsPane,
+        animSearch, animGroupSel, animList, tabModels, tabAnims, charsTitle, addBtn, charsWarn, charsList};
+  addBtn.addEventListener("click", addHighlighted);
+
+  const setTab = t => {
+    picker.dataset.tab = t;
+    tabModels.setAttribute("aria-pressed", String(t === "models"));
+    tabAnims.setAttribute("aria-pressed", String(t === "anims"));
+    scheduleRender();
+    renderAnims();
+  };
+  tabModels.addEventListener("click", () => setTab("models"));
+  tabAnims.addEventListener("click", () => setTab("anims"));
+  setTab("models");
+
+  search.addEventListener("input", () => { query = search.value; activeKey = null; ui.list.scrollTop = 0; renderPicker(); });
+  search.addEventListener("keydown", onSearchKey);
+  sortSel.addEventListener("change", () => { savePrefs({sort: sortSel.value}); renderPicker(); });
+  gridBtn.addEventListener("click", () => { savePrefs({layout: "grid"}); renderPicker(); });
+  listBtn.addEventListener("click", () => { savePrefs({layout: "list"}); renderPicker(); });
+  kindBtns.forEach((b, i) => b.addEventListener("click", () => {
+    savePrefs({kind: KINDS[i][0]});
+    activeKey = null;
+    ui.list.scrollTop = 0;
+    renderPicker();
+  }));
+  varBtn.addEventListener("click", () => { savePrefs({variants: !prefs.variants}); renderPicker(); });
+  sourceBtn.addEventListener("click", () => toggleMenu());
+  sourceBtn.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown" && menu.hidden) { e.preventDefault(); toggleMenu(true); }
+  });
+  menu.addEventListener("keydown", onMenuKey);
+  picker.addEventListener("pointerdown", e => { if (!menu.hidden && !e.target.closest(".menu-wrap")) toggleMenu(false); });
+  list.addEventListener("scroll", scheduleRender, {passive: true});
+  new ResizeObserver(scheduleRender).observe(list);
+  // The rail sizes its letters to the list box height, so it redraws when the box resizes.
+  new ResizeObserver(() => { if (items.length) { drawRail(); updateRailCurrent(); } }).observe(listbox);
+  setupRailScrub();
+  animSearch.addEventListener("input", () => { animQuery = animSearch.value; renderAnims(); });
+  animGroupSel.addEventListener("change", () => { animGroup = animGroupSel.value; renderAnims(); });
+  animSearch.addEventListener("keydown", e => {
+    if (e.key === "Escape" && animSearch.value) { e.preventDefault(); animSearch.value = animQuery = ""; renderAnims(); }
+  });
+}
+
+function toggleMenu(open = ui.menu.hidden) {
+  ui.menu.hidden = !open;
+  ui.sourceBtn.setAttribute("aria-expanded", String(open));
+  if (open) { buildMenu(); const first = ui.menu.querySelector("button"); if (first) first.focus(); }
+}
+
+function buildMenu() {
+  const counts = new Map();
+  for (const m of models) counts.set(groupOf(m), (counts.get(groupOf(m)) || 0) + 1);
+  const names = [...counts.keys()].sort((a, b) => (a === NO_GROUP) - (b === NO_GROUP) || a.localeCompare(b));
+  const entry = (label, checked, onPick, role) => {
+    const b = el("button", {type: "button", textContent: label, tabIndex: -1});
+    b.setAttribute("role", role);
+    b.setAttribute("aria-checked", String(checked));
+    b.addEventListener("click", onPick);
+    return b;
+  };
+  ui.menu.replaceChildren(
+    entry(`All sources (${models.length})`, !sourceSel.size, () => { sourceSel.clear(); afterSourceChange(); }, "menuitemradio"),
+    ...names.map(n => entry(`${n} (${counts.get(n)})`, sourceSel.has(n), () => {
+      if (!sourceSel.delete(n)) sourceSel.add(n);
+      afterSourceChange();
+    }, "menuitemcheckbox")));
+}
+
+function afterSourceChange() {
+  const focused = [...ui.menu.querySelectorAll("button")].indexOf(document.activeElement);
+  buildMenu();
+  const buttons = ui.menu.querySelectorAll("button");
+  if (buttons[Math.max(focused, 0)]) buttons[Math.max(focused, 0)].focus();
+  activeKey = null;
+  ui.list.scrollTop = 0;
+  renderPicker();
+}
+
+function onMenuKey(e) {
+  const buttons = [...ui.menu.querySelectorAll("button")];
+  const i = buttons.indexOf(document.activeElement);
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); toggleMenu(false); ui.sourceBtn.focus(); }
+  else if (e.key === "ArrowDown") { e.preventDefault(); buttons[(i + 1) % buttons.length].focus(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); buttons[(i - 1 + buttons.length) % buttons.length].focus(); }
+  else if (e.key === "Tab") toggleMenu(false);
+}
+
+function renderPicker() {
+  if (!ui) ensureChrome();
+  if (sourceSel.size) for (const s of [...sourceSel]) if (!models.some(m => groupOf(m) === s)) sourceSel.delete(s);
+  items = buildItems();
+  KINDS.forEach(([kind, label], i) => {
+    const count = kind === "all" ? models.length : models.filter(m => m.kind === kind).length;
+    ui.kindBtns[i].textContent = `${label} (${count})`;
+    ui.kindBtns[i].setAttribute("aria-pressed", String(prefs.kind === kind));
+  });
+  const sources = sourceSel.size ? [...sourceSel].join(", ") : "All";
+  ui.sourceBtn.textContent = `Source: ${sources}`;
+  ui.sourceBtn.title = ui.sourceBtn.textContent;
+  renderChars();
+  ui.sortSel.value = prefs.sort;
+  ui.sortSel.disabled = !!query.trim();
+  for (const [b, on] of [[ui.gridBtn, prefs.layout === "grid"], [ui.listBtn, prefs.layout === "list"], [ui.varBtn, prefs.variants]])
+    b.setAttribute("aria-pressed", String(on));
+  const cells = items.filter(i => i.k === "c").length;
+  ui.empty.hidden = cells > 0;
+  ui.empty.textContent = models.length ? "No models match." : "No models found. Add one to the models directory.";
+  ui.list.setAttribute("aria-label", `Models, ${cells} shown`);
+  drawRail();
+  computeLayout();
+  renderWindow();
+  renderAnims();
+}
+
+function computeLayout() {
+  const W = ui.list.clientWidth;
+  const grid = prefs.layout === "grid";
+  const colsFor = w => grid ? Math.max(1, Math.floor((w + GAP) / (GRID_MIN + GAP))) : 1;
+  const rowH = grid ? GRID_H : LIST_H;
+  const cols = colsFor(W), colsV = colsFor(W - SUB_INDENT);
+  const cellW = (W - GAP * (cols - 1)) / cols;
+  const cellWv = (W - SUB_INDENT - GAP * (colsV - 1)) / colsV;
+  let col = 0, y = 0, sub = null;
+  const endRow = () => { if (col) { y += rowH + GAP; col = 0; } };
+  // The variants block draws one connector line from its label to its last row, so it needs the block height.
+  const closeSub = () => { if (sub) { sub.span = Math.max(y - GAP - sub.y, HEAD_H); sub = null; } };
+  pos = items.map(it => {
+    if (it.k === "h" || it.k === "s") {
+      endRow(); closeSub();
+      const p = {x: 0, y, w: W, h: HEAD_H, span: HEAD_H};
+      if (it.k === "s") sub = p;
+      y += HEAD_H + GAP;
+      return p;
+    }
+    if (it.variant) {
+      const p = {x: SUB_INDENT + col * (cellWv + GAP), y, w: cellWv, h: rowH};
+      if (++col === colsV) { y += rowH + GAP; col = 0; }
+      return p;
+    }
+    if (sub) { endRow(); closeSub(); }
+    const p = {x: col * (cellW + GAP), y, w: cellW, h: rowH};
+    if (++col === cols) { y += rowH + GAP; col = 0; }
+    return p;
+  });
+  endRow(); closeSub();
+  ui.spacer.style.height = `${Math.max(y - GAP, 0)}px`;
+  ui.cols = cols;
+}
+
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; if (ui && editMode) { computeLayout(); renderWindow(); } });
+}
+
+// A character card never counts as the playing model. It only holds it, and the playing variant row is the selection.
+const shownModel = () => (multi && selectedChar() ? selectedChar().model : state.model);
+const isPlaying = it => it.count === 1 && it.m.id === shownModel();
+const heldModel = it => it.count > 1 ? it.members.find(m => m.id === shownModel()) : null;
+
+// With several characters, picking a model replaces the selected one. Otherwise it replaces the single model.
+function setModel(id) {
+  const target = multi && selectedChar();
+  const path = target ? `set-char-model/${target.uid}/${encodeURIComponent(id)}` : `set-model/${encodeURIComponent(id)}`;
+  fetch(`${API}/cmd/${path}`).catch(() => {});
+}
+
+function addHighlighted() {
+  const it = items.find(i => i.k === "c" && itemKey(i) === activeKey);
+  const id = it ? playTarget(it).id : shownModel();
+  if (id) fetch(`${API}/cmd/add-character/${encodeURIComponent(id)}`).catch(() => {});
+}
+
+// Enter or a double click plays the variant the user played last, else the first one.
+function playTarget(it) {
+  const lastId = prefs.recent.find(id => it.members.some(m => m.id === id));
+  return it.members.find(m => m.id === lastId) || it.m;
+}
+
+function cellId(key) {
+  if (!keyIds.has(key)) keyIds.set(key, `o${keyIds.size}`);
+  return keyIds.get(key);
+}
+
+function makeCell(it, key, grid) {
+  const img = el("img", {alt: ""});
+  const th = el("span", {className: "th"}, img);
+  const name = el("span", {className: "name"});
+  const meta = el("span", {className: "meta"});
+  const check = el("span", {className: "check", textContent: "\u2713"});
+  check.setAttribute("aria-hidden", "true");
+  const group = it.count > 1;
+  const c = el("div", {className: `cell ${grid ? "grid" : "list"}${it.variant ? " variant" : ""}${group ? " group" : ""}`, id: cellId(key)});
+  c.setAttribute("role", "option");
+  c.append(th, check, el("span", {className: "txt"}, name, meta));
+  let star = null, chev = null;
+  if (group) {
+    // Favorites stay per model, so a character card has no star. Star the variant instead.
+    chev = el("span", {className: "chev"});
+    chev.setAttribute("aria-hidden", "true");
+    c.append(chev);
+    c.addEventListener("dblclick", () => {
+      const fresh = items.find(i => i.k === "c" && i.character === it.character);
+      if (fresh) playCharacter(fresh);
+    });
+  } else {
+    star = el("button", {type: "button", className: "star", tabIndex: -1});
+    star.addEventListener("click", e => {
+      e.stopPropagation();
+      fetch(`${API}/fav/${encodeURIComponent(it.m.id)}`, {method: "POST", body: "{}"})
+        .then(r => r.json()).then(p => { if (p.favorites) { prefs.favorites = p.favorites; renderPicker(); } }).catch(() => {});
+    });
+    c.append(star);
+  }
+  c.addEventListener("click", () => {
+    const fresh = items.find(i => i.k === "c" && itemKey(i) === key) || it;
+    activate(fresh);
+  });
+  c._parts = {th, img, name, meta, star, chev};
+  return c;
+}
+
+function renderWindow() {
+  if (!ui) return;
+  const W = ui.list.clientWidth, H = ui.list.clientHeight;
+  if (!W || !H) return;
+  const top = ui.list.scrollTop, grid = prefs.layout === "grid";
+  const lo = top - H, hi = top + H * 2;
+  let posinset = 0;
+  const live = new Set(), want = [];
+  items.forEach((it, i) => {
+    if (it.k !== "c") return;
+    posinset++;
+    const p = pos[i];
+    if (p.y + p.h < lo || p.y > hi) return;
+    const key = itemKey(it);
+    live.add(key);
+    let c = cellEls.get(key);
+    if (c && c._grid !== grid) { c.remove(); cellEls.delete(key); c = null; }
+    if (!c) {
+      c = makeCell(it, key, grid);
+      c._grid = grid;
+      cellEls.set(key, c);
+      ui.spacer.append(c);
+      want.push({c, it, dist: Math.max(0, top - (p.y + p.h), p.y - (top + H)), y: p.y});
+    }
+    const info = matchInfo.get(it.m.id);
+    const {name, meta, star, chev} = c._parts;
+    highlight(name, it.m.name, info ? info.idx : []);
+    if (star) {
+      const fav = prefs.favorites.includes(it.m.id);
+      star.textContent = fav ? "★" : "☆";
+      star.setAttribute("aria-pressed", String(fav));
+      star.setAttribute("aria-label", `Favorite ${it.m.name}`);
+    }
+    const held = heldModel(it);
+    c.style.cssText = `left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px`;
+    c.setAttribute("aria-posinset", String(posinset));
+    c.setAttribute("aria-setsize", String(items.filter(x => x.k === "c").length));
+    if (it.count > 1) {
+      const target = playTarget(it);
+      meta.replaceChildren(el("span", {textContent: `${it.count} variants`}));
+      if (held) meta.append(el("span", {className: "now", textContent: `Playing: ${held.name}`}));
+      chev.textContent = it.open ? "\u25be" : "\u25b8";
+      c.setAttribute("aria-label", `${it.m.name}, ${it.count} variants${held ? `, playing ${held.name}` : ""}`);
+      c.setAttribute("aria-expanded", String(!!it.open));
+      c.title = `${it.open ? "Hide" : "Show"} ${it.count} variants. Enter or double click plays ${target.name}.`;
+      c.setAttribute("aria-selected", "false");
+    } else {
+      meta.replaceChildren();
+      c.setAttribute("aria-label", it.variant ? `${it.m.name}, variant of ${it.parent}` : it.m.name);
+      c.removeAttribute("aria-expanded");
+      c.title = it.m.name;
+      c.setAttribute("aria-selected", String(isPlaying(it)));
+    }
+    c.classList.toggle("holds", !!held);
+    if (isPlaying(it)) c.setAttribute("aria-current", "true"); else c.removeAttribute("aria-current");
+    c.classList.toggle("active", key === activeKey);
+  });
+  items.forEach((it, i) => {
+    if (it.k === "c") return;
+    const key = itemKey(it), p = pos[i];
+    if (p.y + p.span < lo || p.y > hi) return;
+    live.add(key);
+    let h = cellEls.get(key);
+    if (!h) {
+      if (it.k === "s") {
+        h = el("div", {className: "subhead", textContent: "Variants - pick one to play"});
+        h.setAttribute("aria-hidden", "true");
+      } else {
+        h = el("h3", {textContent: it.label});
+        h.style.cssText = `position:absolute;margin:0;font-size:14px;line-height:${HEAD_H}px;left:0;width:100%`;
+      }
+      cellEls.set(key, h);
+      ui.spacer.append(h);
+    }
+    h.style.top = `${p.y}px`;
+    if (it.k === "s") h.style.height = `${p.span}px`;
+  });
+  for (const [key, c] of cellEls) {
+    if (live.has(key)) continue;
+    c.remove();
+    cellEls.delete(key);
+    const cancel = thumbCancels.get(key);
+    if (cancel) { cancel(); thumbCancels.delete(key); }
+  }
+  // The last job pushed runs first, so jobs in view go last, with the topmost row at the very end.
+  want.sort((a, b) => b.dist - a.dist || b.y - a.y).forEach(({c, it}) => {
+    const {th, img} = c._parts, key = itemKey(it);
+    thumbCancels.set(key, wantThumb(it.m, url => {
+      thumbCancels.delete(key);
+      img.onload = () => th.setAttribute("data-ready", "");
+      img.src = url;
+    }));
+  });
+  updateRailCurrent();
+  const act = cellEls.get(activeKey);
+  if (act) ui.search.setAttribute("aria-activedescendant", act.id); else ui.search.removeAttribute("aria-activedescendant");
+}
+
+// A click on a character only opens or closes its variants. Playing needs a variant row, Enter, or a double click.
+function activate(it) {
+  if (it.count > 1) {
+    if (!expanded.delete(it.character)) expanded.add(it.character);
+    activeKey = itemKey({...it, open: undefined});
+    renderPicker();
+    return;
+  }
+  setModel(it.m.id);
+}
+
+function playCharacter(it) {
+  const target = playTarget(it);
+  expanded.add(it.character);
+  activeKey = `c::v:${target.id}`;
+  setModel(target.id);
+  renderPicker();
+}
+
+const RAIL_STEP = 16, RAIL_MIN_LETTERS = 6;
+// Digits and symbols sort before letters, so "#" leads the rail to match the list order.
+const ALPHABET = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
+const letterOf = name => { const ch = name[0].toUpperCase(); return /[A-Z]/.test(ch) ? ch : "#"; };
+
+// The rail never scrolls. It shows every letter when they fit, else only letters that have models, thinned
+// to the height available. Below a few letters it hides, because tiny targets are worse than none.
+function drawRail() {
+  const wanted = !query.trim() && prefs.sort === "name" && items.length > 40;
+  const fit = Math.floor((ui.listbox.clientHeight - 4) / RAIL_STEP);
+  ui.rail.hidden = !wanted || fit < RAIL_MIN_LETTERS;
+  ui.rail.replaceChildren();
+  ui.rail.shown = [];
+  ui.rail.firstOf = new Map();
+  if (ui.rail.hidden) return;
+  items.forEach((it, i) => {
+    if (it.k !== "c" || it.section || it.variant) return;
+    const l = letterOf(it.m.name);
+    if (!ui.rail.firstOf.has(l)) ui.rail.firstOf.set(l, i);
+  });
+  let shown = fit >= ALPHABET.length ? ALPHABET : ALPHABET.filter(l => ui.rail.firstOf.has(l));
+  if (shown.length > fit) shown = Array.from({length: fit}, (_, k) => shown[Math.round(k * (shown.length - 1) / (fit - 1))]);
+  ui.rail.shown = shown;
+  ui.rail.append(...shown.map(l => el("span", {className: `rl${ui.rail.firstOf.has(l) ? "" : " none"}`, textContent: l})));
+}
+
+// A letter with no models jumps to the nearest letter that has some.
+function railTarget(letter) {
+  const at = ALPHABET.indexOf(letter);
+  let best = null;
+  for (const l of ui.rail.firstOf.keys()) {
+    const d = Math.abs(ALPHABET.indexOf(l) - at);
+    if (best === null || d < best.d || (d === best.d && ALPHABET.indexOf(l) > at)) best = {l, d};
+  }
+  return best && best.l;
+}
+
+function updateRailCurrent() {
+  if (ui.rail.hidden || !ui.rail.shown.length) return;
+  const top = ui.list.scrollTop;
+  const i = items.findIndex((it, k) => it.k === "c" && !it.section && !it.variant && pos[k].y + pos[k].h > top + 1);
+  const l = i < 0 ? null : letterOf(items[i].m.name);
+  const shown = ui.rail.shown;
+  const at = l && ALPHABET.indexOf(l);
+  const cur = l ? [...shown].filter(x => ALPHABET.indexOf(x) <= at).pop() || shown[0] : null;
+  [...ui.rail.children].forEach((c, k) => c.classList.toggle("cur", shown[k] === cur));
+}
+
+// Press or drag anywhere on the rail. One pointer target keeps the 44 px width at every letter size.
+function setupRailScrub() {
+  let scrubbing = false;
+  const scrub = e => {
+    const n = ui.rail.shown.length;
+    if (!n) return;
+    const rect = ui.rail.getBoundingClientRect(), inner = ui.rail.clientHeight;
+    const y = e.clientY - rect.top - ui.rail.clientTop;
+    const k = Math.max(0, Math.min(n - 1, Math.floor(y / inner * n)));
+    const letter = railTarget(ui.rail.shown[k]);
+    if (!letter) return;
+    ui.list.scrollTop = pos[ui.rail.firstOf.get(letter)].y;
+    ui.bubble.textContent = letter;
+    const box = ui.listbox.getBoundingClientRect();
+    const top = rect.top - box.top + ui.rail.clientTop + (k + 0.5) * inner / n - 28;
+    ui.bubble.style.top = `${Math.max(0, Math.min(box.height - 56, top))}px`;
+    scheduleRender();
+  };
+  const end = () => { scrubbing = false; ui.bubble.hidden = true; };
+  ui.rail.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    // Keeping focus in the search box lets typing continue after a jump.
+    e.preventDefault();
+    scrubbing = true;
+    ui.rail.setPointerCapture(e.pointerId);
+    ui.bubble.hidden = false;
+    scrub(e);
+  });
+  ui.rail.addEventListener("pointermove", e => { if (scrubbing) scrub(e); });
+  ui.rail.addEventListener("pointerup", end);
+  ui.rail.addEventListener("pointercancel", end);
+}
+
+function moveActive(dx, dy) {
+  const idxs = items.map((it, i) => i).filter(i => items[i].k === "c");
+  if (!idxs.length) return;
+  const cur = idxs.find(i => itemKey(items[i]) === activeKey);
+  let next;
+  if (cur === undefined) next = idxs[0];
+  else if (dx) next = idxs[Math.max(0, Math.min(idxs.length - 1, idxs.indexOf(cur) + dx))];
+  else {
+    const here = pos[cur];
+    const rows = idxs.filter(i => dy > 0 ? pos[i].y > here.y : pos[i].y < here.y);
+    if (!rows.length) return;
+    const rowY = dy > 0 ? Math.min(...rows.map(i => pos[i].y)) : Math.max(...rows.map(i => pos[i].y));
+    next = rows.filter(i => pos[i].y === rowY).sort((a, b) => Math.abs(pos[a].x - here.x) - Math.abs(pos[b].x - here.x))[0];
+  }
+  activeKey = itemKey(items[next]);
+  const p = pos[next], top = ui.list.scrollTop, H = ui.list.clientHeight;
+  if (p.y < top) ui.list.scrollTop = p.y;
+  else if (p.y + p.h > top + H) ui.list.scrollTop = p.y + p.h - H;
+  computeLayout();
+  renderWindow();
+}
+
+function onSearchKey(e) {
+  const grid = prefs.layout === "grid";
+  if (e.key === "ArrowDown") { e.preventDefault(); moveActive(0, 1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); moveActive(0, -1); }
+  else if (e.key === "ArrowRight" && grid && activeKey) { e.preventDefault(); moveActive(1, 0); }
+  else if (e.key === "ArrowLeft" && grid && activeKey) { e.preventDefault(); moveActive(-1, 0); }
+  else if (e.key === "Enter") {
+    e.preventDefault();
+    const it = items.find(i => i.k === "c" && itemKey(i) === activeKey) || items.find(i => i.k === "c");
+    if (!it) return;
+    // Shift+Enter only opens or closes a character. Plain Enter plays one of its variants.
+    // Ctrl+Enter adds the highlighted model as another character.
+    if (e.ctrlKey) addHighlighted();
+    else if (it.count > 1 && !e.shiftKey) playCharacter(it); else activate(it);
+  } else if (e.key === "Escape") {
+    if (query) { e.preventDefault(); ui.search.value = query = ""; activeKey = null; renderPicker(); }
+    else ui.search.blur();
+  }
+}
+
+let animQuery = "", animGroup = "";
+let previewTimer = null, previewing = false;
+
+// "attack_01" and "attack02" share the prefix "attack". The split applies only when it yields a usable number of groups.
+const animPrefix = n => (n.match(/^[^_\d\-\s]+/) || [n])[0].toLowerCase();
+
+function animGroups() {
+  const counts = new Map();
+  for (const n of currentAnims()) counts.set(animPrefix(n), (counts.get(animPrefix(n)) || 0) + 1);
+  return counts.size >= 2 && counts.size <= 12 ? counts : null;
+}
+
+// Preview plays on the page only. It sends no command, so the server and other clients never see it.
+function previewAnim(name) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    if (!currentAnims().includes(name)) return;
+    previewing = true;
+    playOnTarget(name);
+  }, 150);
+}
+
+function endPreview() {
+  clearTimeout(previewTimer);
+  if (!previewing) return;
+  previewing = false;
+  if (currentAnims().includes(currentAnim())) playOnTarget(currentAnim());
+}
+
+// The animation list belongs to the loaded model, so it redraws on its own when a model finishes loading.
+function renderAnims() {
+  if (!ui) return;
+  const groups = animGroups();
+  if (animGroup && (!groups || !groups.has(animGroup))) animGroup = "";
+  ui.animGroupSel.hidden = !groups;
+  if (groups) {
+    ui.animGroupSel.replaceChildren(el("option", {value: "", textContent: `All groups (${currentAnims().length})`}),
+      ...[...groups].map(([g, n]) => el("option", {value: g, textContent: `${g} (${n})`})));
+    ui.animGroupSel.value = animGroup;
+  }
+  const q = animQuery.trim();
+  const rows = [];
+  const names = currentAnims();
+  for (const name of names) {
+    if (animGroup && animPrefix(name) !== animGroup) continue;
+    const r = q ? fuzzy(q, name) : {score: 0, idx: []};
+    if (r) rows.push({name, ...r});
+  }
+  if (q) rows.sort((a, b) => b.score - a.score);
+  const scroll = ui.animList.scrollTop;
+  ui.animList.replaceChildren(...rows.map(({name, idx}) => {
+    const b = el("button", {type: "button"});
+    highlight(b, name, idx);
+    if (name === currentAnim()) b.setAttribute("aria-current", "true");
+    b.addEventListener("click", () => {
+      clearTimeout(previewTimer);
+      previewing = false;
+      chooseAnim(name);
+    });
+    b.addEventListener("pointerenter", e => { if (e.pointerType === "mouse") previewAnim(name); });
+    b.addEventListener("pointerleave", endPreview);
+    b.addEventListener("focus", () => previewAnim(name));
+    b.addEventListener("blur", endPreview);
+    return b;
+  }));
+  if (!rows.length) ui.animList.append(el("p", {className: "empty", textContent: names.length ? "No animations match." : "No animation list yet."}));
+  ui.animList.scrollTop = scroll;
+}
+
+// Thumbnails render one at a time. The newest request runs first, so rows scrolled into view
+// win over rows already passed, and a job whose row left the window is dropped before it starts.
+const thumbUrls = new Map();
+const thumbJobs = [];
+let thumbBusy = false;
+
+function wantThumb(model, apply) {
+  const job = {model, apply, live: true};
+  if (thumbUrls.has(model.id)) {
+    thumbUrls.get(model.id).then(url => { if (job.live && url) apply(url); });
+  } else {
+    thumbJobs.push(job);
+    pumpThumbs();
+  }
+  return () => { job.live = false; };
+}
+
+async function pumpThumbs() {
+  if (thumbBusy) return;
+  thumbBusy = true;
+  try {
+    for (let job; (job = thumbJobs.pop());) {
+      if (!job.live) continue;
+      if (!thumbUrls.has(job.model.id)) thumbUrls.set(job.model.id, loadOrMakeThumb(job.model));
+      const url = await thumbUrls.get(job.model.id);
+      if (job.live && url) job.apply(url);
+    }
+  } finally {
+    thumbBusy = false;
+  }
+}
+
+async function loadOrMakeThumb(model) {
+  try {
+    const res = await fetch(`${API}/thumb/${encodeURIComponent(model.id)}.png`);
+    if (res.ok) return URL.createObjectURL(await res.blob());
+    const png = await renderThumb(model);
+    const bytes = Uint8Array.from(atob(png), c => c.charCodeAt(0));
+    post(`/thumb/${encodeURIComponent(model.id)}`, {png});
+    return URL.createObjectURL(new Blob([bytes], {type: "image/png"}));
+  } catch (e) {
+    console.log("thumbnail error", model.id, e);
+    thumbUrls.delete(model.id);
+    return null;
+  }
+}
+
+const THUMB_PX = 128;
+
+// Region attachments take (slot, out, offset, stride). Mesh attachments take (slot, start, count, out, offset, stride).
+// The 3.8 region attachment takes the bone where later versions take the slot.
+// 4.2 region attachments also take the slot's vertex offsets, so the argument count tells the versions apart.
+// Returns how many floats it wrote.
+function attachmentWorld(slot, att, out, legacy) {
+  if (att.worldVerticesLength !== undefined) {
+    att.computeWorldVertices(slot, 0, att.worldVerticesLength, out, 0, 2);
+    return att.worldVerticesLength;
+  }
+  if (att.computeWorldVertices.length === 5) att.computeWorldVertices(slot, att.getOffsets ? att.getOffsets(slot) : att.offset, out, 0, 2);
+  else att.computeWorldVertices(legacy ? slot.bone : slot, out, 0, 2);
+  return 8;
+}
+
+function attachmentBox(slot, att, legacy) {
+  const verts = new Float32Array(att.worldVerticesLength !== undefined ? att.worldVerticesLength : 8);
+  attachmentWorld(slot, att, verts, legacy);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let i = 0; i < verts.length; i += 2) {
+    minX = Math.min(minX, verts[i]); maxX = Math.max(maxX, verts[i]);
+    minY = Math.min(minY, verts[i + 1]); maxY = Math.max(maxY, verts[i + 1]);
+  }
+  return {minX, minY, maxX, maxY};
+}
+
+function unionBox(skeleton, include, legacy) {
+  let box = {minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity};
+  for (const slot of skeleton.drawOrder) {
+    const att = slot.getAttachment();
+    if (!att || !att.uvs || slot.color.a === 0 || !include(slot)) continue;
+    const b = attachmentBox(slot, att, legacy);
+    box = {minX: Math.min(box.minX, b.minX), minY: Math.min(box.minY, b.minY),
+           maxX: Math.max(box.maxX, b.maxX), maxY: Math.max(box.maxY, b.maxY)};
+  }
+  return Number.isFinite(box.minX) ? {x: box.minX, y: box.minY, w: box.maxX - box.minX, h: box.maxY - box.minY} : null;
+}
+
+// Animations key slot attachments every frame, so the call runs after each animation step.
+// A null attachment also leaves the bounds, the thumbnail crop, and the hit test.
+function hideSlotsOf(skeleton, model) {
+  const prefixes = (model.hideSlots || []).map(p => p.toLowerCase());
+  const slots = skeleton.slots.filter(sl => prefixes.some(p => sl.data.name.toLowerCase().startsWith(p)));
+  return () => { for (const sl of slots) sl.setAttachment(null); };
+}
+
+// Rigs name the head differently. A head bone frames hair and face. Without one, the face feature slots
+// (eyes, nose, mouth, brows) frame the face alone, and the crop widens around them.
+function headBox(skeleton, legacy) {
+  const head = skeleton.findBone("head") || skeleton.bones.find(b => /^head/i.test(b.data.name))
+    || skeleton.findBone("face") || skeleton.bones.find(b => /head|face/i.test(b.data.name));
+  if (head) {
+    const onHead = bone => { for (let b = bone; b; b = b.parent) if (b === head) return true; return false; };
+    const box = unionBox(skeleton, slot => onHead(slot.bone), legacy);
+    if (box) return {...box, hair: true};
+  }
+  const box = unionBox(skeleton, slot => /eye|nose|mouth|brow|lash/i.test(slot.data.name), legacy);
+  return box && {...box, hair: false};
+}
+
+// The runtime classes differ per version in how they hand back loaded files, so both the thumbnails
+// and the shared stage read a model through this one function.
+async function loadSkeleton(rt, assets, model) {
+  const base = `${API}/${encodeURIComponent(model.id)}`;
+  const isJson = model.skeleton.endsWith(".json");
+  const skeletonUrl = `${base}/${encodeURIComponent(model.skeleton)}`;
+  if (isJson) (assets.loadJson || assets.loadText).call(assets, skeletonUrl); else assets.loadBinary(skeletonUrl);
+  assets.loadTextureAtlas(`${base}/${encodeURIComponent(model.atlas)}`);
+  while (!assets.isLoadingComplete()) {
+    if (assets.hasErrors()) throw new Error(JSON.stringify(assets.getErrors()));
+    await new Promise(r => setTimeout(r, 30));
+  }
+  const fetched = path => (assets.require || assets.get).call(assets, path);
+  const atlas = fetched(`${base}/${encodeURIComponent(model.atlas)}`);
+  const loader = isJson ? new rt.SkeletonJson(new rt.AtlasAttachmentLoader(atlas))
+                        : new rt.SkeletonBinary(new rt.AtlasAttachmentLoader(atlas));
+  return {assets, atlas, data: loader.readSkeletonData(fetched(skeletonUrl))};
+}
+
+async function renderThumb(model) {
+  const rt = RUNTIMES[model.runtime];
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = THUMB_PX;
+  const gl = canvas.getContext("webgl", {alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true});
+  const context = new rt.ManagedWebGLRenderingContext(gl);
+  const renderer = new rt.SceneRenderer(canvas, context, true);
+  const assets = new rt.AssetManager(context, "");
+  try {
+    const {atlas, data} = await loadSkeleton(rt, assets, model);
+    const skeleton = new rt.Skeleton(data);
+    if (data.findSkin(model.skin)) skeleton.setSkinByName(model.skin);
+    skeleton.setSlotsToSetupPose();
+    const animation = [model.defaultAnimation, "idle"].map(n => data.findAnimation(n)).find(Boolean) || data.animations[0];
+    skeleton.setToSetupPose();
+    if (animation) animation.apply(skeleton, 0, 0, false, [], 1, 0, 0);
+    // 4.2 requires a physics mode and throws without one. Older runtimes have no Physics and ignore the argument.
+    hideSlotsOf(skeleton, model)();
+    skeleton.updateWorldTransform(rt.Physics && rt.Physics.pose);
+
+    const offset = new rt.Vector2(), size = new rt.Vector2();
+    skeleton.getBounds(offset, size);
+    // Long hair makes the head box tall, so the crop keeps the top square where the face sits.
+    // Without a head bone, the crop falls back to the top centre of the whole model.
+    const found = headBox(skeleton, rt.legacy);
+    const box = found || {x: offset.x, y: offset.y + size.y * 0.8, w: size.x, h: size.y * 0.2, hair: true};
+    // Long hair makes a head box tall, so the crop keeps the top square where the face sits.
+    const side = box.hair ? Math.max(Math.min(box.w, box.h) * 1.15, 1) : Math.max(box.w, box.h) * 2.4;
+    const centerX = box.x + box.w / 2;
+    const centerY = box.hair ? box.y + box.h - side / 2 : box.y + box.h / 2;
+
+    gl.viewport(0, 0, THUMB_PX, THUMB_PX);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    renderer.camera.setViewport(THUMB_PX, THUMB_PX);
+    renderer.camera.zoom = side / THUMB_PX;
+    renderer.camera.position.set(centerX, centerY, 0);
+    renderer.begin();
+    renderer.drawSkeleton(skeleton, atlas.pages[0] ? atlas.pages[0].pma : true);
+    renderer.end();
+    return canvas.toDataURL("image/png").split(",")[1];
+  } finally {
+    assets.dispose();
+    renderer.dispose();
+    const lose = gl.getExtension("WEBGL_lose_context");
+    if (lose) lose.loseContext();
+  }
+}
+
+// Rescanning on each entry into edit mode shows models added since the server started.
+async function setEditMode(on) {
+  if (on === editMode) return;
+  editMode = on;
+  picker.classList.toggle("on", on);
+  placeSelbox();
+  if (!on) { endPreview(); return; }
+  try { models = await (await fetch(`${API}/rescan`)).json(); } catch (e) {}
+  await refreshPrefs();
+  renderPicker();
+  // Typing searches at once, with no click first. Focus waits for the panel to become visible.
+  requestAnimationFrame(() => ui.search.focus());
+}
+
+// Counting keys shows whether Plasma gives the wallpaper page keyboard focus. Search depends on it.
+addEventListener("keydown", () => { counts.keydown++; }, true);
+
 // The server counts raw input so `spinewall info` can show whether Plasma delivers pointer events.
 setInterval(() => {
   if (!Object.values(counts).some(Boolean)) return;
   const sent = counts;
-  counts = {wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0};
+  counts = {wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0};
   post("/input", sent);
 }, 2000);
 
@@ -96,15 +1167,353 @@ addEventListener("webglcontextlost", () => {
   setTimeout(() => location.reload(), 1500);
 }, true);
 
+function disposePlayer() {
+  if (!player) return;
+  disposing = true;
+  try { player.dispose(); } catch (e) {}
+  player = null;
+  anims = [];
+  document.getElementById("p").innerHTML = "";
+  setTimeout(() => { disposing = false; }, 1000);
+}
+
+// ---- Shared stage: one canvas per Spine runtime, one skeleton and animation state per character ----
+
+const FIT_PADDING = 1.2;
+const FRAME_SAMPLES = 8;
+const FRAME_INTERVAL_MS = {few: 0, many: 33};
+const MANY_CHARACTERS = 4;
+const HIT_ALPHA_MIN = 0.05;
+const HIT_BOX_GROW = 1.5;
+const layers = new Map();
+const stageChars = new Map();
+let desired = new Map();
+let stageRaf = 0, lastFrameAt = 0;
+let hitBuffer = new Float32Array(1024);
+const layersEl = document.getElementById("layers");
+const selbox = document.getElementById("selbox");
+
+const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
+
+function makeLayer(key) {
+  const rt = RUNTIMES[key];
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(innerWidth * dpr());
+  canvas.height = Math.round(innerHeight * dpr());
+  // 3.8 atlases are straight alpha, so its canvas must not be composited as premultiplied.
+  const gl = canvas.getContext("webgl", {alpha: true, premultipliedAlpha: !rt.legacy});
+  const context = new rt.ManagedWebGLRenderingContext(gl);
+  const layer = {key, rt, canvas, gl, renderer: new rt.SceneRenderer(canvas, context, true),
+                 assets: new rt.AssetManager(context, ""), cache: new Map()};
+  layersEl.append(canvas);
+  layers.set(key, layer);
+  return layer;
+}
+
+// Skeleton data and textures load once per model and layer, so copies of one model share them.
+function layerModel(layer, model) {
+  if (!layer.cache.has(model.id)) {
+    const job = loadSkeleton(layer.rt, layer.assets, model).then(({atlas, data}) => {
+      const names = data.animations.map(a => a.name);
+      const pick = [model.defaultAnimation, "idle", names[0]].find(n => names.includes(n));
+      return {atlas, data, names, frame: frameOf(layer.rt, data, model, pick)};
+    });
+    // A failed load must not stay cached, or the model could never load again.
+    job.catch(() => layer.cache.delete(model.id));
+    layer.cache.set(model.id, job);
+  }
+  return layer.cache.get(model.id);
+}
+
+// Fit once from the bounds over the whole animation. Re-fitting per animation would rescale the character.
+function frameOf(rt, data, model, animationName) {
+  const skeleton = new rt.Skeleton(data);
+  if (data.findSkin(model.skin)) skeleton.setSkinByName(model.skin);
+  const animation = data.findAnimation(animationName);
+  const hide = hideSlotsOf(skeleton, model);
+  const offset = new rt.Vector2(), size = new rt.Vector2();
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const samples = animation && animation.duration > 0 ? FRAME_SAMPLES : 1;
+  for (let i = 0; i < samples; i++) {
+    skeleton.setToSetupPose();
+    if (animation) animation.apply(skeleton, 0, animation.duration * i / samples, false, [], 1, 0, 0);
+    hide();
+    skeleton.updateWorldTransform(rt.Physics && rt.Physics.pose);
+    skeleton.getBounds(offset, size);
+    if (!Number.isFinite(size.x) || !Number.isFinite(size.y) || size.x <= 0 || size.y <= 0) continue;
+    minX = Math.min(minX, offset.x); minY = Math.min(minY, offset.y);
+    maxX = Math.max(maxX, offset.x + size.x); maxY = Math.max(maxY, offset.y + size.y);
+  }
+  if (!Number.isFinite(minX)) { minX = -100; minY = -100; maxX = 100; maxY = 100; }
+  const w = maxX - minX, h = maxY - minY;
+  return {cx: minX + w / 2, cy: minY + h / 2, w, h};
+}
+
+// Pixels per world unit. The stage is as tall as the window, the same fit the single player uses.
+const fitScale = (c, entry) => innerHeight / (Math.max(c.frame.w, c.frame.h) * FIT_PADDING) * entry.scale;
+const screenX = entry => innerWidth / 2 + entry.x * innerWidth;
+const screenY = entry => innerHeight / 2 + entry.y * innerHeight;
+
+async function createStageChar(entry) {
+  const model = models.find(m => m.id === entry.model);
+  const rt = model && RUNTIMES[model.runtime];
+  if (!rt) return;
+  const layer = layers.get(model.runtime) || makeLayer(model.runtime);
+  let loaded;
+  try { loaded = await layerModel(layer, model); }
+  catch (e) { console.log("spine load error", model.id, e.message || e); return; }
+  const want = desired.get(entry.uid);
+  if (!want || want.model !== entry.model || !multi || stageChars.has(entry.uid)) return;
+  const skeleton = new rt.Skeleton(loaded.data);
+  if (loaded.data.findSkin(model.skin)) skeleton.setSkinByName(model.skin);
+  skeleton.setToSetupPose();
+  const state = new rt.AnimationState(new rt.AnimationStateData(loaded.data));
+  const c = {uid: entry.uid, modelId: entry.model, layer, rt, skeleton, state, names: loaded.names, frame: loaded.frame,
+             model, requested: undefined, animName: null, hide: hideSlotsOf(skeleton, model),
+             // 3.8 atlases are straight alpha. Later runtimes record the mode on the atlas page.
+             pma: rt.legacy ? false : (loaded.atlas.pages[0] ? loaded.atlas.pages[0].pma : true)};
+  stageChars.set(entry.uid, c);
+  setCharAnimation(c, want.animation);
+  post("/report", {model: model.id, animations: loaded.names});
+  if (editMode) { renderChars(); renderAnims(); }
+}
+
+function setCharAnimation(c, requested) {
+  c.requested = requested;
+  const pick = [requested, c.model.defaultAnimation, "idle", c.names[0]].find(n => c.names.includes(n));
+  if (!pick) return;
+  c.animName = pick;
+  c.state.setAnimation(0, pick, true);
+}
+
+// Draw order is layer by layer, because a canvas cannot interleave with another runtime's canvas.
+// A layer ranks by its topmost character, and hit testing walks the same order backwards.
+function drawSequence() {
+  const rank = new Map();
+  layout.forEach((e, i) => { const c = stageChars.get(e.uid); if (c) rank.set(c.layer, Math.max(rank.get(c.layer) ?? -1, i)); });
+  const ordered = [];
+  layout.forEach((e, i) => { const c = stageChars.get(e.uid); if (c) ordered.push({c, e, i}); });
+  // A scene is a backdrop, so it draws before every character whatever its layer or position in the list.
+  const isScene = x => x.c.model.kind === "scene";
+  return ordered.sort((a, b) => isScene(b) - isScene(a) || rank.get(a.c.layer) - rank.get(b.c.layer) || a.i - b.i);
+}
+
+function onScreen(c, entry) {
+  const k = fitScale(c, entry);
+  const hw = c.frame.w * k / 2, hh = c.frame.h * k / 2;
+  const x = screenX(entry), y = screenY(entry);
+  return x + hw > 0 && x - hw < innerWidth && y + hh > 0 && y - hh < innerHeight;
+}
+
+function stageFrame(now) {
+  stageRaf = requestAnimationFrame(stageFrame);
+  if (!multi) return;
+  const interval = layout.length >= MANY_CHARACTERS ? FRAME_INTERVAL_MS.many : FRAME_INTERVAL_MS.few;
+  if (now - lastFrameAt < interval - 2) return;
+  // The first frame and any frame after a pause advance by a capped step, so animations never jump.
+  const dt = lastFrameAt ? Math.min((now - lastFrameAt) / 1000, 0.1) : 0;
+  lastFrameAt = now;
+  const sequence = drawSequence();
+  for (const layer of layers.values()) {
+    layer.gl.viewport(0, 0, layer.canvas.width, layer.canvas.height);
+    layer.gl.clearColor(0, 0, 0, 0);
+    layer.gl.clear(layer.gl.COLOR_BUFFER_BIT);
+  }
+  for (const {c, e} of sequence) {
+    // A character outside the window costs nothing, so it neither updates nor draws.
+    if (!onScreen(c, e)) continue;
+    c.state.update(dt);
+    c.state.apply(c.skeleton);
+    c.hide();
+    if (c.skeleton.update) c.skeleton.update(dt);
+    c.skeleton.updateWorldTransform(c.rt.Physics && c.rt.Physics.update);
+    const k = fitScale(c, e);
+    const cam = c.layer.renderer.camera;
+    cam.setViewport(c.layer.canvas.width, c.layer.canvas.height);
+    cam.zoom = 1 / (k * dpr());
+    cam.position.set(c.frame.cx - (screenX(e) - innerWidth / 2) / k, c.frame.cy + (screenY(e) - innerHeight / 2) / k, 0);
+    c.layer.renderer.begin();
+    c.layer.renderer.drawSkeleton(c.skeleton, c.pma);
+    c.layer.renderer.end();
+  }
+}
+
+// Point in triangle by sign of the edge cross products. The point is inside when none disagrees.
+function inTriangle(px, py, ax, ay, bx, by, cx, cy) {
+  const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
+  const d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
+  const d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+  return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+}
+
+const QUAD_TRIANGLES = [0, 1, 2, 2, 3, 0];
+
+function charContains(c, entry, px, py) {
+  const k = fitScale(c, entry);
+  const wx = c.frame.cx + (px - screenX(entry)) / k;
+  const wy = c.frame.cy - (py - screenY(entry)) / k;
+  // The bounding box is the cheap first pass. It is wider than the framing, because other animations reach further.
+  if (Math.abs(wx - c.frame.cx) > c.frame.w * HIT_BOX_GROW / 2 || Math.abs(wy - c.frame.cy) > c.frame.h * HIT_BOX_GROW / 2) return false;
+  const slots = c.skeleton.drawOrder;
+  for (let s = slots.length - 1; s >= 0; s--) {
+    const slot = slots[s];
+    const att = slot.getAttachment();
+    if (!att || !att.uvs || slot.color.a < HIT_ALPHA_MIN || (att.color && att.color.a < HIT_ALPHA_MIN) || slot.bone.active === false) continue;
+    const need = att.worldVerticesLength !== undefined ? att.worldVerticesLength : 8;
+    if (hitBuffer.length < need) hitBuffer = new Float32Array(need * 2);
+    attachmentWorld(slot, att, hitBuffer, c.rt.legacy);
+    const tri = att.worldVerticesLength !== undefined ? att.triangles : QUAD_TRIANGLES;
+    for (let t = 0; t < tri.length; t += 3) {
+      const a = tri[t] * 2, b = tri[t + 1] * 2, d = tri[t + 2] * 2;
+      if (inTriangle(wx, wy, hitBuffer[a], hitBuffer[a + 1], hitBuffer[b], hitBuffer[b + 1], hitBuffer[d], hitBuffer[d + 1])) return true;
+    }
+  }
+  return false;
+}
+
+// Returns the layout entry of the topmost character under the point, or null.
+function hitTest(px, py) {
+  const sequence = drawSequence();
+  for (let i = sequence.length - 1; i >= 0; i--) {
+    const {c, e} = sequence[i];
+    if (c.model.kind !== "scene" && onScreen(c, e) && charContains(c, e, px, py)) return e;
+  }
+  return null;
+}
+
+const selectedChar = () => layout.find(e => e.uid === selectedUid) || null;
+const targetChar = () => selectedChar() || layout[layout.length - 1] || null;
+
+function selectChar(uid) {
+  if (selectedUid === uid) return;
+  selectedUid = uid;
+  placeSelbox();
+  if (editMode) { renderChars(); renderPicker(); renderAnims(); }
+}
+
+function placeSelbox() {
+  const e = selectedChar();
+  const c = e && stageChars.get(e.uid);
+  if (!multi || !editMode || !c) { selbox.style.display = "none"; return; }
+  const k = fitScale(c, e);
+  const w = c.frame.w * k, h = c.frame.h * k;
+  Object.assign(selbox.style, {display: "block", left: `${screenX(e) - w / 2}px`, top: `${screenY(e) - h / 2}px`, width: `${w}px`, height: `${h}px`});
+}
+
+let layoutTimer = null;
+function layoutMoved() {
+  layoutPending = true;
+  placeSelbox();
+  clearTimeout(layoutTimer);
+  layoutTimer = setTimeout(() => {
+    layoutPending = false;
+    post("/layout", {characters: layout.map(({uid, x, y, scale}) => ({uid, x, y, scale}))});
+  }, 120);
+}
+
+function destroyLayers() {
+  disposing = true;
+  for (const layer of layers.values()) {
+    try { layer.assets.dispose(); layer.renderer.dispose(); } catch (e) {}
+    const lose = layer.gl.getExtension("WEBGL_lose_context");
+    if (lose) lose.loseContext();
+    layer.canvas.remove();
+  }
+  layers.clear();
+  stageChars.clear();
+  setTimeout(() => { disposing = false; }, 1000);
+}
+
+// Reconciling keeps a character that is unchanged, so a position push never restarts an animation.
+function applyCharacters(list) {
+  const was = multi;
+  const known = new Set(layout.map(e => e.uid));
+  layout = list;
+  multi = list.length > 0;
+  desired = new Map(list.map(e => [e.uid, e]));
+  if (multi && !was) {
+    disposePlayer();
+    document.getElementById("stage").style.display = "none";
+    layersEl.style.display = "block";
+    lastFrameAt = 0;
+  }
+  if (!multi && was) {
+    destroyLayers();
+    layersEl.style.display = "none";
+    document.getElementById("stage").style.display = "";
+    selectedUid = null;
+  }
+  const added = list.filter(e => !known.has(e.uid));
+  if (multi && added.length) selectedUid = added[added.length - 1].uid;
+  if (!selectedChar()) selectedUid = null;
+  for (const [uid, c] of stageChars) {
+    const e = desired.get(uid);
+    if (!e || e.model !== c.modelId) stageChars.delete(uid);
+    else if (e.animation !== c.requested) setCharAnimation(c, e.animation);
+  }
+  for (const e of list) if (!stageChars.has(e.uid)) createStageChar(e);
+  if (multi && !stageRaf) stageRaf = requestAnimationFrame(stageFrame);
+  placeSelbox();
+  if (ui) { renderChars(); if (editMode) { renderPicker(); renderAnims(); } }
+}
+
+addEventListener("resize", () => {
+  for (const layer of layers.values()) {
+    layer.canvas.width = Math.round(innerWidth * dpr());
+    layer.canvas.height = Math.round(innerHeight * dpr());
+  }
+  placeSelbox();
+});
+
+// The animation list and the preview follow the selected character, or the single player.
+function currentAnims() {
+  const e = multi && targetChar();
+  const c = e && stageChars.get(e.uid);
+  return multi ? (c ? c.names : []) : anims;
+}
+function currentAnim() {
+  const e = multi && targetChar();
+  const c = e && stageChars.get(e.uid);
+  return multi ? (c && c.animName) : state.animation;
+}
+function playOnTarget(name) {
+  if (!multi) { if (player) player.animationState.setAnimation(0, name, true); return; }
+  const e = targetChar();
+  const c = e && stageChars.get(e.uid);
+  if (c) c.state.setAnimation(0, name, true);
+}
+function chooseAnim(name) {
+  const e = multi && targetChar();
+  const path = e ? `set-char-anim/${e.uid}/${encodeURIComponent(name)}` : `set-anim/${encodeURIComponent(name)}`;
+  fetch(`${API}/cmd/${path}`).catch(() => {});
+}
+
+function renderChars() {
+  if (!ui) return;
+  const n = layout.length;
+  ui.charsList.hidden = !multi;
+  ui.charsTitle.textContent = multi ? `Characters (${n})` : "Characters";
+  ui.charsWarn.hidden = n <= WARN_ABOVE;
+  ui.charsWarn.textContent = `${n} characters. Frame rate drops above ${WARN_ABOVE}.`;
+  const target = targetChar();
+  ui.charsList.replaceChildren(...layout.map(e => {
+    const m = models.find(x => x.id === e.model);
+    const name = m ? m.name : e.model;
+    const sel = el("button", {type: "button", className: "sel", textContent: name, title: name});
+    sel.setAttribute("aria-pressed", String(!!target && target.uid === e.uid));
+    sel.setAttribute("aria-label", `Select ${name}`);
+    sel.addEventListener("click", () => selectChar(e.uid));
+    const rm = el("button", {type: "button", className: "rm", textContent: "✕"});
+    rm.setAttribute("aria-label", `Remove ${name}`);
+    rm.addEventListener("click", () => fetch(`${API}/cmd/remove-character/${e.uid}`).catch(() => {}));
+    return el("div", {className: "charrow"}, sel, rm);
+  }));
+}
+
 function load(modelId, animation) {
   const model = models.find(m => m.id === modelId) || models[0];
   if (!model) return;
-  if (player) {
-    disposing = true;
-    try { player.dispose(); } catch (e) {}
-    document.getElementById("p").innerHTML = "";
-    setTimeout(() => { disposing = false; }, 1000);
-  }
+  disposePlayer();
   const runtime = RUNTIMES[model.runtime];
   const base = `${API}/${encodeURIComponent(model.id)}`;
   player = new runtime.SpinePlayer("p", {
@@ -113,13 +1522,33 @@ function load(modelId, animation) {
     skin: model.skin,
     backgroundColor: "#000000",
     alpha: false,
+    // 3.8 atlases are straight alpha. The 3.8 player assumes premultiplied by default, which leaves a bright fringe.
+    ...(runtime.legacy && {premultipliedAlpha: false}),
     mipmaps: false,
     showControls: false,
     success: p => {
       anims = p.skeleton.data.animations.map(a => a.name);
+      const hide = hideSlotsOf(p.skeleton, model);
+      if (model.hideSlots && model.hideSlots.length) {
+        const update = p.skeleton.updateWorldTransform;
+        p.skeleton.updateWorldTransform = function (...args) { hide(); return update.apply(this, args); };
+      }
       const pick = [animation, model.defaultAnimation, "idle", anims[0]].find(n => anims.includes(n));
-      if (pick) p.animationState.setAnimation(0, pick, true);
+      // The camera frames once, on the first animation. Re-framing per animation rescales the model
+      // whenever an animation has wider bounds, such as a sword swing. An empty viewport blanks the canvas.
+      // The player starts paused and only calls play() itself when no animation is set yet.
+      if (pick && runtime.legacy) {
+        // 3.8 has no setViewport. Its setAnimation frames the camera and plays, and it has already run for the first animation.
+        p.setAnimation(pick, true);
+      } else if (pick) {
+        p.setViewport(pick);
+        p.animationState.setAnimation(0, pick, true);
+        p.play();
+      }
       post("/report", {model: model.id, animations: anims, playing: pick});
+      // The server learns the playing animation from this report and bumps no revision, so mark it here.
+      state.animation = pick;
+      if (editMode) renderAnims();
     },
     error: (p, msg) => console.log("spine load error", model.id, msg)
   });
@@ -128,7 +1557,12 @@ function load(modelId, animation) {
 async function poll() {
   try {
     const s = await (await fetch(`${API}/state`)).json();
-    editMode = !!s.edit;
+    setEditMode(!!s.edit);
+    // A drag in progress owns the layout, so a server copy waits until the push has landed.
+    if (s.crev !== crev && !dragging && !layoutPending) {
+      crev = s.crev;
+      applyCharacters(Array.isArray(s.characters) ? s.characters : []);
+    }
     if (s.vrev !== state.vrev && !dragging) {
       view = {scale: s.scale, x: s.x, y: s.y};
       applyView();
@@ -137,9 +1571,14 @@ async function poll() {
     if (s.rev !== state.rev) {
       const modelChanged = s.model !== state.model || state.rev === -1;
       state = s;
-      if (modelChanged) load(s.model, s.animation);
+      // The server records recents itself. Mirroring them keeps "last played" right until the next prefs read.
+      if (modelChanged && s.model) prefs.recent = [s.model, ...prefs.recent.filter(id => id !== s.model)].slice(0, 20);
+      if (editMode) { renderPicker(); }
+      if (modelChanged && !multi) load(s.model, s.animation);
       else if (player && anims.includes(s.animation)) player.animationState.setAnimation(0, s.animation, true);
     }
+    // Leaving the shared stage brings the single player back with the model the server carried over.
+    if (!multi && !player && state.model) load(state.model, state.animation);
   } catch (e) {}
   setTimeout(poll, POLL_MS);
 }

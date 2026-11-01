@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # usage: spinewall info | next-model | prev-model | random-model | set-model ID
 #        | next-anim | prev-anim | random-anim | set-anim NAME
-#        | zoom-in | zoom-out | move-left|right|up|down | reset-view
+#        | zoom-in | zoom-out | move-left|right|up|down | reset-view | rescan
+#        | add-character [ID] | remove-character UID | clear-characters
+#        | next-char-anim UID | prev-char-anim UID | set-char-anim UID NAME | set-char-model UID ID
 set -euo pipefail
 base="http://127.0.0.1:${SPINEWALL_PORT:-8777}"
 cmd="${1:-info}"
 arg="${2:-}"
+# set-char-anim and set-char-model carry two values, which the server reads as UID/VALUE.
+if [ -n "${3:-}" ]; then arg="$arg/$3"; fi
 if [ "$cmd" = info ]; then
   curl -fsS "$base/info"
+elif [ "$cmd" = rescan ]; then
+  curl -fsS "$base/rescan"
 else
   curl -fsS "$base/cmd/$cmd${arg:+/$arg}"
 fi
