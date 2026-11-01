@@ -16,7 +16,8 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 | `docs/windows.md` | Windows steps for Lively and Wallpaper Engine. |
 | `scripts/patch-plasmoid.sh` | Applies the patch to a local copy of the containment. |
 | `systemd/spinewall.service` | User service for the server. |
-| `docs/demo/` | Static demo for GitHub Pages. `index.html` plays the sample models in `models/` (list in `models/index.json`). Deployed by `.github/workflows/pages.yml`. Neutral display names only. |
+| `docs/demo/models/` | Sample models for the Pages demo (list in `models/index.json`). Neutral display names only. |
+| `scripts/build-demo.py` | Builds the Pages demo from `theme/index.html` in local mode, with one pinned CDN player. `.github/workflows/pages.yml` runs it. |
 | `docs/assets.md` | Model directory layout and `model.json` keys. |
 | `docs/credits.md` | Sources, tools, and test models. Add a row when you use a new source. |
 | `README.md` | Install steps, CLI, and the code map by function. Keep the code map in step with the code. |
@@ -44,6 +45,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 - `auto` is a bool. The server only stores it and rejects other types. The page owns the timing: an animation plays at least 6 s, rounded up to whole loops, then the next one in list order plays. A click or an edit-mode preview resets the timer.
 - A click changes only the topmost character under the pointer. Hit testing uses triangle tests on world vertices, so a transparent area does nothing.
 - The server scans models at start and on `GET /rescan` (`spinewall rescan`). A new model appears after a rescan.
+- `additional_model_dirs` in `~/.config/spinewall/config.json` (env `SPINEWALL_CONFIG`) adds scan roots. `MODEL_DIRS` maps each id to its directory and `translate_path` serves from it. The main directory wins a duplicate id. Only that file can add a directory, never a request.
 - `model.json` `kind` is `character` or `scene`. The server detects it from region names when absent. A scene draws first in multi mode and never takes a click. `hideSlots` removes backdrop slots from drawing, framing, thumbnails, and hit tests.
 - The picker filter `kind` (Characters, Scenes, All) lives in `prefs.json`.
 - Position `x` and `y` are fractions of the window size. Scale ranges from 0.3 to 8.
@@ -76,7 +78,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 
 - Check multi-character and the picker on the real desktop after each change.
 - Fetch background-only models only where `hideSlots` can leave a character.
-- Add Spine 3.7 support, and an `additional_model_dirs` config.
+- Add Spine 3.7 support.
 
 ## Style
 

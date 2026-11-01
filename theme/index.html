@@ -1,9 +1,9 @@
 <!doctype html>
-<html><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <link rel="stylesheet" href="spine-player.css">
 <style>
 html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;overflow:hidden}
-#stage{position:absolute;inset:0;display:flex;justify-content:center}
+#stage{position:absolute;inset:0;display:flex;justify-content:center;overflow:hidden}
 #p{height:100%;aspect-ratio:1/1;transform-origin:50% 50%;will-change:transform}
 .spine-player-controls{display:none!important}
 .spine-player,.spine-player-canvas{width:100%;height:100%;display:block}
@@ -105,6 +105,9 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 .cell.grid .check{position:absolute;left:8px;top:6px}
 .cell .chev{position:absolute;right:0;top:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:18px;pointer-events:none}
 .cell.list .chev{height:100%}
+/* The arrow is drawn by CSS, so it is never part of the cell text that screen readers compare with the label. */
+.cell .chev::before{content:"\25b8"}
+.cell .chev.open::before{content:"\25be"}
 .subhead{position:absolute;margin:0;box-sizing:border-box;left:6px;width:calc(100% - 6px);border-left:2px solid #767676;
   padding-left:8px;font-size:13px;font-weight:400;line-height:32px;color:#cfcfcf;pointer-events:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .cell .th{width:48px;height:48px;flex:none;border-radius:4px;background:#2b2b2b;overflow:hidden;position:relative}
@@ -813,8 +816,9 @@ function renderWindow() {
     if (it.count > 1) {
       const target = playTarget(it);
       meta.replaceChildren(el("span", {textContent: `${it.count} variants`}));
-      if (held) meta.append(el("span", {className: "now", textContent: `Playing: ${held.name}`}));
-      chev.textContent = it.open ? "\u25be" : "\u25b8";
+      // The space keeps the two spans apart for assistive tech, which joins them without one and then misses the label.
+      if (held) meta.append(" ", el("span", {className: "now", textContent: `Playing: ${held.name}`}));
+      chev.classList.toggle("open", it.open);
       c.setAttribute("aria-label", `${it.m.name} ${it.count} variants${held ? ` Playing: ${held.name}` : ""}, ${it.open ? "shown" : "hidden"}`);
       c.title = `${it.open ? "Hide" : "Show"} ${it.count} variants. Enter or double click plays ${target.name}.`;
       c.setAttribute("aria-selected", "false");

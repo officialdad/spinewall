@@ -135,6 +135,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | `theme/local-host.js` | Local mode. Runs the server's state logic in the page, with `localStorage` for state and prefs. |
 | `server/spinewall-server.py` | Local HTTP server. State, model scan, prefs, layout, thumbnails. |
 | `bin/spinewall` | CLI. Thin `curl` wrapper over the server. |
+| `scripts/build-demo.py` | Builds the Pages demo from `theme/index.html` in local mode. |
 | `scripts/package-windows.py` | Builds the Lively zip and Wallpaper Engine files for Windows. See [docs/windows.md](docs/windows.md). Unconfirmed on Windows. |
 | `scripts/install.sh` | Installs theme, server, CLI, and user service. Fetches the runtimes. |
 | `scripts/patch-plasmoid.sh` | Applies `plasma/desktopcontainment.patch`. |
@@ -232,6 +233,7 @@ Spinewall is a viewer. It includes no Spine runtime. The only models are the few
 |---|---|---|
 | `SPINEWALL_PORT` | `8777` | Server and CLI port. The theme and the Plasma patch hardcode `8777`, so a changed port breaks the wallpaper. |
 | `SPINEWALL_MODELS` | `~/.local/share/spinewall/models` | Model directory. |
+| `SPINEWALL_CONFIG` | `~/.config/spinewall/config.json` | Config file. `additional_model_dirs` lists more model directories, see [docs/assets.md](docs/assets.md). |
 | `SPINEWALL_STATE` | `~/.local/state/spinewall/state.json` | Current model, animation, and view. |
 | `SPINEWALL_PREFS` | `~/.local/state/spinewall/prefs.json` | Favorites, recents, sort, filters. |
 | `SPINEWALL_LAYOUT` | `~/.local/state/spinewall/layout.json` | Several-character layout. |
