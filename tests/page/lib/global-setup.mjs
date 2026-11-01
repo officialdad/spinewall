@@ -25,4 +25,5 @@ export default function globalSetup() {
   const html = fs.readFileSync(path.join(repo, "theme/index.html"), "utf8");
   if (!html.includes("http://127.0.0.1:8777")) throw new Error("theme/index.html no longer hardcodes port 8777. Update tests/page/lib/global-setup.mjs.");
   fs.writeFileSync(path.join(theme, "index.html"), html.replace("http://127.0.0.1:8777", `http://127.0.0.1:${port}`));
+  fs.copyFileSync(path.join(repo, "theme/local-host.js"), path.join(theme, "local-host.js"));
 }

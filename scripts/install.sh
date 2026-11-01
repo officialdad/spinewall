@@ -55,7 +55,7 @@ fetch_runtime 4.0.31 spine40 db13daf8219b1de211785ed6bf70588b66879168cd9b7406aa6
 fetch_runtime 4.1.56 spine41 5c6d530857d6eb18d8bb5f8b10e4ba62fed42e887bf874088e91fe57f2307a80
 fetch_runtime 4.2.120 spine42 f553d60910e6069b121555d4575c60f31c65d6fd2a3e349328ba9d2882dd79f1
 fetch_runtime_38
-cp "$root/theme/index.html" "$root/theme/spinewall.theme" "$stage/"
+cp "$root/theme/index.html" "$root/theme/local-host.js" "$root/theme/spinewall.theme" "$stage/"
 
 # Everything checked. Only now does the install touch the home directory.
 mkdir -p "$theme_dir" "$models_dir" "$state_dir" "$cache_dir" "$bin_dir" "$HOME/.config/systemd/user"

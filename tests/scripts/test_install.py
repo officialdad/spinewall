@@ -95,7 +95,7 @@ class HappyPath(InstallCase):
 
     def test_theme_files_are_copied(self):
         self.install()
-        for name in ("index.html", "spinewall.theme", "spine-player.css"):
+        for name in ("index.html", "local-host.js", "spinewall.theme", "spine-player.css"):
             self.assertTrue((self.theme / name).is_file(), name)
         self.assertEqual((self.theme / "index.html").read_bytes(), (ROOT / "theme/index.html").read_bytes())
 

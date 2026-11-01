@@ -132,6 +132,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | Path | Job |
 |---|---|
 | `theme/index.html` | The wallpaper page. One file, no build step. |
+| `theme/local-host.js` | Local mode. Runs the server's state logic in the page, with `localStorage` for state and prefs. |
 | `server/spinewall-server.py` | Local HTTP server. State, model scan, prefs, layout, thumbnails. |
 | `bin/spinewall` | CLI. Thin `curl` wrapper over the server. |
 | `scripts/install.sh` | Installs theme, server, CLI, and user service. Fetches the runtimes. |
@@ -144,7 +145,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 
 | Area | Functions |
 |---|---|
-| Config and runtimes | `RUNTIMES` (`spine38`, `spine40`, `spine41`, `spine42`), `API`, `POLL_MS`, click and scale limits |
+| Config and runtimes | `RUNTIMES` (`spine38`, `spine40`, `spine41`, `spine42`), `API`, `LOCAL`, `MODEL_ROOT`, `api`, `POLL_MS`, click and scale limits |
 | View and polling | `applyView`, `pushView`, `poll`, `load`, `setEditMode` |
 | Picker data | `refreshPrefs`, `fuzzy`, `matchModel`, `comparator`, `buildItems` |
 | Picker UI | `ensureChrome`, `renderPicker`, `computeLayout`, `renderWindow`, `makeCell`, `drawRail`, `setupRailScrub`, `onSearchKey` |
@@ -153,6 +154,16 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | Stage (all characters) | `makeLayer`, `createStageChar`, `stageFrame`, `frameOf`, `applyCharacters`, `destroyLayers` |
 | Hit testing | `hitTest`, `charContains`, `inTriangle`, `selectChar` |
 | Scenes | `hideSlotsOf`, `kind` filter in `buildItems` |
+
+### `theme/local-host.js`
+
+| Area | Functions |
+|---|---|
+| Entry | `createLocalHost` answers the server paths from memory and `localStorage`. |
+| Model list | `completeModels` fills the fields a server scan derives. |
+| State | `runCommand`, `setView`, `changeModel`, `changeAnimation`, `setLayout`, `cleanCharacters` |
+
+Local mode starts with `?local=<models index url>` or `window.SPINEWALL_LOCAL = {modelsUrl}`. The index is `{"runtime": "4.1.56", "models": [...]}` like `docs/demo/models/index.json`. The model folders sit beside it. A visible Edit button replaces the Plasma patch.
 
 ### `server/spinewall-server.py`
 
@@ -212,7 +223,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT
 
 ## Legal notice
 
-Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters and all related art, models, and audio are the property of SHIFT UP Corporation. Spinewall is a fan project. SHIFT UP does not sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
+Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters and all related art and models are the property of SHIFT UP Corporation. Spinewall is a fan project. SHIFT UP does not sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
 
 ## Configuration
 
