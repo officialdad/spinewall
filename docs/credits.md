@@ -1,6 +1,6 @@
 # Credits
 
-Spinewall ships no models and no Spine runtime. Each project below keeps its own license.
+Spinewall ships no Spine runtime. The only models are the few samples for the live demo, under `docs/demo/models/`. Each project below keeps its own license.
 
 | Project | Use |
 |---|---|

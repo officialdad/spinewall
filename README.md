@@ -8,19 +8,28 @@ Live 2D animated characters as a KDE Plasma 6 wallpaper, on a black background. 
 
 Spinewall works with any Spine 3.8, 4.0, 4.1, or 4.2 model. It is not tied to one game.
 
-![Two seated Spine characters from different models, each playing its action animation side by side on a black desktop.](docs/images/hero.gif)
+<table>
+<tr>
+<td align="center"><img src="docs/images/hero.gif" alt="Two seated Spine characters from different models, each playing its action animation side by side on a black desktop." width="720"><br><sub>Two characters on one wallpaper, each playing its own animation. <a href="docs/images/hero.mp4">Smaller MP4</a></sub></td>
+</tr>
+</table>
 
-A [smaller MP4](docs/images/hero.mp4) of the same clip is also available.
+## Live demo
+
+Try it in the browser at [officialdad.github.io/spinewall](https://officialdad.github.io/spinewall/). The demo has a few sample variants of two characters. Pick a variant, play an animation, add a second character, drag to move, and scroll to scale. It needs no install and runs only in your browser.
 
 ## What it looks like
 
 In normal mode the desktop shows only the character. Click it to change its animation.
 
-![A Spine character animating on an otherwise empty black desktop, with no interface visible.](docs/images/normal-mode.png)
-
 Edit mode opens a panel on the right. Use it to choose models and animations, and to move and scale characters. Right-click the desktop and choose "Enter Edit Mode" to open it.
 
-![Edit mode: a model picker panel with search, filters, thumbnails, and an animation list beside the character.](docs/images/edit-mode.png)
+<table>
+<tr>
+<td align="center"><img src="docs/images/normal-mode.png" alt="A Spine character animating on an otherwise empty black desktop, with no interface visible." width="440"><br><sub>Normal mode: only the character</sub></td>
+<td align="center"><img src="docs/images/edit-mode.png" alt="Edit mode: a model picker panel with search, filters, thumbnails, and an animation list beside the character." width="440"><br><sub>Edit mode: the model picker and animation list</sub></td>
+</tr>
+</table>
 
 In edit mode you can:
 
@@ -30,17 +39,19 @@ In edit mode you can:
 - Drag the character to move it. Scroll the mouse wheel to scale it.
 - Add more characters with "Add character". Press a character to select it. A click changes only the topmost character under the pointer.
 
-Spinewall draws several characters on one wallpaper. Each character keeps its own model, animation, position, and scale.
+Spinewall draws several characters on one wallpaper. Each character keeps its own model, animation, position, and scale. In edit mode, the Characters list shows every character on screen. A dashed yellow box marks the selected one.
 
-![Two Spine characters on one black desktop, side by side, with no interface visible.](docs/images/multi-character.png)
+<table>
+<tr>
+<td align="center"><img src="docs/images/multi-character.png" alt="Two Spine characters on one black desktop, side by side, with no interface visible." width="440"><br><sub>Two characters, normal mode</sub></td>
+<td align="center"><img src="docs/images/multi-character-edit.png" alt="Edit mode with two characters on screen. A dashed yellow box marks the selected character, and the Characters list on the right shows both." width="440"><br><sub>Two characters, edit mode</sub></td>
+</tr>
+<tr>
+<td align="center" colspan="2"><img src="docs/images/picker-search.png" alt="The model picker after a fuzzy search for a character name, with the matching letters highlighted." width="440"><br><sub>Fuzzy search in the picker</sub></td>
+</tr>
+</table>
 
-In edit mode, the Characters list shows every character on screen. A dashed yellow box marks the selected one.
-
-![Edit mode with two characters on screen. A dashed yellow box marks the selected character, and the Characters list on the right shows both.](docs/images/multi-character-edit.png)
-
-![The model picker after a fuzzy search for a character name, with the matching letters highlighted.](docs/images/picker-search.png)
-
-The characters in these images belong to their owners. They are shown to demonstrate the interface only. Spinewall includes no models.
+The characters in these images are the property of SHIFT UP Corporation. Spinewall is not affiliated with SHIFT UP. They are shown to demonstrate the interface only. The only models in this repository are the few samples for the live demo, under `docs/demo/models/`. Spinewall does not install any models.
 
 ## Spine, not Live2D Cubism
 
@@ -157,7 +168,7 @@ Data flow, state keys, and rules are in `CLAUDE.md`.
 
 ## Test models
 
-Models are never committed. Test with the Esoteric Software example projects from the [spine-runtimes](https://github.com/EsotericSoftware/spine-runtimes) repo (`spineboy`, `raptor`, `goblins`, `hero`, `vine`, `stretchyman`, in 4.0 and 4.1), and with models you own.
+Models are never committed, except the demo samples in `docs/demo/models/`. Test with the Esoteric Software example projects from the [spine-runtimes](https://github.com/EsotericSoftware/spine-runtimes) repo (`spineboy`, `raptor`, `goblins`, `hero`, `vine`, `stretchyman`, in 4.0 and 4.1), and with models you own.
 
 1. Copy a model directory into `~/.local/share/spinewall/models/`.
 2. Run `spinewall rescan`.
@@ -201,7 +212,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT
 
 ## Legal notice
 
-Spinewall is a viewer. It includes no models and no Spine runtime. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. Game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
+Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters and all related art, models, and audio are the property of SHIFT UP Corporation. Spinewall is a fan project. SHIFT UP does not sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
 
 ## Configuration
 

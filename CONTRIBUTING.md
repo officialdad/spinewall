@@ -4,7 +4,7 @@ Read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first. Report security problems th
 
 ## Rules
 
-- Never commit models, `.skel`, `.atlas`, atlas images, or Spine runtime files. The runtime license forbids redistribution. CI rejects them.
+- Never commit models, `.skel`, `.atlas`, atlas images, or Spine runtime files. The only exception is the sample models in `docs/demo/models/`. The runtime license forbids redistribution. CI rejects them.
 - Never add game-specific code or names, in code or in docs.
 - Comments explain why, not what.
 - Use short sentences and a plain dash, never an em dash.

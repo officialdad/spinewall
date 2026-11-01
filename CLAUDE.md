@@ -13,6 +13,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 | `scripts/install.sh` | Installs theme, server, CLI, user service. Fetches the Spine runtimes from npm. |
 | `scripts/patch-plasmoid.sh` | Applies the patch to a local copy of the containment. |
 | `systemd/spinewall.service` | User service for the server. |
+| `docs/demo/` | Static demo for GitHub Pages. `index.html` plays the sample models in `models/` (list in `models/index.json`). Deployed by `.github/workflows/pages.yml`. Neutral display names only. |
 | `docs/assets.md` | Model directory layout and `model.json` keys. |
 | `docs/credits.md` | Sources, tools, and test models. Add a row when you use a new source. |
 | `README.md` | Install steps, CLI, and the code map by function. Keep the code map in step with the code. |
@@ -28,7 +29,8 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 
 ## Rules
 
-- Never commit models, `.skel`, `.atlas`, atlas images, or Spine runtime files. The runtime license forbids redistribution. The install script fetches it.
+- Never commit models, `.skel`, `.atlas`, or atlas images, with one exception: `docs/demo/models/` holds the sample models for the Pages demo. The user approved that on 2026-11-01. Add nothing else there and keep the sample count small.
+- Never commit Spine runtime files, demo included. The runtime license forbids redistribution. The install script fetches it, and the demo loads it from the npm CDN with pinned versions and SRI hashes.
 - The Spine players define the global `spine`. The install script renames the 4.x players to `spine40`, `spine41`, and `spine42` with `sed`. It wraps the 3.8 player in a function that returns `spine38`, because that player names `spine` internally. Keep the theme and the script in step.
 - Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`, `auto`, `characters`, `crev`. The page and server share them. Change both together.
 - `characters` is a list of `{uid, model, animation, x, y, scale, auto}` in z order, last on top. `crev` bumps on each change. An empty list means single-character mode, which uses the old keys alone. The list persists in `layout.json` (env `SPINEWALL_LAYOUT`), apart from `STATE_FILE`.

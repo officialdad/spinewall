@@ -12,6 +12,9 @@ spine-player*.css
 *.webp
 *.jpg
 !docs/**/*.png
+# Demo sample models are the one allowed set of assets.
+!docs/demo/models/
+!docs/demo/models/**
 tests/page/test-results/
 tests/page/.work/
 tests/page/playwright-report/

@@ -13,6 +13,9 @@ from tests.scripts.support import ROOT
 # Binary or generated paths that the denylist scan skips.
 BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".mp4", ".webp", ".ico", ".woff", ".woff2"}
 FORBIDDEN_NAMES = re.compile(r"(\.skel|\.atlas)$|(^|/)spine-player[^/]*\.(js|css)$|(^|/)spine-(webgl|canvas)[^/]*\.js$")
+# Demo sample models are the one place assets are allowed. The runtime ban has no exception.
+DEMO_MODELS = "docs/demo/models/"
+RUNTIME_NAMES = re.compile(r"(^|/)spine-player[^/]*\.(js|css)$|(^|/)spine-(webgl|canvas)[^/]*\.js$")
 # Personal paths and machine names. Add a name here when a new one must stay out of the repo.
 DENYLIST = ("/home/", "/Users/", "cachy", "ariff@", "192.168.")
 # This file holds the denylist itself.
@@ -110,14 +113,18 @@ class Shellcheck(unittest.TestCase):
 
 class NoForbiddenContent(unittest.TestCase):
     def test_no_model_or_runtime_file_is_tracked(self):
-        bad = [p for p in project_files() if FORBIDDEN_NAMES.search(p)]
-        self.assertEqual(bad, [], "the runtime license forbids redistribution, and models are never committed")
+        bad = [p for p in project_files() if FORBIDDEN_NAMES.search(p) and not p.startswith(DEMO_MODELS)]
+        self.assertEqual(bad, [], "the runtime license forbids redistribution, and models are only allowed under docs/demo/models/")
+
+    def test_no_runtime_file_is_tracked_anywhere(self):
+        bad = [p for p in project_files() if RUNTIME_NAMES.search(p)]
+        self.assertEqual(bad, [], "the runtime license forbids redistribution, with no exception for the demo")
 
     def test_no_file_is_big_enough_to_be_a_bundled_runtime(self):
         hits = []
         for rel in project_files():
             path = ROOT / rel
-            if path.suffix in BINARY_SUFFIXES or rel in SCAN_EXEMPT or rel.startswith("tests/page/node_modules"):
+            if path.suffix in BINARY_SUFFIXES or rel in SCAN_EXEMPT or rel.startswith(("tests/page/node_modules", DEMO_MODELS)):
                 continue
             if path.stat().st_size > 400_000:
                 hits.append(f"{rel} is over 400 KB, so it may be a bundled runtime")
