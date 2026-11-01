@@ -1,6 +1,6 @@
 # spinewall
 
-Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubism is not supported. Any Spine 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs.
+Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubism is not supported. Any Spine 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs. One exception: `docs/windows.md` and `docs/credits.md` link the community model pack and name its publisher. The user approved that on 2026-11-01. Add nothing else.
 
 ## Layout
 
@@ -12,6 +12,8 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 | `bin/spinewall` | CLI. Sends commands to the server. |
 | `plasma/desktopcontainment.patch` | Patch for a local copy of the Plasma desktop containment. |
 | `scripts/install.sh` | Installs theme, server, CLI, user service. Fetches the Spine runtimes from npm. |
+| `scripts/package-windows.py` | Builds the Lively zip and the Wallpaper Engine files from a model directory. Runs the page in local mode. Windows is unconfirmed (issue #2). `install.sh --build-theme DIR` builds the theme only, so the runtime pins stay in one file. |
+| `docs/windows.md` | Windows steps for Lively and Wallpaper Engine. |
 | `scripts/patch-plasmoid.sh` | Applies the patch to a local copy of the containment. |
 | `systemd/spinewall.service` | User service for the server. |
 | `docs/demo/` | Static demo for GitHub Pages. `index.html` plays the sample models in `models/` (list in `models/index.json`). Deployed by `.github/workflows/pages.yml`. Neutral display names only. |

@@ -3,7 +3,15 @@
 # The Spine runtime is fetched from npm because its license forbids redistribution.
 set -euo pipefail
 
-for tool in npm curl sha256sum python3 systemctl tar sed; do
+# --build-theme DIR only builds the theme into DIR. package-windows.py uses it so the runtime pins stay in this file.
+build_only=""
+if [ "${1:-}" = "--build-theme" ]; then
+  build_only="${2:?error: --build-theme needs a directory.}"
+fi
+
+tools=(npm curl sha256sum tar sed)
+[ -z "$build_only" ] && tools+=(python3 systemctl)
+for tool in "${tools[@]}"; do
   command -v "$tool" >/dev/null || { echo "error: $tool is required and was not found on PATH." >&2; exit 1; }
 done
 
@@ -56,6 +64,12 @@ fetch_runtime 4.1.56 spine41 5c6d530857d6eb18d8bb5f8b10e4ba62fed42e887bf874088e9
 fetch_runtime 4.2.120 spine42 f553d60910e6069b121555d4575c60f31c65d6fd2a3e349328ba9d2882dd79f1
 fetch_runtime_38
 cp "$root/theme/index.html" "$root/theme/local-host.js" "$root/theme/spinewall.theme" "$stage/"
+
+if [ -n "$build_only" ]; then
+  mkdir -p "$build_only"
+  cp "$stage"/* "$build_only/"
+  exit 0
+fi
 
 # Everything checked. Only now does the install touch the home directory.
 mkdir -p "$theme_dir" "$models_dir" "$state_dir" "$cache_dir" "$bin_dir" "$HOME/.config/systemd/user"

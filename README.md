@@ -135,6 +135,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | `theme/local-host.js` | Local mode. Runs the server's state logic in the page, with `localStorage` for state and prefs. |
 | `server/spinewall-server.py` | Local HTTP server. State, model scan, prefs, layout, thumbnails. |
 | `bin/spinewall` | CLI. Thin `curl` wrapper over the server. |
+| `scripts/package-windows.py` | Builds the Lively zip and Wallpaper Engine files for Windows. See [docs/windows.md](docs/windows.md). Unconfirmed on Windows. |
 | `scripts/install.sh` | Installs theme, server, CLI, and user service. Fetches the runtimes. |
 | `scripts/patch-plasmoid.sh` | Applies `plasma/desktopcontainment.patch`. |
 | `systemd/spinewall.service` | User service for the server. |
