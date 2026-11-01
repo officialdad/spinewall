@@ -101,7 +101,7 @@ test("variants group under one character and expand", async ({ open, page }) => 
   await expect(group).toHaveAttribute("aria-label", /hidden/);
   await search.press("Shift+Enter");
   await expect(group).toHaveAttribute("aria-label", /shown/);
-  await expect(page.getByRole("option", { name: /variant of Alice/ })).toHaveCount(VARIANTS.length);
+  await expect(page.getByRole("listbox", { name: `Models, ${VARIANTS.length + 1} shown` })).toBeVisible();
 });
 
 test("the Variants toggle lists each variant on its own", async ({ open, page }) => {
