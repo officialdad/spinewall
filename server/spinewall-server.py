@@ -23,6 +23,9 @@ STATE_FILE = os.environ.get(
     "SPINEWALL_STATE", os.path.expanduser("~/.local/state/spinewall/state.json")
 )
 # Older installs kept the state beside the directory. It is read once when the new file is absent.
+CONFIG_FILE = os.environ.get(
+    "SPINEWALL_CONFIG", os.path.expanduser("~/.config/spinewall/config.json")
+)
 LEGACY_STATE_FILE = os.path.expanduser("~/.local/state/spinewall.json")
 
 THUMB_DIR = os.environ.get(
@@ -189,23 +192,62 @@ def scan_model(directory):
     }, None
 
 
+def load_extra_dirs():
+    """Reads additional_model_dirs from the config file. Only the user's own file can add a directory."""
+    try:
+        with open(CONFIG_FILE) as f:
+            data = json.load(f)
+    except OSError:
+        return []
+    except (ValueError, RecursionError):
+        print(f"spinewall: {CONFIG_FILE} is not valid JSON, so additional_model_dirs is ignored", file=sys.stderr)
+        return []
+    raw = data.get("additional_model_dirs") if isinstance(data, dict) else None
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        print("spinewall: additional_model_dirs must be a list of paths, so it is ignored", file=sys.stderr)
+        return []
+    dirs = []
+    for entry in raw:
+        path = os.path.expanduser(entry) if isinstance(entry, str) else ""
+        if not os.path.isabs(path) or not os.path.isdir(path):
+            print(f"spinewall: additional_model_dirs entry {entry!r} is not an existing absolute directory, skipped", file=sys.stderr)
+        elif os.path.realpath(path) != os.path.realpath(MODELS_DIR) and path not in dirs:
+            dirs.append(path)
+    return dirs
+
+
+# Maps each scanned model id to its directory, because models can live outside MODELS_DIR.
+MODEL_DIRS = {}
+
+
 def scan_models():
     models, skipped = [], {}
-    if not os.path.isdir(MODELS_DIR):
-        return models, skipped
-    for name in sorted(os.listdir(MODELS_DIR)):
-        directory = os.path.join(MODELS_DIR, name)
-        if not os.path.isdir(directory):
+    MODEL_DIRS.clear()
+    # The first root wins on a duplicate id, so the main directory always keeps its own models.
+    for root in [MODELS_DIR, *load_extra_dirs()]:
+        if not os.path.isdir(root):
             continue
-        try:
-            model, reason = scan_model(directory)
-        except Exception as e:  # noqa: BLE001 - one bad model must never stop the server
-            model, reason = None, f"{type(e).__name__}: {e}"
-        if model:
-            models.append(model)
-        else:
-            skipped[name] = reason
-            print(f"skipped model {name}: {reason}", file=sys.stderr)
+        for name in sorted(os.listdir(root)):
+            directory = os.path.join(root, name)
+            if not os.path.isdir(directory):
+                continue
+            label = name if root == MODELS_DIR else directory
+            if name in MODEL_DIRS:
+                skipped[label] = f"duplicate model ID, {MODEL_DIRS[name]} already has it"
+                print(f"skipped model {label}: {skipped[label]}", file=sys.stderr)
+                continue
+            try:
+                model, reason = scan_model(directory)
+            except Exception as e:  # noqa: BLE001 - one bad model must never stop the server
+                model, reason = None, f"{type(e).__name__}: {e}"
+            if model:
+                models.append(model)
+                MODEL_DIRS[name] = directory
+            else:
+                skipped[label] = reason
+                print(f"skipped model {label}: {reason}", file=sys.stderr)
     assign_characters(models)
     return models, skipped
 
@@ -682,6 +724,12 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def translate_path(self, path):
+        # A path that names no scanned model maps to a file that does not exist, so it answers 404.
+        parts = [urllib.parse.unquote(p) for p in path.split("?", 1)[0].split("/") if p]
+        directory = MODEL_DIRS.get(parts[0]) if len(parts) == 2 else None
+        return os.path.join(directory, parts[1]) if directory else os.path.join(MODELS_DIR, ".not-a-model")
+
     def end_headers(self):
         if self.cors_origin:
             self.send_header("Access-Control-Allow-Origin", self.cors_origin)
@@ -809,6 +857,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "models": len(MODELS),
                     "skipped": SKIPPED,
                     "modelsDir": MODELS_DIR,
+                    "additionalModelDirs": load_extra_dirs(),
                     "input": INPUT,
                 }
             )

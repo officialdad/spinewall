@@ -15,6 +15,26 @@ Put one directory per model in `~/.local/share/spinewall/models/`. The directory
     model.json             optional
 ```
 
+## Models in other directories
+
+The server can scan more directories. List them in `~/.config/spinewall/config.json` (env `SPINEWALL_CONFIG`):
+
+```json
+{
+  "additional_model_dirs": ["/mnt/games/spine-models", "~/Downloads/models"]
+}
+```
+
+| Rule | Detail |
+|---|---|
+| Entry | An absolute path, or one that starts with `~`. Anything else is skipped and logged. |
+| Layout | The same as the main directory: one subdirectory per model. |
+| Duplicate ID | The main directory wins. The later model is skipped and listed under `skipped`. |
+| Reload | The server reads the config at start and on `spinewall rescan`. |
+| Bad file | Invalid JSON or a non-list value is ignored and logged. The main directory still loads. |
+
+`spinewall info` lists the directories under `additionalModelDirs`. Local mode takes its models from an index and has no directory scan.
+
 ## Required files
 
 | File | Rule |
