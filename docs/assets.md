@@ -34,7 +34,7 @@ Put one directory per model in `~/.local/share/spinewall/models/`. The directory
 
 The server reads the version from the skeleton file. It skips a model with another version and prints the reason. `spinewall info` lists skipped models under `skipped`.
 
-Spine 3.7 and older, and 4.3, are not supported yet. Many mobile game exports use 3.8.
+Spine 3.7 and older, 4.3, and Live2D Cubism (`.moc3`) models are not supported. Many mobile game exports use 3.8.
 
 ## Optional `model.json`
 
@@ -88,6 +88,16 @@ Edit mode shows a Characters strip above the model list.
 Characters of one Spine version draw in the order of the list. Characters of different versions share order by layer only, so two overlapping characters of different versions can appear in the wrong order.
 
 Command line: `spinewall add-character [ID]`, `remove-character UID`, `clear-characters`, `next-char-anim UID`, `set-char-anim UID NAME`, `set-char-model UID ID`. `spinewall info` lists each UID under `state.characters`.
+
+## Auto-cycle animations
+
+Each character has an Auto-cycle animations checkbox in the Characters strip and in its row. It is off by default and the server keeps it in `layout.json`.
+
+- An animation plays at least 6 s, rounded up to whole loops, so a motion never cuts off. The next animation in list order plays, wrapping at the end.
+- A click on the character restarts the timer. Previewing an animation from the list pauses cycling for the selected character.
+- Cycling also runs in normal mode.
+
+Command line: `spinewall auto-cycle on|off` for all characters, `spinewall auto-cycle UID on|off` for one.
 
 ## Check a model
 

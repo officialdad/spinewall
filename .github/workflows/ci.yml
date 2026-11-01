@@ -1,17 +1,66 @@
 name: ci
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
+  static:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Python compiles
-        run: python3 -m py_compile server/spinewall-server.py
+        run: python3 -I -m py_compile server/spinewall-server.py
+      - name: Shell syntax
+        run: bash -n scripts/install.sh scripts/patch-plasmoid.sh bin/spinewall
       - name: Shell lint
-        run: shellcheck scripts/*.sh bin/spinewall
+        run: shellcheck scripts/*.sh bin/spinewall tests/page/setup.sh
       - name: No assets or runtimes tracked
         run: |
           if git ls-files | grep -E '\.(skel|atlas)$|spine-player.*\.(js|css)$'; then
             echo "error: models or runtime files are tracked. The runtime license forbids redistribution."
             exit 1
           fi
+
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Server, CLI, and script tests
+        run: python3 -I -m unittest discover -s tests -t . -v
+      - name: Install from the registry with pinned hashes
+        env:
+          SPINEWALL_TEST_NETWORK: "1"
+        run: python3 -I -m unittest tests.scripts.test_install -v
+
+  page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install page test dependencies
+        working-directory: tests/page
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Page tests
+        working-directory: tests/page
+        run: npm test
+      - name: Upload test report on error
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: page-test-results
+          path: tests/page/test-results
+          if-no-files-found: ignore
+          retention-days: 7

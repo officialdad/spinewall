@@ -1,6 +1,6 @@
 # spinewall
 
-Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs.
+Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubism is not supported. Any Spine 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs.
 
 ## Layout
 
@@ -30,10 +30,11 @@ Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 3.8, 4.0, 4.1, or 4.2 model 
 
 - Never commit models, `.skel`, `.atlas`, atlas images, or Spine runtime files. The runtime license forbids redistribution. The install script fetches it.
 - The Spine players define the global `spine`. The install script renames the 4.x players to `spine40`, `spine41`, and `spine42` with `sed`. It wraps the 3.8 player in a function that returns `spine38`, because that player names `spine` internally. Keep the theme and the script in step.
-- Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`, `characters`, `crev`. The page and server share them. Change both together.
-- `characters` is a list of `{uid, model, animation, x, y, scale}` in z order, last on top. `crev` bumps on each change. An empty list means single-character mode, which uses the old keys alone. The list persists in `layout.json` (env `SPINEWALL_LAYOUT`), apart from `STATE_FILE`.
+- Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`, `auto`, `characters`, `crev`. The page and server share them. Change both together.
+- `characters` is a list of `{uid, model, animation, x, y, scale, auto}` in z order, last on top. `crev` bumps on each change. An empty list means single-character mode, which uses the old keys alone. The list persists in `layout.json` (env `SPINEWALL_LAYOUT`), apart from `STATE_FILE`.
 - Several characters share one canvas per Spine runtime. Layers stack by their topmost character, so characters of different runtimes interleave by layer only. Two overlapping characters of different versions can draw in the wrong order.
-- Removing down to one character folds it back into `model`, `animation`, `scale`, `x`, `y`.
+- Removing down to one character folds it back into `model`, `animation`, `scale`, `x`, `y`, `auto`.
+- `auto` is a bool. The server only stores it and rejects other types. The page owns the timing: an animation plays at least 6 s, rounded up to whole loops, then the next one in list order plays. A click or an edit-mode preview resets the timer.
 - A click changes only the topmost character under the pointer. Hit testing uses triangle tests on world vertices, so a transparent area does nothing.
 - The server scans models at start and on `GET /rescan` (`spinewall rescan`). A new model appears after a rescan.
 - `model.json` `kind` is `character` or `scene`. The server detects it from region names when absent. A scene draws first in multi mode and never takes a click. `hideSlots` removes backdrop slots from drawing, framing, thumbnails, and hit tests.

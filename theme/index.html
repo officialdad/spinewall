@@ -40,6 +40,10 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 .charrow{display:flex;gap:6px;flex:none}
 .charrow .sel{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 12px}
 .charrow .rm{flex:none;width:44px;padding:0;font-size:18px}
+.autolabel{display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;cursor:pointer}
+.charrow .autolabel{flex:none;padding:0 8px;border:2px solid #767676;border-radius:6px}
+.charrow .autolabel:hover{border-color:#fff}
+#picker input[type="checkbox"]{width:20px;height:20px;min-height:0;padding:0;margin:0;flex:none;accent-color:#fff;cursor:pointer}
 #picker .warn{margin:0;padding:6px 8px;border:2px solid #ffd54a;border-radius:6px;font-size:14px}
 .tabs{display:none;gap:6px}
 .tabs button{flex:1}
@@ -109,8 +113,7 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 .cell .name{overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:1.2}
 .cell.list .name{white-space:nowrap}
 .cell.grid .name{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;text-align:center;font-size:14px;width:100%}
-#picker .cell .star{position:absolute;right:0;top:0;width:44px;height:44px;min-height:44px;border:0;background:transparent;color:inherit;font-size:20px;padding:0}
-#picker .cell .star[aria-pressed="true"]{background:transparent;color:inherit;font-weight:400}
+#picker .cell .star{position:absolute;right:0;top:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:inherit;font-size:20px}
 #rail{display:flex;flex-direction:column;overflow:hidden;flex:none;width:44px;box-sizing:border-box;
   border:2px solid #767676;border-radius:6px;touch-action:none;user-select:none;cursor:pointer}
 #rail[hidden]{display:none}
@@ -163,7 +166,7 @@ let models = [], player = null, anims = [];
 // Several characters share one stage. `layout` mirrors the server list, and an empty list means the single player.
 let multi = false, layout = [], selectedUid = null, crev = -1, layoutPending = false;
 const WARN_ABOVE = 25;
-let state = {model: null, animation: null, rev: -1};
+let state = {model: null, animation: null, rev: -1, auto: false};
 let editMode = false, dragging = false, click = null;
 let view = {scale: 1, x: 0, y: 0}, viewRev = -1;
 const emptyCounts = () => ({wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0});
@@ -475,22 +478,26 @@ function ensureChrome() {
     el("h2", {textContent: "Animations"}), animSearch, animGroupSel, animList);
   const charsTitle = el("h2", {textContent: "Characters"});
   const addBtn = el("button", {type: "button", textContent: "Add character"});
-  addBtn.setAttribute("aria-label", "Add the highlighted model as another character");
+  addBtn.title = "Add the highlighted model as another character";
   const charsWarn = el("p", {className: "warn", hidden: true});
   charsWarn.setAttribute("role", "status");
+  const autoBox = el("input", {type: "checkbox", id: "auto-target"});
+  const autoText = el("span", {textContent: "Auto-cycle animations"});
+  const autoLabel = el("label", {className: "autolabel"}, autoBox, autoText);
   const charsList = el("div", {id: "chars", hidden: true});
   charsList.setAttribute("role", "group");
   charsList.setAttribute("aria-label", "Characters on screen");
   const charsPane = el("div", {className: "pane", id: "chars-pane"},
-    el("div", {className: "charhead"}, charsTitle, addBtn), charsWarn, charsList);
+    el("div", {className: "charhead"}, charsTitle, addBtn), autoLabel, charsWarn, charsList);
   const tabModels = el("button", {type: "button", textContent: "Models"});
   const tabAnims = el("button", {type: "button", textContent: "Animations"});
   const tabs = el("div", {className: "tabs"}, tabModels, tabAnims);
   picker.replaceChildren(tabs, charsPane, modelsPane, animsPane);
   picker.dataset.tab = "models";
   ui = {kindBtns, search, sourceBtn, menu, sortSel, gridBtn, listBtn, varBtn, list, spacer, rail, bubble, listbox, empty,
-        animGroupSel, animList, charsTitle, charsWarn, charsList};
+        animGroupSel, animList, charsTitle, charsWarn, charsList, autoBox};
   addBtn.addEventListener("click", addHighlighted);
+  autoBox.addEventListener("change", () => setAuto(targetChar(), autoBox.checked));
 
   const setTab = t => {
     picker.dataset.tab = t;
@@ -701,7 +708,7 @@ function makeCell(it, key, grid) {
   const group = it.count > 1;
   const c = el("div", {className: `cell ${grid ? "grid" : "list"}${it.variant ? " variant" : ""}${group ? " group" : ""}`, id: cellId(key)});
   c.setAttribute("role", "option");
-  c.append(th, check, el("span", {className: "txt"}, name, meta));
+  c.append(th, check, el("span", {className: "txt"}, name, " ", meta));
   let star = null, chev = null;
   if (group) {
     // Favorites stay per model, so a character card has no star. Star the variant instead.
@@ -713,7 +720,9 @@ function makeCell(it, key, grid) {
       if (fresh) playCharacter(fresh);
     });
   } else {
-    star = el("button", {type: "button", className: "star", tabIndex: -1});
+    // A control inside an option breaks the listbox pattern, so the star is a mouse target only. Alt+F is the keyboard path.
+    star = el("span", {className: "star"});
+    star.setAttribute("aria-hidden", "true");
     star.addEventListener("click", e => {
       e.stopPropagation();
       toggleFavorite(it.m.id);
@@ -763,8 +772,7 @@ function renderWindow() {
     if (star) {
       const fav = prefs.favorites.includes(it.m.id);
       star.textContent = fav ? "★" : "☆";
-      star.setAttribute("aria-pressed", String(fav));
-      star.setAttribute("aria-label", `Favorite ${it.m.name}`);
+      star.classList.toggle("on", fav);
     }
     const held = heldModel(it);
     c.style.cssText = `left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px`;
@@ -775,12 +783,13 @@ function renderWindow() {
       meta.replaceChildren(el("span", {textContent: `${it.count} variants`}));
       if (held) meta.append(el("span", {className: "now", textContent: `Playing: ${held.name}`}));
       chev.textContent = it.open ? "\u25be" : "\u25b8";
-      c.setAttribute("aria-label", `${it.m.name}, ${it.count} variants, ${it.open ? "shown" : "hidden"}${held ? `, playing ${held.name}` : ""}`);
+      c.setAttribute("aria-label", `${it.m.name} ${it.count} variants${held ? ` Playing: ${held.name}` : ""}, ${it.open ? "shown" : "hidden"}`);
       c.title = `${it.open ? "Hide" : "Show"} ${it.count} variants. Enter or double click plays ${target.name}.`;
       c.setAttribute("aria-selected", "false");
     } else {
       meta.replaceChildren();
-      c.setAttribute("aria-label", it.variant ? `${it.m.name}, variant of ${it.parent}` : it.m.name);
+      const fav = prefs.favorites.includes(it.m.id) ? ", favorite" : "";
+      c.setAttribute("aria-label", (it.variant ? `${it.m.name}, variant of ${it.parent}` : it.m.name) + fav);
       c.title = it.m.name;
       c.setAttribute("aria-selected", String(isPlaying(it)));
     }
@@ -1401,6 +1410,41 @@ function setCharAnimation(c, requested) {
   c.state.setAnimation(0, pick, true);
 }
 
+// A short loop would flicker if it advanced each cycle, so an animation plays at least AUTO_MIN_S,
+// rounded up to a whole loop so it never cuts off mid-motion.
+const AUTO_MIN_S = 6;
+function cycleDue(track) {
+  if (!track || !track.animation) return false;
+  const loop = track.animation.duration || 0;
+  return track.trackTime >= (loop > 0 ? Math.ceil(AUTO_MIN_S / loop) * loop : AUTO_MIN_S);
+}
+
+// The server stores the new animation too, so a click, the list, and a reload all start from what is on screen.
+function autoCycleChar(c) {
+  const track = c.state.getCurrent(0);
+  if (c.names.length < 2 || !cycleDue(track)) return;
+  const next = c.names[(c.names.indexOf(track.animation.name) + 1) % c.names.length];
+  setCharAnimation(c, next);
+  cmd(`set-char-anim/${c.uid}/${encodeURIComponent(next)}`);
+  if (editMode && c === targetStageChar()) renderAnims();
+}
+
+function autoCycleSingle() {
+  if (multi || !player || !state.auto || previewing || anims.length < 2) return;
+  const track = player.animationState.getCurrent(0);
+  if (!cycleDue(track)) return;
+  const next = anims[(anims.indexOf(track.animation.name) + 1) % anims.length];
+  player.animationState.setAnimation(0, next, true);
+  state.animation = next;
+  cmd(`set-anim/${encodeURIComponent(next)}`);
+  if (editMode) renderAnims();
+}
+
+const playingName = () => {
+  const track = player && player.animationState.getCurrent(0);
+  return track && track.animation ? track.animation.name : null;
+};
+
 // Draw order is layer by layer, because a canvas cannot interleave with another runtime's canvas.
 // A layer ranks by its topmost character, and a layer holding only scenes ranks lowest.
 // The canvases stack in the same order (`stackLayers`), so the picture and hit testing agree.
@@ -1450,6 +1494,7 @@ function stageFrame(now) {
     // A character outside the window costs nothing, so it neither updates nor draws.
     if (!onScreen(c, e)) continue;
     c.state.update(dt);
+    if (e.auto && !(previewing && c === targetStageChar())) autoCycleChar(c);
     c.state.apply(c.skeleton);
     c.hide();
     if (c.skeleton.update) c.skeleton.update(dt);
@@ -1617,6 +1662,13 @@ function chooseAnim(name) {
   cmd(e ? `set-char-anim/${e.uid}/${encodeURIComponent(name)}` : `set-anim/${encodeURIComponent(name)}`);
 }
 
+// The cycle itself runs in normal mode too. The checkbox only exists in the edit panel.
+function setAuto(e, on) {
+  const word = on ? "on" : "off";
+  if (e) { e.auto = on; cmd(`auto-cycle/${e.uid}/${word}`); }
+  else { state.auto = on; cmd(`auto-cycle/${word}`); }
+}
+
 function renderChars() {
   if (!ui) return;
   const n = layout.length;
@@ -1625,18 +1677,34 @@ function renderChars() {
   ui.charsWarn.hidden = n <= WARN_ABOVE;
   ui.charsWarn.textContent = `${n} characters. Frame rate drops above ${WARN_ABOVE}.`;
   const target = targetChar();
+  const targetModel = target && models.find(x => x.id === target.model);
+  ui.autoBox.checked = target ? !!target.auto : !!state.auto;
+  ui.autoBox.setAttribute("aria-label", multi && target ? `Auto-cycle animations for ${targetModel ? targetModel.name : target.model}` : "Auto-cycle animations");
+  // A rebuilt row loses focus, so a keyboard user who just toggled a box would be sent back to the top.
+  const focused = document.activeElement && document.activeElement.dataset.focusKey;
   ui.charsList.replaceChildren(...layout.map(e => {
     const m = models.find(x => x.id === e.model);
     const name = m ? m.name : e.model;
     const sel = el("button", {type: "button", className: "sel", textContent: name, title: name});
+    sel.dataset.focusKey = `sel:${e.uid}`;
     sel.setAttribute("aria-pressed", String(!!target && target.uid === e.uid));
     sel.setAttribute("aria-label", `Select ${name}`);
     sel.addEventListener("click", () => selectChar(e.uid));
+    const box = el("input", {type: "checkbox", checked: !!e.auto});
+    box.dataset.focusKey = `auto:${e.uid}`;
+    box.setAttribute("aria-label", `Auto-cycle animations for ${name}`);
+    box.addEventListener("change", () => { setAuto(e, box.checked); if (target && target.uid === e.uid) ui.autoBox.checked = box.checked; });
+    const auto = el("label", {className: "autolabel", title: "Auto-cycle animations"}, box, el("span", {textContent: "Auto"}));
     const rm = el("button", {type: "button", className: "rm", textContent: "✕"});
+    rm.dataset.focusKey = `rm:${e.uid}`;
     rm.setAttribute("aria-label", `Remove ${name}`);
     rm.addEventListener("click", () => cmd(`remove-character/${e.uid}`));
-    return el("div", {className: "charrow"}, sel, rm);
+    return el("div", {className: "charrow"}, sel, auto, rm);
   }));
+  if (focused) {
+    const again = [...ui.charsList.querySelectorAll("[data-focus-key]")].find(x => x.dataset.focusKey === focused);
+    if (again) again.focus();
+  }
 }
 
 function load(modelId, animation) {
@@ -1709,8 +1777,10 @@ async function poll() {
       if (modelChanged && s.model) prefs.recent = [s.model, ...prefs.recent.filter(id => id !== s.model)].slice(0, 20);
       if (editMode) { renderPicker(); }
       if (modelChanged && !multi) load(s.model, s.animation);
-      else if (player && anims.includes(s.animation)) player.animationState.setAnimation(0, s.animation, true);
+      // An auto-cycle step already plays the animation the server just stored, and a restart would stutter.
+      else if (player && anims.includes(s.animation) && playingName() !== s.animation) player.animationState.setAnimation(0, s.animation, true);
     }
+    autoCycleSingle();
     // Leaving the shared stage brings the single player back with the model the server carried over.
     if (!multi && !player && state.model) load(state.model, state.animation);
   } catch (e) {}

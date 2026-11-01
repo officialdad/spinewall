@@ -271,7 +271,7 @@ def plain_int(value, fallback=0):
 
 
 def load_state():
-    state = {"model": first_character_id(MODELS), "animation": None, "rev": 0, **VIEW_DEFAULT, "vrev": 0}
+    state = {"model": first_character_id(MODELS), "animation": None, "rev": 0, **VIEW_DEFAULT, "vrev": 0, "auto": False}
     saved = read_json_dict(STATE_FILE)
     if saved is None and not os.path.exists(STATE_FILE):
         saved = read_json_dict(LEGACY_STATE_FILE)
@@ -281,6 +281,7 @@ def load_state():
     animation = saved.get("animation")
     state["animation"] = animation if isinstance(animation, str) and 0 < len(animation) <= ANIMATION_MAX_CHARS else None
     state["rev"] = max(0, plain_int(saved.get("rev")))
+    state["auto"] = saved.get("auto") is True
     state["vrev"] = max(0, plain_int(saved.get("vrev")))
     state["scale"] = clamp(saved.get("scale"), 0.3, 8.0, VIEW_DEFAULT["scale"])
     state["x"] = clamp(saved.get("x"), -2.0, 2.0, VIEW_DEFAULT["x"])
@@ -329,6 +330,8 @@ def clean_characters(raw, allowed_uids=None):
                 "x": clamp(entry.get("x"), -2.0, 2.0, 0.0),
                 "y": clamp(entry.get("y"), -2.0, 2.0, 0.0),
                 "scale": clamp(entry.get("scale"), 0.3, 8.0, 1.0),
+                # `is True` keeps 1 and "yes" out, because a bool is the only value the page writes.
+                "auto": entry.get("auto") is True,
             }
         )
     return cleaned
@@ -460,6 +463,7 @@ def add_character(model_id):
                 "x": STATE["x"],
                 "y": STATE["y"],
                 "scale": STATE["scale"],
+                "auto": STATE["auto"],
             }
         ]
     n = len(chars)
@@ -474,6 +478,7 @@ def add_character(model_id):
             "x": side * step * 0.2,
             "y": 0.0,
             "scale": 0.7,
+            "auto": False,
         }
     ]
     set_characters(chars)
@@ -487,9 +492,10 @@ def remove_character(uid):
         # One character left is the single-character layout, so the old keys carry it and the player returns.
         last = chars[0]
         chars = []
-        if last["model"] != STATE["model"] or last["animation"]:
+        if last["model"] != STATE["model"] or last["animation"] or last["auto"] != STATE["auto"]:
             STATE["model"] = last["model"]
             STATE["animation"] = last["animation"]
+            STATE["auto"] = last["auto"]
             STATE["rev"] += 1
         STATE.update(scale=last["scale"], x=last["x"], y=last["y"])
         STATE["vrev"] += 1
@@ -513,6 +519,24 @@ def cycle_character_animation(uid, step):
     update_character(uid, animation=names[(i + step) % len(names)])
 
 
+def set_auto_cycle(arg):
+    """`on` or `off` for the single character, or all characters in multi mode. `UID/on` for one character."""
+    uid, slash, value = arg.rpartition("/")
+    if value not in ("on", "off"):
+        return
+    on = value == "on"
+    if slash:
+        update_character(uid, auto=on)
+    elif STATE["characters"]:
+        chars = [{**c, "auto": on} for c in STATE["characters"]]
+        if chars != STATE["characters"]:
+            set_characters(chars)
+    elif STATE["auto"] != on:
+        STATE["auto"] = on
+        STATE["rev"] += 1
+        save()
+
+
 def set_layout(body):
     """Merge a page push of positions and order, or replace the whole layout when `replace` is true.
 
@@ -522,10 +546,14 @@ def set_layout(body):
     existing = {c["uid"]: c for c in STATE["characters"]}
     replace = body.get("replace") is True
     pushed = [e for e in body["characters"] if isinstance(e, dict)]
+    # A bad flag keeps the stored one. Only a real bool changes it.
+    pushed = [e if isinstance(e.get("auto"), bool) else {k: v for k, v in e.items() if k != "auto"} for e in pushed]
     if not replace:
         pushed = [e for e in pushed if e.get("uid") in existing]
     # Pushed entries carry position, scale and order. The stored model and animation fill the rest, so a
     # stale push cannot overwrite what a command changed.
+    if not replace:
+        pushed = [{k: v for k, v in e.items() if k not in ("model", "animation")} for e in pushed]
     merged = [
         {**existing.get(e.get("uid") if isinstance(e.get("uid"), str) else None, {}), **e}
         for e in pushed
@@ -635,6 +663,8 @@ def run_command(cmd, arg=None):
         remove_character(arg)
     elif cmd in ("next-char-anim", "prev-char-anim") and arg:
         cycle_character_animation(arg, 1 if cmd == "next-char-anim" else -1)
+    elif cmd == "auto-cycle" and arg:
+        set_auto_cycle(arg)
     elif cmd in ("set-char-anim", "set-char-model") and arg:
         uid, _, value = arg.partition("/")
         if cmd == "set-char-anim" and value:
@@ -743,7 +773,11 @@ class Handler(SimpleHTTPRequestHandler):
                 return
         if not self.is_served_file():
             return self.send_json({"error": "not found"}, 404)
-        super().do_GET()
+        try:
+            super().do_GET()
+        except ValueError:
+            # A NUL byte in the path makes open() raise. A 404 keeps the connection usable.
+            self.send_json({"error": "not found"}, 404)
 
     def handle_get(self):
         """Answers the API paths. Returns False for a path that is a model file."""

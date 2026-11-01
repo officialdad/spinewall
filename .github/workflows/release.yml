@@ -1,0 +1,54 @@
+name: release
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  assets:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - name: Build source tarball
+        run: |
+          name="spinewall-${TAG#v}"
+          git archive --format=tar.gz --prefix="$name/" -o "$name.tar.gz" "$TAG"
+          if tar tzf "$name.tar.gz" | grep -E '\.(skel|atlas)$|spine-player.*\.(js|css)$'; then
+            echo "error: archive holds models or runtime files. Release stops."
+            exit 1
+          fi
+          sha256sum "$name.tar.gz" > SHA256SUMS
+      - name: Check install script runs from the tarball
+        run: |
+          name="spinewall-${TAG#v}"
+          mkdir "$RUNNER_TEMP/extract"
+          tar xzf "$name.tar.gz" -C "$RUNNER_TEMP/extract"
+          bash -n "$RUNNER_TEMP/extract/$name/scripts/install.sh"
+          test -f "$RUNNER_TEMP/extract/$name/theme/index.html"
+      - name: Upload assets
+        run: gh release upload "$TAG" "spinewall-${TAG#v}.tar.gz" SHA256SUMS --clobber

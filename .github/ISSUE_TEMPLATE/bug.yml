@@ -1,0 +1,36 @@
+name: Bug
+description: Report an error
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach game models, textures, `.skel`, `.atlas`, or Spine runtime files. Name the model format and Spine version instead.
+  - type: input
+    id: plasma
+    attributes:
+      label: Plasma version and session
+      description: For example 6.8.1, Wayland.
+    validations:
+      required: true
+  - type: input
+    id: spine
+    attributes:
+      label: Spine version of the model
+      description: 3.8, 4.0, 4.1, or 4.2.
+    validations:
+      required: true
+  - type: textarea
+    id: info
+    attributes:
+      label: Output of `spinewall info`
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include what you expected and what happened.
+    validations:
+      required: true

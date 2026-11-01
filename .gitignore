@@ -12,3 +12,6 @@ spine-player*.css
 *.webp
 *.jpg
 !docs/**/*.png
+tests/page/test-results/
+tests/page/.work/
+tests/page/playwright-report/

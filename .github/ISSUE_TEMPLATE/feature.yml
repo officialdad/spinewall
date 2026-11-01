@@ -1,0 +1,21 @@
+name: Feature
+description: Ask for a change
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach game models, textures, or Spine runtime files. Spinewall stays free of game-specific code.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can you not do today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations:
+      required: true

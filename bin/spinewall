@@ -4,6 +4,7 @@
 #        | zoom-in | zoom-out | move-left|right|up|down | reset-view | rescan
 #        | add-character [ID] | remove-character UID | clear-characters
 #        | next-char-anim UID | prev-char-anim UID | set-char-anim UID NAME | set-char-model UID ID
+#        | auto-cycle on|off | auto-cycle UID on|off
 set -euo pipefail
 base="http://127.0.0.1:${SPINEWALL_PORT:-8777}"
 cmd="${1:-info}"

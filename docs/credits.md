@@ -7,7 +7,6 @@ Spinewall ships no models and no Spine runtime. Each project below keeps its own
 | [Spine and spine-runtimes](https://github.com/EsotericSoftware/spine-runtimes) | WebGL players. 3.8 from commit `8b4844b`. 4.x from npm `@esotericsoftware/spine-player`. The Spine Runtimes License applies. |
 | [webwallpaper-kde](https://github.com/ekoputrapratama/webwallpaper-kde) | Plugin that shows a web page as the Plasma wallpaper. |
 | [Nikke-db](https://github.com/Nikke-db) | Open-source viewer. Studied for skin handling and viewer behavior. |
-| [Waifuland](https://github.com/shinkuan/Waifuland) | Open-source multi-game viewer. Studied for design. |
 | [Spine-Viewer-Web](https://github.com/FrankoFPM/Spine-Viewer-Web) | Reference for a Spine web viewer. |
 
 Example models for testing come from the Esoteric Software `spine-runtimes` repo.

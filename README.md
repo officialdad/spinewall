@@ -1,8 +1,58 @@
 # spinewall
 
-Live Spine 2D animations as a KDE Plasma 6 wallpaper, on a black background.
+[![ci](https://github.com/officialdad/spinewall/actions/workflows/ci.yml/badge.svg)](https://github.com/officialdad/spinewall/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/officialdad/spinewall)](https://github.com/officialdad/spinewall/releases)
+[![license](https://img.shields.io/github/license/officialdad/spinewall)](LICENSE)
+
+Live 2D animated characters as a KDE Plasma 6 wallpaper, on a black background. Click a character to change its animation.
 
 Spinewall works with any Spine 3.8, 4.0, 4.1, or 4.2 model. It is not tied to one game.
+
+![Two seated Spine characters from different models, each playing its action animation side by side on a black desktop.](docs/images/hero.gif)
+
+A [smaller MP4](docs/images/hero.mp4) of the same clip is also available.
+
+## What it looks like
+
+In normal mode the desktop shows only the character. Click it to change its animation.
+
+![A Spine character animating on an otherwise empty black desktop, with no interface visible.](docs/images/normal-mode.png)
+
+Edit mode opens a panel on the right. Use it to choose models and animations, and to move and scale characters. Right-click the desktop and choose "Enter Edit Mode" to open it.
+
+![Edit mode: a model picker panel with search, filters, thumbnails, and an animation list beside the character.](docs/images/edit-mode.png)
+
+In edit mode you can:
+
+- Search models with fuzzy matching, and filter by source, favorites, recents, and Characters, Scenes, or All.
+- Group the variants of one character into a single card.
+- Play any animation from the list, with a preview on hover.
+- Drag the character to move it. Scroll the mouse wheel to scale it.
+- Add more characters with "Add character". Press a character to select it. A click changes only the topmost character under the pointer.
+
+Spinewall draws several characters on one wallpaper. Each character keeps its own model, animation, position, and scale.
+
+![Two Spine characters on one black desktop, side by side, with no interface visible.](docs/images/multi-character.png)
+
+In edit mode, the Characters list shows every character on screen. A dashed yellow box marks the selected one.
+
+![Edit mode with two characters on screen. A dashed yellow box marks the selected character, and the Characters list on the right shows both.](docs/images/multi-character-edit.png)
+
+![The model picker after a fuzzy search for a character name, with the matching letters highlighted.](docs/images/picker-search.png)
+
+The characters in these images belong to their owners. They are shown to demonstrate the interface only. Spinewall includes no models.
+
+## Spine, not Live2D Cubism
+
+"Live 2D" can mean two different formats. Spinewall plays only [Spine](https://esotericsoftware.com) skeletal animation.
+
+| | Spine (supported) | Live2D Cubism (not supported) |
+|---|---|---|
+| Maker | Esoteric Software | Live2D Inc. |
+| Files | `.skel` or `.json`, `.atlas`, PNG pages | `.moc3`, `.model3.json`, textures |
+| Method | Image pieces attached to bones | Textured meshes driven by parameters |
+
+A model with `.moc3` files will not load. Many viewers and games call their Spine characters "Live2D", so check the file extensions.
 
 ## How it works
 
@@ -32,7 +82,17 @@ Enter edit mode from the Plasma desktop menu: right-click the desktop, then choo
 - `python3`, `npm`, `curl`, `patch`, `systemd` (user session).
 - Spine models. See [docs/assets.md](docs/assets.md).
 
+## Supported versions
+
+| Component | Version |
+|---|---|
+| KDE Plasma | 6.x. The containment patch targets 6.8.1. |
+| Spine models | 3.8, 4.0, 4.1, 4.2 |
+| Spinewall | The latest release. See [SECURITY.md](SECURITY.md). |
+
 ## Install
+
+Download the latest `spinewall-X.Y.Z.tar.gz` and `SHA256SUMS` from the [releases page](https://github.com/officialdad/spinewall/releases). Run `sha256sum -c SHA256SUMS`, extract the archive, and run the steps below from the extracted directory. A git clone works too.
 
 1. Install `webwallpaper-kde` and restart plasmashell. Follow its README.
 2. Run `scripts/install.sh`. It fetches the Spine runtimes (npm for 4.x, a pinned `spine-runtimes` commit for 3.8), installs the theme, the server, the CLI, and the user service.
@@ -111,7 +171,7 @@ See [docs/credits.md](docs/credits.md).
 
 - [Esoteric Software](https://esotericsoftware.com): Spine and [spine-runtimes](https://github.com/EsotericSoftware/spine-runtimes).
 - [webwallpaper-kde](https://github.com/ekoputrapratama/webwallpaper-kde): the web page wallpaper plugin.
-- [Nikke-db](https://github.com/Nikke-db) and [Waifuland](https://github.com/shinkuan/Waifuland): open-source viewers studied for design.
+- [Nikke-db](https://github.com/Nikke-db): open-source viewer studied for skin handling and viewer behavior.
 
 ## Plasmoid patch warning
 
@@ -123,6 +183,21 @@ The patch has three effects:
 - The containment tells the server when edit mode starts and stops.
 
 Run `scripts/patch-plasmoid.sh` again after every `plasma-desktop` update. A stale copy can break the desktop. To undo, remove the local directory and restart plasmashell.
+
+## First run
+
+1. Copy one model into `~/.local/share/spinewall/models/`.
+2. Run `spinewall rescan`, then `spinewall info`. The `models` count must rise.
+3. Run `spinewall set-model <id>`.
+4. Right-click the desktop and choose "Enter Edit Mode" to open the picker.
+
+## Security
+
+The server listens on `127.0.0.1` only. See [SECURITY.md](SECURITY.md) to report a problem.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Releases are automatic. See [docs/releasing.md](docs/releasing.md).
 
 ## Legal notice
 
@@ -167,8 +242,8 @@ The server listens on `127.0.0.1` only and rejects requests with another `Host` 
 
 ## Status
 
-The wallpaper, edit mode, model picker, several characters at once, and scene filtering work. Headless tests passed. Check the real desktop after each change.
+Version 0.1.0 is the first public release. The wallpaper, edit mode, model picker, several characters at once, and scene filtering work. Expect changes before 1.0.0. Check the real desktop after each change.
 
 ## License
 
-MIT, for the code in this repository. The Spine runtimes and your models keep their own licenses.
+MIT, for the code in this repository. See [docs/license-choice.md](docs/license-choice.md). The Spine runtimes and your models keep their own licenses.
