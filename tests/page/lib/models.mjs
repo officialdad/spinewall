@@ -27,7 +27,7 @@ function atlas(id, regions) {
   return head + body;
 }
 
-function skeleton(version, slots) {
+function skeleton(version, slots, blankAnimation) {
   const editor = VERSIONS[version];
   const attachments = {};
   for (const s of slots) attachments[s.name] = { [s.name]: { x: 0, y: s.y ?? 50, width: s.size ?? 100, height: s.size ?? 100 } };
@@ -46,6 +46,10 @@ function skeleton(version, slots) {
       },
     };
   }
+  // A real rig can hide every image slot in one animation, so the wallpaper goes black while it plays.
+  if (blankAnimation) {
+    animations[blankAnimation] = { slots: Object.fromEntries(slots.map((s) => [s.name, { attachment: [{ time: 0, name: null }] }])) };
+  }
   return {
     skeleton: { hash: "synthetic", spine: editor, x: -50, y: 0, width: 100, height: 100 },
     bones: [{ name: "root" }],
@@ -55,10 +59,10 @@ function skeleton(version, slots) {
   };
 }
 
-function writeModel(dir, id, { version, slots, meta = {}, color = [200, 80, 80] }) {
+function writeModel(dir, id, { version, slots, meta = {}, color = [200, 80, 80], blankAnimation }) {
   const modelDir = path.join(dir, id);
   fs.mkdirSync(modelDir, { recursive: true });
-  fs.writeFileSync(path.join(modelDir, `${id}.json`), JSON.stringify(skeleton(version, slots)));
+  fs.writeFileSync(path.join(modelDir, `${id}.json`), JSON.stringify(skeleton(version, slots, blankAnimation)));
   fs.writeFileSync(path.join(modelDir, `${id}.atlas`), atlas(id, slots.map((s) => s.name)));
   fs.writeFileSync(path.join(modelDir, `${id}.png`), squarePng(color));
   if (Object.keys(meta).length) fs.writeFileSync(path.join(modelDir, "model.json"), JSON.stringify(meta));
@@ -73,6 +77,7 @@ const SCENE = [
 export const SOLO = { "3.8": "v38-solo", "4.0": "v40-solo", "4.1": "v41-solo", "4.2": "v42-solo" };
 export const SCENES = { "4.0": "scene-v40", "4.2": "scene-v42" };
 export const HIDE = "hide-v40";
+export const BLANK = { id: "blank-v41", animation: "bg_blank" };
 export const VARIANTS = ["alice_01", "alice_02", "alice_03"];
 export const BULK_COUNT = 60;
 export const ANIMATION_NAMES = Object.keys(ANIMATIONS);
@@ -97,6 +102,7 @@ export function generateModels(dir) {
     slots: [{ name: "bg_back", size: 300, y: 150 }, ...BODY],
     meta: { name: "Hidden Backdrop", group: "Modern", hideSlots: ["bg"], kind: "character" },
   });
+  add(BLANK.id, { version: "4.1", slots: BODY, meta: { name: "Blank Animation", group: "Modern" }, blankAnimation: BLANK.animation });
   VARIANTS.forEach((id, i) => add(id, { version: "4.0", slots: BODY, color: [80, 200, 120], meta: { name: `Alice ${"ABC"[i]}`, group: "Variants" } }));
   for (let n = 0; n < BULK_COUNT; n++) {
     add(bulkId(n), { version: "4.1", slots: BODY, color: [200, 200, 80], meta: { name: `Pack ${n + 1}`, group: "Bulk" } });
@@ -104,4 +110,4 @@ export function generateModels(dir) {
   return count;
 }
 
-export const TOTAL_MODELS = Object.keys(SOLO).length + Object.keys(SCENES).length + 1 + VARIANTS.length + BULK_COUNT;
+export const TOTAL_MODELS = Object.keys(SOLO).length + Object.keys(SCENES).length + 2 + VARIANTS.length + BULK_COUNT;

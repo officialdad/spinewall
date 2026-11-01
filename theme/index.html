@@ -1360,7 +1360,7 @@ function layerModel(layer, model) {
     const assets = new layer.rt.AssetManager(layer.context, "");
     layer.managers.set(model.id, assets);
     const job = loadSkeleton(layer.rt, assets, model).then(({atlas, data}) => {
-      const names = data.animations.map(a => a.name);
+      const names = drawingAnimations(layer.rt, data, model);
       return {atlas, data, names, frame: frameOf(layer.rt, data, model, pickAnimation(names, model.defaultAnimation))};
     });
     // A failed load must not stay cached, or the model could never load again.
@@ -1381,6 +1381,28 @@ function releaseModel(layer, id) {
 function releaseUnusedModels() {
   const used = new Set(layout.map(e => e.model));
   for (const layer of layers.values()) for (const id of [...layer.cache.keys()]) if (!used.has(id)) releaseModel(layer, id);
+}
+
+// Some animations hide every image slot and leave only point attachments, so the wallpaper goes black.
+// Those names are dropped from the animation list, which keeps the click, auto-cycle, and picker on animations that draw.
+// A model with no drawing animation keeps all of them, because an empty list would leave nothing to play.
+function drawingAnimations(rt, data, model) {
+  const names = data.animations.map(a => a.name);
+  const skeleton = skeletonFor(rt, data, model);
+  const hide = hideSlotsOf(skeleton, model);
+  const draws = att => att && (att instanceof rt.RegionAttachment || att instanceof rt.MeshAttachment);
+  const shows = animation => {
+    const samples = animation.duration > 0 ? FRAME_SAMPLES : 1;
+    for (let i = 0; i < samples; i++) {
+      skeleton.setToSetupPose();
+      animation.apply(skeleton, 0, animation.duration * i / samples, false, [], 1, 0, 0);
+      hide();
+      if (skeleton.slots.some(sl => draws(sl.attachment) && sl.color.a > 0.01)) return true;
+    }
+    return false;
+  };
+  const keep = names.filter(n => shows(data.findAnimation(n)));
+  return keep.length ? keep : names;
 }
 
 // Fit once from the bounds over the whole animation. Re-fitting per animation would rescale the character.
@@ -1759,7 +1781,7 @@ function load(modelId, animation) {
     mipmaps: false,
     showControls: false,
     success: p => {
-      anims = p.skeleton.data.animations.map(a => a.name);
+      anims = drawingAnimations(runtime, p.skeleton.data, model);
       const hide = hideSlotsOf(p.skeleton, model);
       if (model.hideSlots && model.hideSlots.length) {
         const update = p.skeleton.updateWorldTransform;

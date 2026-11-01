@@ -1,5 +1,5 @@
 import { test, expect, cmd, get, reported } from "../lib/fixture.mjs";
-import { SOLO, ANIMATION_NAMES } from "../lib/models.mjs";
+import { SOLO, ANIMATION_NAMES, BLANK } from "../lib/models.mjs";
 
 for (const [version, id] of Object.entries(SOLO)) {
   test(`a ${version} model loads and reports animations`, async ({ open, consoleErrors }) => {
@@ -38,4 +38,10 @@ test("webglcontextlost reloads the page", async ({ open, page }) => {
   await page.evaluate(() => { window.__marker = 1; });
   await page.evaluate(() => document.querySelector("canvas").dispatchEvent(new Event("webglcontextlost", { cancelable: true })));
   await expect.poll(() => page.evaluate(() => window.__marker), { timeout: 8000 }).toBeUndefined();
+});
+
+test("an animation that draws nothing stays out of the animation list", async ({ open }) => {
+  await open({ model: BLANK.id });
+  await expect.poll(reported(BLANK.id)).toEqual(expect.arrayContaining(["idle", "wave", "spin"]));
+  expect(await get("/info").then((i) => i.animations)).not.toContain(BLANK.animation);
 });

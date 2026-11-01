@@ -149,7 +149,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | View and polling | `applyView`, `pushView`, `poll`, `load`, `setEditMode` |
 | Picker data | `refreshPrefs`, `fuzzy`, `matchModel`, `comparator`, `buildItems` |
 | Picker UI | `ensureChrome`, `renderPicker`, `computeLayout`, `renderWindow`, `makeCell`, `drawRail`, `setupRailScrub`, `onSearchKey` |
-| Animation list | `animGroups`, `renderAnims`, `previewAnim`, `endPreview` |
+| Animation list | `drawingAnimations`, `animGroups`, `renderAnims`, `previewAnim`, `endPreview` |
 | Thumbnails | `wantThumb`, `pumpThumbs`, `loadOrMakeThumb`, `renderThumb`, `headBox`, `unionBox` |
 | Stage (all characters) | `makeLayer`, `createStageChar`, `stageFrame`, `frameOf`, `applyCharacters`, `destroyLayers` |
 | Hit testing | `hitTest`, `charContains`, `inTriangle`, `selectChar` |
