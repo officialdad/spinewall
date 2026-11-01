@@ -47,6 +47,7 @@ The server can scan more directories. List them in `~/.config/spinewall/config.j
 
 | Editor version | Runtime |
 |---|---|
+| 3.7.x | `spine-player.js` from the `spine-runtimes` repo, commit `9639bcc`, fetched by the install script. JSON export only, because this player has no binary reader |
 | 3.8.x | `spine-player.js` from the `spine-runtimes` repo, commit `8b4844b`, fetched by the install script |
 | 4.0.x | `@esotericsoftware/spine-player` 4.0.31 |
 | 4.1.x | `@esotericsoftware/spine-player` 4.1.56 |
@@ -54,7 +55,7 @@ The server can scan more directories. List them in `~/.config/spinewall/config.j
 
 The server reads the version from the skeleton file. It skips a model with another version and prints the reason. `spinewall info` lists skipped models under `skipped`.
 
-Spine 3.7 and older, 4.3, and Live2D Cubism (`.moc3`) models are not supported. Many mobile game exports use 3.8.
+Spine 3.6 and older, 4.3, and Live2D Cubism (`.moc3`) models are not supported. Many mobile game exports use 3.8.
 
 ## Optional `model.json`
 

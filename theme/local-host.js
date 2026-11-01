@@ -5,7 +5,7 @@ const SCALE_MIN = 0.3, SCALE_MAX = 8, POS_MAX = 2, RECENT_MAX = 20, ANIMATION_MA
 const VIEW_DEFAULT = {scale: 1, x: 0, y: 0};
 const PREF_CHOICES = {layout: ["grid", "list"], sort: ["name", "recent", "source"], kind: ["character", "scene", "all"]};
 const UID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
-const RUNTIME_BY_VERSION = {"4.0": "spine40", "4.1": "spine41", "4.2": "spine42", "3.8": "spine38"};
+const RUNTIME_BY_VERSION = {"4.0": "spine40", "4.1": "spine41", "4.2": "spine42", "3.8": "spine38", "3.7": "spine37"};
 const STORAGE_KEY = "spinewall";
 
 const clamp = (value, low, high, fallback) => {

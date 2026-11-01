@@ -45,24 +45,25 @@ fetch_runtime() {
   cp "$dir/package/dist/spine-player.css" "$stage/spine-player.css"
 }
 
-# The 3.8 player is not on npm. It comes from a pinned commit of the official runtimes repo.
+# The 3.7 and 3.8 players are not on npm. Each comes from a pinned commit of the official runtimes repo.
 # The player refers to the global `spine` internally, so a rename with sed breaks it.
-# A function scope keeps the global private and exposes it as `spine38`.
-spine38_commit=8b4844bd4b193ba9e54487ed397a777993cbad56
-spine38_sha256=3f335337a8fa9c51c6502a7557ea44cd2bcb4f22483adae275e4ecf5ec69faec
-fetch_runtime_38() {
-  local url="https://raw.githubusercontent.com/EsotericSoftware/spine-runtimes/$spine38_commit/spine-ts/build/spine-player.js"
-  curl -fsSL "$url" -o "$work/spine-player38.js"
-  echo "$spine38_sha256  $work/spine-player38.js" | sha256sum -c --quiet
-  { echo "var spine38 = (function () {"; cat "$work/spine-player38.js"; printf '\nreturn spine;\n})();\n'; } \
-    > "$stage/spine-player38.js"
-  grep -q '^var spine38 = ' "$stage/spine-player38.js"
+# A function scope keeps the global private and exposes it as `spine37` or `spine38`.
+fetch_runtime_legacy() {
+  local global="$1" commit="$2" sha256="$3"
+  local file="spine-player${global#spine}.js"
+  local url="https://raw.githubusercontent.com/EsotericSoftware/spine-runtimes/$commit/spine-ts/build/spine-player.js"
+  curl -fsSL "$url" -o "$work/$file"
+  echo "$sha256  $work/$file" | sha256sum -c --quiet
+  { echo "var $global = (function () {"; cat "$work/$file"; printf '\nreturn spine;\n})();\n'; } \
+    > "$stage/$file"
+  grep -q "^var $global = " "$stage/$file"
 }
 
 fetch_runtime 4.0.31 spine40 db13daf8219b1de211785ed6bf70588b66879168cd9b7406aa62b30cef56d8b1
 fetch_runtime 4.1.56 spine41 5c6d530857d6eb18d8bb5f8b10e4ba62fed42e887bf874088e91fe57f2307a80
 fetch_runtime 4.2.120 spine42 f553d60910e6069b121555d4575c60f31c65d6fd2a3e349328ba9d2882dd79f1
-fetch_runtime_38
+fetch_runtime_legacy spine38 8b4844bd4b193ba9e54487ed397a777993cbad56 3f335337a8fa9c51c6502a7557ea44cd2bcb4f22483adae275e4ecf5ec69faec
+fetch_runtime_legacy spine37 9639bcc81722d7178fd9d1cdc1a3d55a4c91f989 7e94ec3760c98013b2eb4449fc9ad0fe84b7a3cbe9c4368e326c7339628a3feb
 cp "$root/theme/index.html" "$root/theme/local-host.js" "$root/theme/spinewall.theme" "$stage/"
 
 if [ -n "$build_only" ]; then

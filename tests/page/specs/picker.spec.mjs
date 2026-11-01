@@ -119,14 +119,14 @@ test("arrow keys move the highlight and Enter plays", async ({ open, page }) => 
   await pickerOpen(open, page);
   const search = page.getByRole("combobox", { name: "Search models" });
   await search.fill("Solo");
-  await expect(cells(page)).toHaveCount(4);
+  await expect(cells(page)).toHaveCount(Object.keys(SOLO).length);
   await search.press("ArrowDown");
   await search.press("ArrowDown");
   const active = page.locator("#list .cell.active");
   await expect(active).toHaveCount(1);
   const name = (await active.locator(".name").textContent()).trim();
   await search.press("Enter");
-  const id = Object.values(SOLO).find((s) => name.endsWith(s.slice(1, 3).replace(/^(\d)(\d)$/, "$1.$2")));
+  const id = Object.entries(SOLO).find(([version]) => name.endsWith(version))[1];
   await expect.poll(async () => (await get("/state")).model).toBe(id);
 });
 

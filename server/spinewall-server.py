@@ -51,7 +51,7 @@ VARIANT_SUFFIX = re.compile(r"^(.+?)[_-]\d+$")
 VERSION_PATTERN = re.compile(r"^\d+\.\d+(\.\d+)?")
 
 # Maps the Spine editor version of a model to the player runtime that can load it.
-RUNTIME_BY_VERSION = {"4.0": "spine40", "4.1": "spine41", "4.2": "spine42", "3.8": "spine38"}
+RUNTIME_BY_VERSION = {"4.0": "spine40", "4.1": "spine41", "4.2": "spine42", "3.8": "spine38", "3.7": "spine37"}
 
 KINDS = ("character", "scene")
 SCENE_NAME = re.compile(r"^(bg|background|scene|diorama)|bg_", re.IGNORECASE)
@@ -163,7 +163,10 @@ def scan_model(directory):
     version = read_json_version(path) if skeleton.endswith(".json") else read_binary_version(path)
     runtime = RUNTIME_BY_VERSION.get(".".join((version or "").split(".")[:2]))
     if not runtime:
-        return None, f"unsupported Spine version {version!r}, supported: 3.8.x, 4.0.x, 4.1.x, 4.2.x"
+        return None, f"unsupported Spine version {version!r}, supported: 3.7.x, 3.8.x, 4.0.x, 4.1.x, 4.2.x"
+    # The 3.7 web player has no binary reader, so only a JSON export can play.
+    if runtime == "spine37" and skeleton.endswith(".skel"):
+        return None, "Spine 3.7 needs a JSON export, because the 3.7 player cannot read .skel files"
     model_id = os.path.basename(directory)
     kind = overrides.get("kind")
     if kind not in KINDS:

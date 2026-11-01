@@ -86,12 +86,14 @@ class HappyPath(InstallCase):
         text = (self.theme / "spine-player42.js").read_text()
         self.assertIn("console.log(spine);", text)
 
-    def test_spine_38_player_is_wrapped_in_a_function_scope(self):
+    def test_legacy_players_are_wrapped_in_a_function_scope(self):
         self.install()
-        text = (self.theme / "spine-player38.js").read_text()
-        self.assertTrue(text.startswith("var spine38 = (function () {"))
-        self.assertIn("var spine = {};", text)
-        self.assertTrue(text.rstrip().endswith("return spine;\n})();".rstrip()))
+        for global_name in ("spine37", "spine38"):
+            with self.subTest(runtime=global_name):
+                text = (self.theme / f"spine-player{global_name[5:]}.js").read_text()
+                self.assertTrue(text.startswith(f"var {global_name} = (function () {{"))
+                self.assertIn("var spine = {};", text)
+                self.assertTrue(text.rstrip().endswith("return spine;\n})();".rstrip()))
 
     def test_theme_files_are_copied(self):
         self.install()
@@ -212,14 +214,17 @@ class Pins(unittest.TestCase):
         self.assertEqual([c[1] for c in calls], ["spine40", "spine41", "spine42"])
         for _, _, digest in calls:
             self.assertRegex(digest, r"^[0-9a-f]{64}$")
-        self.assertRegex(re.search(r"^spine38_sha256=(\S+)$", text, re.M).group(1), r"^[0-9a-f]{64}$")
-        self.assertRegex(re.search(r"^spine38_commit=(\S+)$", text, re.M).group(1), r"^[0-9a-f]{40}$")
+        legacy = re.findall(r"^fetch_runtime_legacy (\S+) (\S+) (\S+)$", text, re.M)
+        self.assertEqual([c[0] for c in legacy], ["spine38", "spine37"])
+        for _, commit, digest in legacy:
+            self.assertRegex(commit, r"^[0-9a-f]{40}$")
+            self.assertRegex(digest, r"^[0-9a-f]{64}$")
 
     def test_the_theme_loads_every_player_the_script_installs(self):
         page = (ROOT / "theme/index.html").read_text()
-        for name in ("spine-player38.js", "spine-player40.js", "spine-player41.js", "spine-player42.js"):
+        for name in ("spine-player37.js", "spine-player38.js", "spine-player40.js", "spine-player41.js", "spine-player42.js"):
             self.assertIn(name, page)
-        for global_name in ("spine38", "spine40", "spine41", "spine42"):
+        for global_name in ("spine37", "spine38", "spine40", "spine41", "spine42"):
             self.assertIn(global_name, page)
 
 
@@ -230,7 +235,7 @@ class RealNetwork(ScriptCase):
         done = self.run_script(SCRIPTS / "install.sh", env_extra={"STUB_LOG": str(self.tmp / "log")})
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         theme = self.home / ".local/share/webwallpaper/themes/spinewall"
-        for name in ("spine-player38.js", "spine-player40.js", "spine-player41.js", "spine-player42.js"):
+        for name in ("spine-player37.js", "spine-player38.js", "spine-player40.js", "spine-player41.js", "spine-player42.js"):
             self.assertGreater((theme / name).stat().st_size, 10000, name)
 
 

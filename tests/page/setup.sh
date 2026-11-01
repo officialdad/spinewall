@@ -8,7 +8,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
 work="$here/.work"
 home="$work/home"
-marker="$home/.local/share/webwallpaper/themes/spinewall/spine-player38.js"
+marker="$home/.local/share/webwallpaper/themes/spinewall/spine-player37.js"
 
 if [ "${1:-}" = "--force" ]; then rm -rf "$work"; fi
 if [ -f "$marker" ]; then

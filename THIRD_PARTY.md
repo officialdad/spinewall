@@ -4,6 +4,7 @@ Spinewall bundles none of the items below. `scripts/install.sh` fetches the Spin
 
 | Item | Source | License |
 |---|---|---|
+| Spine Web Player 3.7 | `EsotericSoftware/spine-runtimes`, commit `9639bcc` | Spine Runtimes License |
 | Spine Web Player 3.8 | `EsotericSoftware/spine-runtimes`, commit `8b4844b` | Spine Runtimes License |
 | Spine Web Player 4.0, 4.1, 4.2 | npm `@esotericsoftware/spine-player` | Spine Runtimes License |
 | `webwallpaper-kde` | `ekoputrapratama/webwallpaper-kde` | Check the project |

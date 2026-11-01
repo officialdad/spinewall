@@ -1,6 +1,6 @@
 # spinewall
 
-Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubism is not supported. Any Spine 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs. One exception: `docs/windows.md` and `docs/credits.md` link the community model pack and name its publisher. The user approved that on 2026-11-01. Add nothing else.
+Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubism is not supported. Any Spine 3.7 (JSON export only), 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs. One exception: `docs/windows.md` and `docs/credits.md` link the community model pack and name its publisher. The user approved that on 2026-11-01. Add nothing else.
 
 ## Layout
 
@@ -35,7 +35,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 
 - Never commit models, `.skel`, `.atlas`, or atlas images, with one exception: `docs/demo/models/` holds the sample models for the Pages demo. The user approved that on 2026-11-01. Add nothing else there and keep the sample count small.
 - Never commit Spine runtime files, demo included. The runtime license forbids redistribution. The install script fetches it, and the demo loads it from the npm CDN with pinned versions and SRI hashes.
-- The Spine players define the global `spine`. The install script renames the 4.x players to `spine40`, `spine41`, and `spine42` with `sed`. It wraps the 3.8 player in a function that returns `spine38`, because that player names `spine` internally. Keep the theme and the script in step.
+- The Spine players define the global `spine`. The install script renames the 4.x players to `spine40`, `spine41`, and `spine42` with `sed`. It wraps the 3.7 and 3.8 players in a function that returns `spine37` or `spine38`, because those players name `spine` internally. The 3.7 player reads JSON only, so the server skips a 3.7 `.skel` model. Keep the theme and the script in step.
 - Local mode (`?local=<index url>` or `window.SPINEWALL_LOCAL`) routes every state call through `api()` to `theme/local-host.js`, with no server. It keeps state, prefs, and layout in `localStorage`. Thumbnails stay in memory. Server mode stays the default and never loads the index.
 - The page drops animations that draw no image slot, such as an animation that hides every region and mesh. `drawingAnimations` decides, and a model with no drawing animation keeps all of them.
 - Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`, `auto`, `characters`, `crev`. The page and server share them. Change both together.
@@ -78,7 +78,6 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 
 - Check multi-character and the picker on the real desktop after each change.
 - Fetch background-only models only where `hideSlots` can leave a character.
-- Add Spine 3.7 support.
 
 ## Style
 

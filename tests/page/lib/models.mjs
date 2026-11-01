@@ -4,7 +4,7 @@ import path from "node:path";
 import { PNG } from "pngjs";
 
 // The editor version string the server reads to choose a runtime.
-const VERSIONS = { "3.8": "3.8.99", "4.0": "4.0.64", "4.1": "4.1.24", "4.2": "4.2.43" };
+const VERSIONS = { "3.7": "3.7.94", "3.8": "3.8.99", "4.0": "4.0.64", "4.1": "4.1.24", "4.2": "4.2.43" };
 
 const ANIMATIONS = { idle: 5, wave: 15, spin: 30 };
 
@@ -54,7 +54,8 @@ function skeleton(version, slots, blankAnimation) {
     skeleton: { hash: "synthetic", spine: editor, x: -50, y: 0, width: 100, height: 100 },
     bones: [{ name: "root" }],
     slots: slots.map((s) => ({ name: s.name, bone: "root", attachment: s.name })),
-    skins: [{ name: "default", attachments }],
+    // The 3.7 format keys skins by name, where 3.8 and later use a list.
+    skins: version === "3.7" ? { default: attachments } : [{ name: "default", attachments }],
     animations,
   };
 }
@@ -74,7 +75,7 @@ const SCENE = [
   { name: "bg_floor", size: 400, y: 0 },
 ];
 
-export const SOLO = { "3.8": "v38-solo", "4.0": "v40-solo", "4.1": "v41-solo", "4.2": "v42-solo" };
+export const SOLO = { "3.7": "v37-solo", "3.8": "v38-solo", "4.0": "v40-solo", "4.1": "v41-solo", "4.2": "v42-solo" };
 export const SCENES = { "4.0": "scene-v40", "4.2": "scene-v42" };
 export const HIDE = "hide-v40";
 export const BLANK = { id: "blank-v41", animation: "bg_blank" };
@@ -92,7 +93,7 @@ export function generateModels(dir) {
   let count = 0;
   const add = (id, spec) => { writeModel(dir, id, spec); count++; };
   for (const [version, id] of Object.entries(SOLO)) {
-    add(id, { version, slots: BODY, meta: { name: `Solo ${version}`, group: version === "3.8" ? "Legacy" : "Modern" } });
+    add(id, { version, slots: BODY, meta: { name: `Solo ${version}`, group: version.startsWith("3.") ? "Legacy" : "Modern" } });
   }
   for (const [version, id] of Object.entries(SCENES)) {
     add(id, { version, slots: SCENE, color: [60, 90, 200], meta: { name: `Scene ${version}`, group: "Modern" } });

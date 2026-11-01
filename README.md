@@ -6,7 +6,7 @@
 
 Live 2D animated characters as a KDE Plasma 6 wallpaper, on a black background. Click a character to change its animation.
 
-Spinewall works with any Spine 3.8, 4.0, 4.1, or 4.2 model. It is not tied to one game.
+Spinewall works with any Spine 3.7 (JSON export only), 3.8, 4.0, 4.1, or 4.2 model. It is not tied to one game.
 
 <table>
 <tr>
@@ -98,7 +98,7 @@ Enter edit mode from the Plasma desktop menu: right-click the desktop, then choo
 | Component | Version |
 |---|---|
 | KDE Plasma | 6.x. The containment patch targets 6.8.1. |
-| Spine models | 3.8, 4.0, 4.1, 4.2 |
+| Spine models | 3.7 (JSON only), 3.8, 4.0, 4.1, 4.2 |
 | Spinewall | The latest release. See [SECURITY.md](SECURITY.md). |
 
 ## Install
@@ -106,7 +106,7 @@ Enter edit mode from the Plasma desktop menu: right-click the desktop, then choo
 Download the latest `spinewall-X.Y.Z.tar.gz` and `SHA256SUMS` from the [releases page](https://github.com/officialdad/spinewall/releases). Run `sha256sum -c SHA256SUMS`, extract the archive, and run the steps below from the extracted directory. A git clone works too.
 
 1. Install `webwallpaper-kde` and restart plasmashell. Follow its README.
-2. Run `scripts/install.sh`. It fetches the Spine runtimes (npm for 4.x, a pinned `spine-runtimes` commit for 3.8), installs the theme, the server, the CLI, and the user service.
+2. Run `scripts/install.sh`. It fetches the Spine runtimes (npm for 4.x, a pinned `spine-runtimes` commit for 3.7 and 3.8), installs the theme, the server, the CLI, and the user service.
 3. Run `scripts/patch-plasmoid.sh`. It lets left clicks reach the wallpaper. See the warning below.
 4. Restart plasmashell: `systemctl --user restart plasma-plasmashell.service`.
 5. Put models in `~/.local/share/spinewall/models/`. See [docs/assets.md](docs/assets.md).
@@ -147,7 +147,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 
 | Area | Functions |
 |---|---|
-| Config and runtimes | `RUNTIMES` (`spine38`, `spine40`, `spine41`, `spine42`), `API`, `LOCAL`, `MODEL_ROOT`, `api`, `POLL_MS`, click and scale limits |
+| Config and runtimes | `RUNTIMES` (`spine37`, `spine38`, `spine40`, `spine41`, `spine42`), `API`, `LOCAL`, `MODEL_ROOT`, `api`, `POLL_MS`, click and scale limits |
 | View and polling | `applyView`, `pushView`, `poll`, `load`, `setEditMode` |
 | Picker data | `refreshPrefs`, `fuzzy`, `matchModel`, `comparator`, `buildItems` |
 | Picker UI | `ensureChrome`, `renderPicker`, `computeLayout`, `renderWindow`, `makeCell`, `drawRail`, `setupRailScrub`, `onSearchKey` |

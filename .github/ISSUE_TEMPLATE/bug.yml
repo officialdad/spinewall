@@ -17,7 +17,7 @@ body:
     id: spine
     attributes:
       label: Spine version of the model
-      description: 3.8, 4.0, 4.1, or 4.2.
+      description: 3.7, 3.8, 4.0, 4.1, or 4.2.
     validations:
       required: true
   - type: textarea

@@ -18,6 +18,7 @@ SCRIPTS = (
     '<script src="spine-player41.js"></script>\n'
     '<script src="spine-player42.js"></script>\n'
     '<script src="spine-player38.js"></script>\n'
+    '<script src="spine-player37.js"></script>\n'
     '<script src="local-host.js"></script>\n'
 )
 STYLESHEET = '<link rel="stylesheet" href="spine-player.css">'

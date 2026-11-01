@@ -111,7 +111,9 @@ def build_default_models(models_dir):
         },
     )
     # Models the scan must skip, each for a different reason.
-    make_model(models_dir, "old", "3.7.94")
+    make_model(models_dir, "old", "3.6.53")
+    make_model(models_dir, "legacy37", "3.7.94", fmt="json")
+    make_model(models_dir, "legacy37bin", "3.7.94", fmt="skel3")
     make_model(models_dir, "noatlas", "4.1.56", atlas=False)
     make_model(models_dir, "badjson", "4.1.56", model_json="{not json")
     make_model(models_dir, "listjson", "4.1.56", model_json=[])

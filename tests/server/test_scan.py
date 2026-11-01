@@ -87,6 +87,7 @@ class RuntimeMapping(ScanTestCase):
             "beta": ("4.1.56", "spine41"),
             "gamma": ("4.2.120", "spine42"),
             "delta": ("3.8.99", "spine38"),
+            "legacy37": ("3.7.94", "spine37"),
         }
         for model_id, (version, runtime) in expected.items():
             with self.subTest(model=model_id):
@@ -96,16 +97,20 @@ class RuntimeMapping(ScanTestCase):
 
 class SkipReasons(ScanTestCase):
     def test_skipped_models_are_not_listed(self):
-        for model_id in ("old", "noatlas", "badjson", "listjson", "sepbad", "missingfile", "garbage"):
+        for model_id in ("old", "legacy37bin", "noatlas", "badjson", "listjson", "sepbad", "missingfile", "garbage"):
             with self.subTest(model=model_id):
                 self.assertNotIn(model_id, self.by_id)
                 self.assertIn(model_id, self.mod.SKIPPED)
 
     def test_old_version_reason_names_supported_versions(self):
         reason = self.mod.SKIPPED["old"]
-        self.assertIn("3.7.94", reason)
+        self.assertIn("3.6.53", reason)
+        self.assertIn("3.7.x", reason)
         self.assertIn("3.8.x", reason)
         self.assertIn("4.2.x", reason)
+
+    def test_spine_37_binary_reason_asks_for_json(self):
+        self.assertIn("JSON export", self.mod.SKIPPED["legacy37bin"])
 
     def test_missing_atlas_reason(self):
         self.assertIn("needs one skeleton", self.mod.SKIPPED["noatlas"])

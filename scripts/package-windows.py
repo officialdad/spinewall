@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVED_EXTENSIONS = (".skel", ".json", ".atlas", ".png", ".jpg", ".jpeg", ".webp", ".txt")
-PLAYER_FILES = ("spine-player38.js", "spine-player40.js", "spine-player41.js", "spine-player42.js", "spine-player.css")
+PLAYER_FILES = ("spine-player37.js", "spine-player38.js", "spine-player40.js", "spine-player41.js", "spine-player42.js", "spine-player.css")
 TITLE = "Spinewall"
 DESCRIPTION = "Live 2D wallpaper that plays Spine models."
 NOTICE = """Spinewall for Windows
