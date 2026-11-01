@@ -1,6 +1,6 @@
 # spinewall
 
-Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`.
+Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs.
 
 ## Layout
 
@@ -42,6 +42,13 @@ Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 3.8, 4.0, 4.1, or 4.2 model 
 - In multi mode, edit-mode drag and wheel move the selected character. A press on a character selects it.
 - Normal mode takes left click only. Edit mode takes drag, wheel, and a short left click. A click moves under 30 px, so a drag never counts as one.
 
+## Security rules
+
+- The server binds `127.0.0.1` and rejects any other `Host`. Keep both.
+- Do not add `Access-Control-Allow-Origin: *`. Allow only `null`, `file://`, and localhost origins.
+- Validate every POST body: size cap, JSON object, types.
+- Never serve a file outside the whitelist or list a directory.
+
 ## Plasma constraints
 
 - Left clicks do not reach a wallpaper by default. The containment patch exists for this.
@@ -60,7 +67,7 @@ Live Spine 2D wallpaper for KDE Plasma 6. Any Spine 3.8, 4.0, 4.1, or 4.2 model 
 ## Next phase
 
 - Check multi-character and the picker on the real desktop after each change.
-- Fetch the Nikke ids that are background-only, only where `hideSlots` can leave a character.
+- Fetch background-only models only where `hideSlots` can leave a character.
 - Add Spine 3.7 support, and an `additional_model_dirs` config.
 
 ## Style

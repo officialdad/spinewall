@@ -7,14 +7,27 @@
 set -euo pipefail
 base="http://127.0.0.1:${SPINEWALL_PORT:-8777}"
 cmd="${1:-info}"
-arg="${2:-}"
-# set-char-anim and set-char-model carry two values, which the server reads as UID/VALUE.
-if [ -n "${3:-}" ]; then arg="$arg/$3"; fi
-if [ "$cmd" = info ]; then
-  curl -fsS "$base/info"
-elif [ "$cmd" = rescan ]; then
-  curl -fsS "$base/rescan"
-else
-  curl -fsS "$base/cmd/$cmd${arg:+/$arg}"
+
+if [ "$#" -gt 3 ]; then
+  echo "error: at most 3 arguments, got $#. Quote a name that has spaces." >&2
+  exit 2
 fi
+
+# Names carry spaces and symbols, so each value is percent-encoded before it joins the path.
+encode() {
+  python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""), end="")' "$1"
+}
+
+case "$cmd" in
+  info) curl -fsS "$base/info" ;;
+  rescan) curl -fsS "$base/rescan" ;;
+  *)
+    path="$base/cmd/$(encode "$cmd")"
+    # set-char-anim and set-char-model carry two values, which the server reads as UID/VALUE.
+    for value in "${@:2}"; do
+      path="$path/$(encode "$value")"
+    done
+    curl -fsS "$path"
+    ;;
+esac
 echo

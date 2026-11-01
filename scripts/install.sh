@@ -3,24 +3,38 @@
 # The Spine runtime is fetched from npm because its license forbids redistribution.
 set -euo pipefail
 
+for tool in npm curl sha256sum python3 systemctl tar sed; do
+  command -v "$tool" >/dev/null || { echo "error: $tool is required and was not found on PATH." >&2; exit 1; }
+done
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 theme_dir="$HOME/.local/share/webwallpaper/themes/spinewall"
 models_dir="$HOME/.local/share/spinewall/models"
+state_dir="$HOME/.local/state/spinewall"
+cache_dir="$HOME/.cache/spinewall"
 bin_dir="$HOME/.local/bin"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+# Files are built here first, so a failed check never leaves a half-installed theme.
+stage="$work/theme"
+mkdir -p "$stage"
 
 # Spine 4.0, 4.1 and 4.2 binaries are not compatible, so the theme loads one player per minor version.
+# Each tarball is pinned by sha256, so a changed registry copy stops the install.
 fetch_runtime() {
-  local version="$1" global="$2"
+  local version="$1" global="$2" sha256="$3"
+  local tarball="$work/esotericsoftware-spine-player-$version.tgz"
   (cd "$work" && npm pack "@esotericsoftware/spine-player@$version" --silent >/dev/null)
+  echo "$sha256  $tarball" | sha256sum -c --quiet
   local dir="$work/$global"
   mkdir -p "$dir"
-  tar xzf "$work/esotericsoftware-spine-player-$version.tgz" -C "$dir"
+  tar xzf "$tarball" -C "$dir"
   # Both players define the global `spine`, so rename it to keep them apart.
   sed "s/^var spine = /var $global = /" "$dir/package/dist/iife/spine-player.js" \
-    > "$theme_dir/spine-player${global#spine}.js"
-  cp "$dir/package/dist/spine-player.css" "$theme_dir/spine-player.css"
+    > "$stage/spine-player${global#spine}.js"
+  grep -q "^var $global = " "$stage/spine-player${global#spine}.js" \
+    || { echo "error: the $version player has no 'var spine = ' line to rename. Update this script." >&2; exit 1; }
+  cp "$dir/package/dist/spine-player.css" "$stage/spine-player.css"
 }
 
 # The 3.8 player is not on npm. It comes from a pinned commit of the official runtimes repo.
@@ -33,19 +47,19 @@ fetch_runtime_38() {
   curl -fsSL "$url" -o "$work/spine-player38.js"
   echo "$spine38_sha256  $work/spine-player38.js" | sha256sum -c --quiet
   { echo "var spine38 = (function () {"; cat "$work/spine-player38.js"; printf '\nreturn spine;\n})();\n'; } \
-    > "$theme_dir/spine-player38.js"
+    > "$stage/spine-player38.js"
+  grep -q '^var spine38 = ' "$stage/spine-player38.js"
 }
 
-mkdir -p "$theme_dir" "$models_dir" "$bin_dir" "$HOME/.config/systemd/user"
-cp "$root/theme/index.html" "$root/theme/spinewall.theme" "$theme_dir/"
-fetch_runtime 4.0.31 spine40
-fetch_runtime 4.1.56 spine41
-fetch_runtime 4.2.120 spine42
+fetch_runtime 4.0.31 spine40 db13daf8219b1de211785ed6bf70588b66879168cd9b7406aa62b30cef56d8b1
+fetch_runtime 4.1.56 spine41 5c6d530857d6eb18d8bb5f8b10e4ba62fed42e887bf874088e91fe57f2307a80
+fetch_runtime 4.2.120 spine42 f553d60910e6069b121555d4575c60f31c65d6fd2a3e349328ba9d2882dd79f1
 fetch_runtime_38
-grep -q '^var spine40 = ' "$theme_dir/spine-player40.js"
-grep -q '^var spine41 = ' "$theme_dir/spine-player41.js"
-grep -q '^var spine42 = ' "$theme_dir/spine-player42.js"
-grep -q '^var spine38 = ' "$theme_dir/spine-player38.js"
+cp "$root/theme/index.html" "$root/theme/spinewall.theme" "$stage/"
+
+# Everything checked. Only now does the install touch the home directory.
+mkdir -p "$theme_dir" "$models_dir" "$state_dir" "$cache_dir" "$bin_dir" "$HOME/.config/systemd/user"
+cp "$stage"/* "$theme_dir/"
 
 install -m 755 "$root/server/spinewall-server.py" "$bin_dir/spinewall-server"
 install -m 755 "$root/bin/spinewall" "$bin_dir/spinewall"

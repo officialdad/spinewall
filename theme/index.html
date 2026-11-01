@@ -17,6 +17,9 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #picker.on{display:flex}
 #picker h2{margin:0;font-size:16px;font-weight:700}
 #picker .empty{margin:0;padding:8px 0}
+#notice{position:fixed;left:16px;bottom:16px;z-index:4;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;box-sizing:border-box;
+  background:#000;color:#fff;border:2px solid #ffd54a;border-radius:8px;font:16px/1.4 system-ui,sans-serif}
+#notice[hidden]{display:none}
 #picker button,#picker select,#picker input{font:inherit;color:#fff;background:#000;border:2px solid #767676;border-radius:6px;box-sizing:border-box}
 #picker button,#picker select{cursor:pointer;min-height:44px}
 #picker button:hover,#picker select:hover{border-color:#fff}
@@ -67,9 +70,12 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #spacer{position:relative;width:100%}
 .cell{position:absolute;box-sizing:border-box;border:2px solid #767676;border-radius:6px;overflow:hidden;cursor:pointer}
 .cell:hover{border-color:#fff}
-.cell.active{outline:3px solid #ffd54a;outline-offset:-3px}
+.cell.active{outline:3px solid #ffd54a;outline-offset:-3px;box-shadow:inset 0 0 0 3px #000}
 /* A character card holds the playing model with a white bar. Only a playing model row fills white. */
 .cell.holds{box-shadow:inset 6px 0 0 #fff}
+/* The dark ring keeps the yellow outline at 3:1 or better on the white playing row. */
+.sec{display:contents}
+.cell.holds.active{box-shadow:inset 0 0 0 3px #000,inset 6px 0 0 #fff}
 .cell.list.holds{padding-left:16px}
 .cell[aria-current="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
 .cell.list{display:flex;align-items:center;gap:12px;padding:6px 52px 6px 6px}
@@ -94,7 +100,8 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 .cell .th{width:48px;height:48px;flex:none;border-radius:4px;background:#2b2b2b;overflow:hidden;position:relative}
 .cell.grid .th{width:64px;height:64px}
 .cell .th::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#2b2b2b,#4a4a4a,#2b2b2b);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
-.cell .th[data-ready]::before{display:none}
+.cell .th[data-ready]::before,.cell .th[data-failed]::before{display:none}
+.cell .th[data-failed]::after{content:"?";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#cfcfcf;font:700 20px/1 system-ui,sans-serif}
 .cell .th img{position:absolute;inset:0;width:100%;height:100%;visibility:hidden}
 .cell .th[data-ready] img{visibility:visible}
 @keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
@@ -121,7 +128,6 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
   .tabs{display:flex}
   .pane>h2{display:none}
   #picker[data-tab="models"] #anims-pane,#picker[data-tab="anims"] #models-pane,#picker[data-tab="anims"] #chars-pane{display:none}
-  #chars{max-height:144px}
   #anims-pane{max-height:none;flex:1;border-top:0;padding-top:0}
 }
 </style>
@@ -130,6 +136,7 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 <script src="spine-player42.js"></script>
 <script src="spine-player38.js"></script>
 </head><body><div id="stage"><div id="p"></div></div><div id="layers"></div><div id="selbox"></div>
+<div id="notice" role="status" hidden></div>
 <nav id="picker" aria-label="Model picker"></nav>
 <script>
 const API = "http://127.0.0.1:8777";
@@ -137,38 +144,84 @@ const POLL_MS = 700;
 const CLICK_MAX_MS = 500;
 const CLICK_MAX_PX = 30;
 const SCALE_MIN = 0.3, SCALE_MAX = 8;
+const LOAD_TIMEOUT_MS = 15000;
+const MODELS_RETRY_MAX_MS = 8000;
+const clampScale = s => Math.max(SCALE_MIN, Math.min(SCALE_MAX, s));
 
 // The Spine player global differs per runtime version, so each model picks its own.
 // The 3.8 runtime nests the renderer classes under `webgl` and has a different player API.
 // Flattening it lets the thumbnail code treat every runtime alike. `legacy` marks the API differences.
+// `boneRegion` marks runtimes whose region attachments take the bone where later ones take the slot (3.8 and 4.0).
 const RUNTIMES = {
-  spine40: window.spine40,
+  spine40: window.spine40 && {...window.spine40, boneRegion: true},
   spine41: window.spine41,
   spine42: window.spine42,
-  spine38: window.spine38 && {...window.spine38, ...window.spine38.webgl, legacy: true},
+  spine38: window.spine38 && {...window.spine38, ...window.spine38.webgl, legacy: true, boneRegion: true},
 };
 
 let models = [], player = null, anims = [];
 // Several characters share one stage. `layout` mirrors the server list, and an empty list means the single player.
 let multi = false, layout = [], selectedUid = null, crev = -1, layoutPending = false;
 const WARN_ABOVE = 25;
-let state = {model: null, animation: null, rev: -1, vrev: -1};
+let state = {model: null, animation: null, rev: -1};
 let editMode = false, dragging = false, click = null;
-let view = {scale: 1, x: 0, y: 0};
-let counts = {wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0};
+let view = {scale: 1, x: 0, y: 0}, viewRev = -1;
+const emptyCounts = () => ({wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0});
+let counts = emptyCounts();
 
 const post = (path, body) =>
-  fetch(`${API}${path}`, {method: "POST", body: JSON.stringify(body)}).catch(() => {});
+  fetch(`${API}${path}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}).catch(() => {});
+const cmd = path => fetch(`${API}/cmd/${path}`).catch(() => {});
+
+// A missing runtime or a failed load would otherwise leave a silent black wallpaper.
+const noticeEl = document.getElementById("notice");
+function notice(text) {
+  noticeEl.textContent = text || "";
+  noticeEl.hidden = !text;
+}
+
+// Fields come from files the user wrote, so a wrong type must not blank the picker.
+function normalizeModel(m) {
+  const id = String(m.id);
+  const text = v => (typeof v === "string" ? v : "");
+  return {
+    ...m,
+    id,
+    name: text(m.name) || id,
+    group: text(m.group),
+    character: text(m.character) || id,
+    skin: typeof m.skin === "string" ? m.skin : undefined,
+    hideSlots: Array.isArray(m.hideSlots) ? m.hideSlots.filter(x => typeof x === "string") : [],
+  };
+}
+const setModels = list => { if (Array.isArray(list)) models = list.filter(m => m && m.id != null).map(normalizeModel); };
+
+// Every site that picks a starting animation shares one order: wanted names, then "idle", then the first.
+const pickAnimation = (names, ...wanted) => [...wanted, "idle"].find(n => names.includes(n)) ?? names[0];
+
+function skeletonFor(rt, data, model) {
+  const skeleton = new rt.Skeleton(data);
+  if (data.findSkin(model.skin)) skeleton.setSkinByName(model.skin);
+  return skeleton;
+}
 
 function applyView() {
   document.getElementById("p").style.transform =
     `translate(${view.x * innerWidth}px, ${view.y * innerHeight}px) scale(${view.scale})`;
 }
 
-let pushTimer = null;
+// A poll must not overwrite the local view while a push is waiting or in flight, or a wheel gesture jumps back.
+let pushTimer = null, viewPending = false, viewInflight = 0;
 function pushView() {
+  viewPending = true;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => post("/view", view), 120);
+  pushTimer = setTimeout(async () => {
+    pushTimer = null;
+    viewInflight++;
+    await post("/view", view);
+    viewInflight--;
+    viewPending = pushTimer !== null || viewInflight > 0;
+  }, 120);
 }
 
 addEventListener("wheel", e => {
@@ -176,10 +229,10 @@ addEventListener("wheel", e => {
   if (!editMode) return;
   if (multi) {
     const c = selectedChar() || hitTest(e.clientX, e.clientY);
-    if (c) { c.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, c.scale * Math.exp(-e.deltaY * 0.0015))); layoutMoved(); }
+    if (c) { c.scale = clampScale(c.scale * Math.exp(-e.deltaY * 0.0015)); layoutMoved(); }
     return;
   }
-  view.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, view.scale * Math.exp(-e.deltaY * 0.0015)));
+  view.scale = clampScale(view.scale * Math.exp(-e.deltaY * 0.0015));
   applyView(); pushView();
 }, {passive: true});
 
@@ -205,20 +258,23 @@ addEventListener("pointerup", e => {
     const hit = hitTest(e.clientX, e.clientY);
     if (hit) {
       counts.fired++;
-      fetch(`${API}/cmd/next-char-anim/${hit.uid}`).catch(() => {});
+      cmd(`next-char-anim/${hit.uid}`);
     }
   } else if (isClick) {
     counts.fired++;
-    fetch(`${API}/cmd/next-anim`).catch(() => {});
+    cmd("next-anim");
   }
   click = null;
   dragging = false;
 });
 
 addEventListener("pointercancel", () => { click = null; dragging = false; });
+addEventListener("blur", () => { click = null; dragging = false; });
 
 addEventListener("pointermove", e => {
   counts.pointermove++;
+  // The picker swallows pointerup, so a release over it leaves no event here. A move with no button held ends the drag.
+  if (dragging && !(e.buttons & 1)) { dragging = false; click = null; }
   if (!dragging || !editMode) return;
   if (multi) {
     const c = selectedChar();
@@ -235,6 +291,7 @@ const picker = document.getElementById("picker");
 // Edit mode owns drag and wheel on the window, so the panel must keep its events to itself.
 ["pointerdown", "pointerup", "pointermove", "wheel"].forEach(type =>
   picker.addEventListener(type, e => e.stopPropagation()));
+picker.addEventListener("pointerup", () => { dragging = false; click = null; });
 
 const NO_GROUP = "Other";
 const RECENT_SHOWN = 6;
@@ -260,21 +317,22 @@ async function refreshPrefs() {
 }
 
 // Subsequence match. Consecutive letters and word starts score higher, so "ar" finds "aru" before "bare".
+// Indexes count code points, the same unit `highlight` walks, so a mark never lands on the wrong letter.
 function fuzzy(q, text) {
-  const needle = q.toLowerCase(), hay = text.toLowerCase();
+  const chars = [...text], hay = chars.map(c => c.toLowerCase());
   const idx = [];
   let score = 0, from = 0, last = -2;
-  for (const ch of needle) {
+  for (const ch of [...q.toLowerCase()]) {
     if (ch === " ") continue;
     const at = hay.indexOf(ch, from);
     if (at < 0) return null;
     score += at === last + 1 ? 8 : 1;
-    if (at === 0 || /[\s_\-.]/.test(hay[at - 1])) score += 6;
+    if (at === 0 || /[\s_\-.]/.test(chars[at - 1])) score += 6;
     idx.push(at);
     last = at;
     from = at + 1;
   }
-  return {score: score - hay.length * 0.05, idx};
+  return {score: score - chars.length * 0.05, idx};
 }
 
 function matchModel(q, m) {
@@ -303,7 +361,11 @@ function highlight(el, text, idx) {
   flush();
 }
 
-const byName = (a, b) => a.name.localeCompare(b.name);
+// Digits, symbols, and scripts with no Latin letter lead as "#". Accented letters sort under their base letter.
+// The rail and the sort order both read this, so the rail marker always matches the list.
+const ALPHABET = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
+const letterOf = name => { const ch = name.normalize("NFD")[0].toUpperCase(); return /[A-Z]/.test(ch) ? ch : "#"; };
+const byName = (a, b) => ALPHABET.indexOf(letterOf(a.name)) - ALPHABET.indexOf(letterOf(b.name)) || a.name.localeCompare(b.name);
 const recentRank = id => { const i = prefs.recent.indexOf(id); return i < 0 ? Infinity : i; };
 
 function comparator(a, b) {
@@ -368,6 +430,8 @@ function ensureChrome() {
   search.setAttribute("aria-label", "Search models");
   search.setAttribute("aria-controls", "list");
   search.setAttribute("aria-expanded", "true");
+  search.setAttribute("aria-keyshortcuts", "Alt+F Control+Enter");
+  search.title = "Arrow keys move. Enter plays. Ctrl+Enter adds a character. Alt+F toggles the favorite star.";
   const sourceBtn = el("button", {type: "button"});
   sourceBtn.setAttribute("aria-haspopup", "menu");
   sourceBtn.setAttribute("aria-expanded", "false");
@@ -424,8 +488,8 @@ function ensureChrome() {
   const tabs = el("div", {className: "tabs"}, tabModels, tabAnims);
   picker.replaceChildren(tabs, charsPane, modelsPane, animsPane);
   picker.dataset.tab = "models";
-  ui = {kindBtns, search, sourceBtn, menu, sortSel, gridBtn, listBtn, varBtn, list, spacer, rail, bubble, listbox, empty, modelsPane,
-        animSearch, animGroupSel, animList, tabModels, tabAnims, charsTitle, addBtn, charsWarn, charsList};
+  ui = {kindBtns, search, sourceBtn, menu, sortSel, gridBtn, listBtn, varBtn, list, spacer, rail, bubble, listbox, empty,
+        animGroupSel, animList, charsTitle, charsWarn, charsList};
   addBtn.addEventListener("click", addHighlighted);
 
   const setTab = t => {
@@ -572,7 +636,6 @@ function computeLayout() {
   });
   endRow(); closeSub();
   ui.spacer.style.height = `${Math.max(y - GAP, 0)}px`;
-  ui.cols = cols;
 }
 
 function scheduleRender() {
@@ -590,19 +653,37 @@ const heldModel = it => it.count > 1 ? it.members.find(m => m.id === shownModel(
 function setModel(id) {
   const target = multi && selectedChar();
   const path = target ? `set-char-model/${target.uid}/${encodeURIComponent(id)}` : `set-model/${encodeURIComponent(id)}`;
-  fetch(`${API}/cmd/${path}`).catch(() => {});
+  cmd(path);
 }
 
 function addHighlighted() {
   const it = items.find(i => i.k === "c" && itemKey(i) === activeKey);
   const id = it ? playTarget(it).id : shownModel();
-  if (id) fetch(`${API}/cmd/add-character/${encodeURIComponent(id)}`).catch(() => {});
+  if (id) cmd(`add-character/${encodeURIComponent(id)}`);
+}
+
+function toggleFavorite(id) {
+  post(`/fav/${encodeURIComponent(id)}`, {})
+    .then(r => r && r.json()).then(p => { if (p && p.favorites) { prefs.favorites = p.favorites; renderPicker(); } }).catch(() => {});
 }
 
 // Enter or a double click plays the variant the user played last, else the first one.
 function playTarget(it) {
   const lastId = prefs.recent.find(id => it.members.some(m => m.id === id));
   return it.members.find(m => m.id === lastId) || it.m;
+}
+
+const sectionEls = new Map();
+function groupEl(label) {
+  let g = sectionEls.get(label);
+  if (!g) {
+    g = el("div", {className: "sec"});
+    g.setAttribute("role", "group");
+    g.setAttribute("aria-label", label || "Models");
+    sectionEls.set(label, g);
+    ui.spacer.append(g);
+  }
+  return g;
 }
 
 function cellId(key) {
@@ -635,8 +716,7 @@ function makeCell(it, key, grid) {
     star = el("button", {type: "button", className: "star", tabIndex: -1});
     star.addEventListener("click", e => {
       e.stopPropagation();
-      fetch(`${API}/fav/${encodeURIComponent(it.m.id)}`, {method: "POST", body: "{}"})
-        .then(r => r.json()).then(p => { if (p.favorites) { prefs.favorites = p.favorites; renderPicker(); } }).catch(() => {});
+      toggleFavorite(it.m.id);
     });
     c.append(star);
   }
@@ -656,6 +736,10 @@ function renderWindow() {
   const lo = top - H, hi = top + H * 2;
   let posinset = 0;
   const live = new Set(), want = [];
+  const setSize = items.reduce((n, x) => n + (x.k === "c"), 0);
+  // A listbox may only hold options and groups, so each section's options sit in a labelled group.
+  let section = "";
+  const sectionAt = items.map(x => { if (x.k === "h") section = x.label; return section; });
   items.forEach((it, i) => {
     if (it.k !== "c") return;
     posinset++;
@@ -669,9 +753,10 @@ function renderWindow() {
       c = makeCell(it, key, grid);
       c._grid = grid;
       cellEls.set(key, c);
-      ui.spacer.append(c);
       want.push({c, it, dist: Math.max(0, top - (p.y + p.h), p.y - (top + H)), y: p.y});
     }
+    const sec = groupEl(sectionAt[i]);
+    if (c.parentNode !== sec) sec.append(c);
     const info = matchInfo.get(it.m.id);
     const {name, meta, star, chev} = c._parts;
     highlight(name, it.m.name, info ? info.idx : []);
@@ -684,20 +769,18 @@ function renderWindow() {
     const held = heldModel(it);
     c.style.cssText = `left:${p.x}px;top:${p.y}px;width:${p.w}px;height:${p.h}px`;
     c.setAttribute("aria-posinset", String(posinset));
-    c.setAttribute("aria-setsize", String(items.filter(x => x.k === "c").length));
+    c.setAttribute("aria-setsize", String(setSize));
     if (it.count > 1) {
       const target = playTarget(it);
       meta.replaceChildren(el("span", {textContent: `${it.count} variants`}));
       if (held) meta.append(el("span", {className: "now", textContent: `Playing: ${held.name}`}));
       chev.textContent = it.open ? "\u25be" : "\u25b8";
-      c.setAttribute("aria-label", `${it.m.name}, ${it.count} variants${held ? `, playing ${held.name}` : ""}`);
-      c.setAttribute("aria-expanded", String(!!it.open));
+      c.setAttribute("aria-label", `${it.m.name}, ${it.count} variants, ${it.open ? "shown" : "hidden"}${held ? `, playing ${held.name}` : ""}`);
       c.title = `${it.open ? "Hide" : "Show"} ${it.count} variants. Enter or double click plays ${target.name}.`;
       c.setAttribute("aria-selected", "false");
     } else {
       meta.replaceChildren();
       c.setAttribute("aria-label", it.variant ? `${it.m.name}, variant of ${it.parent}` : it.m.name);
-      c.removeAttribute("aria-expanded");
       c.title = it.m.name;
       c.setAttribute("aria-selected", String(isPlaying(it)));
     }
@@ -717,6 +800,7 @@ function renderWindow() {
         h.setAttribute("aria-hidden", "true");
       } else {
         h = el("h3", {textContent: it.label});
+        h.setAttribute("aria-hidden", "true");
         h.style.cssText = `position:absolute;margin:0;font-size:14px;line-height:${HEAD_H}px;left:0;width:100%`;
       }
       cellEls.set(key, h);
@@ -732,12 +816,15 @@ function renderWindow() {
     const cancel = thumbCancels.get(key);
     if (cancel) { cancel(); thumbCancels.delete(key); }
   }
+  for (const [label, g] of sectionEls) if (!g.childElementCount) { g.remove(); sectionEls.delete(label); }
   // The last job pushed runs first, so jobs in view go last, with the topmost row at the very end.
   want.sort((a, b) => b.dist - a.dist || b.y - a.y).forEach(({c, it}) => {
     const {th, img} = c._parts, key = itemKey(it);
     thumbCancels.set(key, wantThumb(it.m, url => {
       thumbCancels.delete(key);
+      if (!url) { th.setAttribute("data-failed", ""); return; }
       img.onload = () => th.setAttribute("data-ready", "");
+      img.onerror = () => th.setAttribute("data-failed", "");
       img.src = url;
     }));
   });
@@ -766,9 +853,6 @@ function playCharacter(it) {
 }
 
 const RAIL_STEP = 16, RAIL_MIN_LETTERS = 6;
-// Digits and symbols sort before letters, so "#" leads the rail to match the list order.
-const ALPHABET = ["#", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
-const letterOf = name => { const ch = name[0].toUpperCase(); return /[A-Z]/.test(ch) ? ch : "#"; };
 
 // The rail never scrolls. It shows every letter when they fit, else only letters that have models, thinned
 // to the height available. Below a few letters it hides, because tiny targets are worse than none.
@@ -874,7 +958,11 @@ function onSearchKey(e) {
   else if (e.key === "ArrowUp") { e.preventDefault(); moveActive(0, -1); }
   else if (e.key === "ArrowRight" && grid && activeKey) { e.preventDefault(); moveActive(1, 0); }
   else if (e.key === "ArrowLeft" && grid && activeKey) { e.preventDefault(); moveActive(-1, 0); }
-  else if (e.key === "Enter") {
+  else if (e.altKey && e.code === "KeyF") {
+    e.preventDefault();
+    const it = items.find(i => i.k === "c" && itemKey(i) === activeKey) || items.find(i => i.k === "c");
+    if (it) toggleFavorite((it.count > 1 ? playTarget(it) : it.m).id);
+  } else if (e.key === "Enter") {
     e.preventDefault();
     const it = items.find(i => i.k === "c" && itemKey(i) === activeKey) || items.find(i => i.k === "c");
     if (!it) return;
@@ -889,7 +977,7 @@ function onSearchKey(e) {
 }
 
 let animQuery = "", animGroup = "";
-let previewTimer = null, previewing = false;
+let previewTimer = null, previewing = false, restoringFocus = false;
 
 // "attack_01" and "attack02" share the prefix "attack". The split applies only when it yields a usable number of groups.
 const animPrefix = n => (n.match(/^[^_\d\-\s]+/) || [n])[0].toLowerCase();
@@ -938,8 +1026,11 @@ function renderAnims() {
   }
   if (q) rows.sort((a, b) => b.score - a.score);
   const scroll = ui.animList.scrollTop;
+  const focusedName = ui.animList.contains(document.activeElement) ? document.activeElement.dataset.name : null;
+  restoringFocus = focusedName !== null;
   ui.animList.replaceChildren(...rows.map(({name, idx}) => {
     const b = el("button", {type: "button"});
+    b.dataset.name = name;
     highlight(b, name, idx);
     if (name === currentAnim()) b.setAttribute("aria-current", "true");
     b.addEventListener("click", () => {
@@ -949,10 +1040,16 @@ function renderAnims() {
     });
     b.addEventListener("pointerenter", e => { if (e.pointerType === "mouse") previewAnim(name); });
     b.addEventListener("pointerleave", endPreview);
-    b.addEventListener("focus", () => previewAnim(name));
-    b.addEventListener("blur", endPreview);
+    b.addEventListener("focus", () => { if (!restoringFocus) previewAnim(name); });
+    b.addEventListener("blur", () => { if (!restoringFocus) endPreview(); });
     return b;
   }));
+  // A rebuild drops the focused button. Focus returns to the same name, and the restore must not restart a preview.
+  if (focusedName !== null) {
+    const again = [...ui.animList.children].find(b => b.dataset.name === focusedName);
+    if (again) again.focus({preventScroll: true});
+    restoringFocus = false;
+  }
   if (!rows.length) ui.animList.append(el("p", {className: "empty", textContent: names.length ? "No animations match." : "No animation list yet."}));
   ui.animList.scrollTop = scroll;
 }
@@ -966,7 +1063,7 @@ let thumbBusy = false;
 function wantThumb(model, apply) {
   const job = {model, apply, live: true};
   if (thumbUrls.has(model.id)) {
-    thumbUrls.get(model.id).then(url => { if (job.live && url) apply(url); });
+    thumbUrls.get(model.id).then(url => { if (job.live) apply(url); });
   } else {
     thumbJobs.push(job);
     pumpThumbs();
@@ -982,7 +1079,7 @@ async function pumpThumbs() {
       if (!job.live) continue;
       if (!thumbUrls.has(job.model.id)) thumbUrls.set(job.model.id, loadOrMakeThumb(job.model));
       const url = await thumbUrls.get(job.model.id);
-      if (job.live && url) job.apply(url);
+      if (job.live) job.apply(url);
     }
   } finally {
     thumbBusy = false;
@@ -991,7 +1088,7 @@ async function pumpThumbs() {
 
 async function loadOrMakeThumb(model) {
   try {
-    const res = await fetch(`${API}/thumb/${encodeURIComponent(model.id)}.png`);
+    const res = await fetch(`${API}/thumb/${encodeURIComponent(model.id)}.png`, {signal: AbortSignal.timeout(LOAD_TIMEOUT_MS)});
     if (res.ok) return URL.createObjectURL(await res.blob());
     const png = await renderThumb(model);
     const bytes = Uint8Array.from(atob(png), c => c.charCodeAt(0));
@@ -1005,24 +1102,26 @@ async function loadOrMakeThumb(model) {
 }
 
 const THUMB_PX = 128;
+// 3.8 atlases are straight alpha. Later runtimes record the mode on the atlas page.
+const atlasPma = (rt, atlas) => rt.legacy ? false : (atlas.pages[0] ? atlas.pages[0].pma : true);
 
 // Region attachments take (slot, out, offset, stride). Mesh attachments take (slot, start, count, out, offset, stride).
-// The 3.8 region attachment takes the bone where later versions take the slot.
-// 4.2 region attachments also take the slot's vertex offsets, so the argument count tells the versions apart.
+// The 3.8 and 4.0 region attachments take the bone where 4.1 and later take the slot (`boneRegion` marks them).
+// A region attachment that takes five arguments also wants the slot's vertex offsets.
 // Returns how many floats it wrote.
-function attachmentWorld(slot, att, out, legacy) {
+function attachmentWorld(slot, att, out, boneRegion) {
   if (att.worldVerticesLength !== undefined) {
     att.computeWorldVertices(slot, 0, att.worldVerticesLength, out, 0, 2);
     return att.worldVerticesLength;
   }
   if (att.computeWorldVertices.length === 5) att.computeWorldVertices(slot, att.getOffsets ? att.getOffsets(slot) : att.offset, out, 0, 2);
-  else att.computeWorldVertices(legacy ? slot.bone : slot, out, 0, 2);
+  else att.computeWorldVertices(boneRegion ? slot.bone : slot, out, 0, 2);
   return 8;
 }
 
-function attachmentBox(slot, att, legacy) {
+function attachmentBox(slot, att, boneRegion) {
   const verts = new Float32Array(att.worldVerticesLength !== undefined ? att.worldVerticesLength : 8);
-  attachmentWorld(slot, att, verts, legacy);
+  attachmentWorld(slot, att, verts, boneRegion);
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (let i = 0; i < verts.length; i += 2) {
     minX = Math.min(minX, verts[i]); maxX = Math.max(maxX, verts[i]);
@@ -1031,12 +1130,13 @@ function attachmentBox(slot, att, legacy) {
   return {minX, minY, maxX, maxY};
 }
 
-function unionBox(skeleton, include, legacy) {
+function unionBox(skeleton, include, boneRegion) {
   let box = {minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity};
   for (const slot of skeleton.drawOrder) {
     const att = slot.getAttachment();
     if (!att || !att.uvs || slot.color.a === 0 || !include(slot)) continue;
-    const b = attachmentBox(slot, att, legacy);
+    const b = attachmentBox(slot, att, boneRegion);
+    if (!Number.isFinite(b.minX + b.minY + b.maxX + b.maxY)) continue;
     box = {minX: Math.min(box.minX, b.minX), minY: Math.min(box.minY, b.minY),
            maxX: Math.max(box.maxX, b.maxX), maxY: Math.max(box.maxY, b.maxY)};
   }
@@ -1053,15 +1153,15 @@ function hideSlotsOf(skeleton, model) {
 
 // Rigs name the head differently. A head bone frames hair and face. Without one, the face feature slots
 // (eyes, nose, mouth, brows) frame the face alone, and the crop widens around them.
-function headBox(skeleton, legacy) {
+function headBox(skeleton, boneRegion) {
   const head = skeleton.findBone("head") || skeleton.bones.find(b => /^head/i.test(b.data.name))
     || skeleton.findBone("face") || skeleton.bones.find(b => /head|face/i.test(b.data.name));
   if (head) {
     const onHead = bone => { for (let b = bone; b; b = b.parent) if (b === head) return true; return false; };
-    const box = unionBox(skeleton, slot => onHead(slot.bone), legacy);
+    const box = unionBox(skeleton, slot => onHead(slot.bone), boneRegion);
     if (box) return {...box, hair: true};
   }
-  const box = unionBox(skeleton, slot => /eye|nose|mouth|brow|lash/i.test(slot.data.name), legacy);
+  const box = unionBox(skeleton, slot => /eye|nose|mouth|brow|lash/i.test(slot.data.name), boneRegion);
   return box && {...box, hair: false};
 }
 
@@ -1073,8 +1173,11 @@ async function loadSkeleton(rt, assets, model) {
   const skeletonUrl = `${base}/${encodeURIComponent(model.skeleton)}`;
   if (isJson) (assets.loadJson || assets.loadText).call(assets, skeletonUrl); else assets.loadBinary(skeletonUrl);
   assets.loadTextureAtlas(`${base}/${encodeURIComponent(model.atlas)}`);
+  const deadline = performance.now() + LOAD_TIMEOUT_MS;
   while (!assets.isLoadingComplete()) {
     if (assets.hasErrors()) throw new Error(JSON.stringify(assets.getErrors()));
+    // A stalled fetch must not hold the one-at-a-time thumbnail queue for good.
+    if (performance.now() > deadline) throw new Error(`timed out loading ${model.id}`);
     await new Promise(r => setTimeout(r, 30));
   }
   const fetched = path => (assets.require || assets.get).call(assets, path);
@@ -1088,16 +1191,15 @@ async function renderThumb(model) {
   const rt = RUNTIMES[model.runtime];
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = THUMB_PX;
-  const gl = canvas.getContext("webgl", {alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true});
+  const gl = canvas.getContext("webgl", {alpha: true, premultipliedAlpha: !rt.legacy, preserveDrawingBuffer: true});
   const context = new rt.ManagedWebGLRenderingContext(gl);
   const renderer = new rt.SceneRenderer(canvas, context, true);
   const assets = new rt.AssetManager(context, "");
   try {
     const {atlas, data} = await loadSkeleton(rt, assets, model);
-    const skeleton = new rt.Skeleton(data);
-    if (data.findSkin(model.skin)) skeleton.setSkinByName(model.skin);
+    const skeleton = skeletonFor(rt, data, model);
     skeleton.setSlotsToSetupPose();
-    const animation = [model.defaultAnimation, "idle"].map(n => data.findAnimation(n)).find(Boolean) || data.animations[0];
+    const animation = data.findAnimation(pickAnimation(data.animations.map(a => a.name), model.defaultAnimation));
     skeleton.setToSetupPose();
     if (animation) animation.apply(skeleton, 0, 0, false, [], 1, 0, 0);
     // 4.2 requires a physics mode and throws without one. Older runtimes have no Physics and ignore the argument.
@@ -1106,9 +1208,8 @@ async function renderThumb(model) {
 
     const offset = new rt.Vector2(), size = new rt.Vector2();
     skeleton.getBounds(offset, size);
-    // Long hair makes the head box tall, so the crop keeps the top square where the face sits.
     // Without a head bone, the crop falls back to the top centre of the whole model.
-    const found = headBox(skeleton, rt.legacy);
+    const found = headBox(skeleton, rt.boneRegion);
     const box = found || {x: offset.x, y: offset.y + size.y * 0.8, w: size.x, h: size.y * 0.2, hair: true};
     // Long hair makes a head box tall, so the crop keeps the top square where the face sits.
     const side = box.hair ? Math.max(Math.min(box.w, box.h) * 1.15, 1) : Math.max(box.w, box.h) * 2.4;
@@ -1122,7 +1223,7 @@ async function renderThumb(model) {
     renderer.camera.zoom = side / THUMB_PX;
     renderer.camera.position.set(centerX, centerY, 0);
     renderer.begin();
-    renderer.drawSkeleton(skeleton, atlas.pages[0] ? atlas.pages[0].pma : true);
+    renderer.drawSkeleton(skeleton, atlasPma(rt, atlas));
     renderer.end();
     return canvas.toDataURL("image/png").split(",")[1];
   } finally {
@@ -1140,7 +1241,7 @@ async function setEditMode(on) {
   picker.classList.toggle("on", on);
   placeSelbox();
   if (!on) { endPreview(); return; }
-  try { models = await (await fetch(`${API}/rescan`)).json(); } catch (e) {}
+  try { setModels(await (await fetch(`${API}/rescan`)).json()); } catch (e) {}
   await refreshPrefs();
   renderPicker();
   // Typing searches at once, with no click first. Focus waits for the panel to become visible.
@@ -1154,7 +1255,7 @@ addEventListener("keydown", () => { counts.keydown++; }, true);
 setInterval(() => {
   if (!Object.values(counts).some(Boolean)) return;
   const sent = counts;
-  counts = {wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0};
+  counts = emptyCounts();
   post("/input", sent);
 }, 2000);
 
@@ -1203,8 +1304,8 @@ function makeLayer(key) {
   // 3.8 atlases are straight alpha, so its canvas must not be composited as premultiplied.
   const gl = canvas.getContext("webgl", {alpha: true, premultipliedAlpha: !rt.legacy});
   const context = new rt.ManagedWebGLRenderingContext(gl);
-  const layer = {key, rt, canvas, gl, renderer: new rt.SceneRenderer(canvas, context, true),
-                 assets: new rt.AssetManager(context, ""), cache: new Map()};
+  const layer = {key, rt, canvas, gl, context, renderer: new rt.SceneRenderer(canvas, context, true),
+                 cache: new Map(), managers: new Map()};
   layersEl.append(canvas);
   layers.set(key, layer);
   return layer;
@@ -1213,22 +1314,36 @@ function makeLayer(key) {
 // Skeleton data and textures load once per model and layer, so copies of one model share them.
 function layerModel(layer, model) {
   if (!layer.cache.has(model.id)) {
-    const job = loadSkeleton(layer.rt, layer.assets, model).then(({atlas, data}) => {
+    // One manager per load. A manager keeps its errors for good, so a shared one would fail every later load.
+    const assets = new layer.rt.AssetManager(layer.context, "");
+    layer.managers.set(model.id, assets);
+    const job = loadSkeleton(layer.rt, assets, model).then(({atlas, data}) => {
       const names = data.animations.map(a => a.name);
-      const pick = [model.defaultAnimation, "idle", names[0]].find(n => names.includes(n));
-      return {atlas, data, names, frame: frameOf(layer.rt, data, model, pick)};
+      return {atlas, data, names, frame: frameOf(layer.rt, data, model, pickAnimation(names, model.defaultAnimation))};
     });
     // A failed load must not stay cached, or the model could never load again.
-    job.catch(() => layer.cache.delete(model.id));
+    job.catch(() => releaseModel(layer, model.id));
     layer.cache.set(model.id, job);
   }
   return layer.cache.get(model.id);
 }
 
+function releaseModel(layer, id) {
+  layer.cache.delete(id);
+  const assets = layer.managers.get(id);
+  layer.managers.delete(id);
+  try { if (assets) assets.dispose(); } catch (e) {}
+}
+
+// Textures stay on the GPU until released, so a model no character uses any more goes.
+function releaseUnusedModels() {
+  const used = new Set(layout.map(e => e.model));
+  for (const layer of layers.values()) for (const id of [...layer.cache.keys()]) if (!used.has(id)) releaseModel(layer, id);
+}
+
 // Fit once from the bounds over the whole animation. Re-fitting per animation would rescale the character.
 function frameOf(rt, data, model, animationName) {
-  const skeleton = new rt.Skeleton(data);
-  if (data.findSkin(model.skin)) skeleton.setSkinByName(model.skin);
+  const skeleton = skeletonFor(rt, data, model);
   const animation = data.findAnimation(animationName);
   const hide = hideSlotsOf(skeleton, model);
   const offset = new rt.Vector2(), size = new rt.Vector2();
@@ -1256,23 +1371,23 @@ const screenY = entry => innerHeight / 2 + entry.y * innerHeight;
 
 async function createStageChar(entry) {
   const model = models.find(m => m.id === entry.model);
-  const rt = model && RUNTIMES[model.runtime];
-  if (!rt) return;
+  if (!model) return;
+  const rt = RUNTIMES[model.runtime];
+  if (!rt) { notice(`The Spine runtime for ${model.name} is not installed. Run scripts/install.sh.`); return; }
   const layer = layers.get(model.runtime) || makeLayer(model.runtime);
   let loaded;
   try { loaded = await layerModel(layer, model); }
-  catch (e) { console.log("spine load error", model.id, e.message || e); return; }
+  catch (e) { console.log("spine load error", model.id, e.message || e); notice(`Could not load ${model.name}.`); return; }
   const want = desired.get(entry.uid);
   if (!want || want.model !== entry.model || !multi || stageChars.has(entry.uid)) return;
-  const skeleton = new rt.Skeleton(loaded.data);
-  if (loaded.data.findSkin(model.skin)) skeleton.setSkinByName(model.skin);
+  const skeleton = skeletonFor(rt, loaded.data, model);
   skeleton.setToSetupPose();
   const state = new rt.AnimationState(new rt.AnimationStateData(loaded.data));
   const c = {uid: entry.uid, modelId: entry.model, layer, rt, skeleton, state, names: loaded.names, frame: loaded.frame,
              model, requested: undefined, animName: null, hide: hideSlotsOf(skeleton, model),
-             // 3.8 atlases are straight alpha. Later runtimes record the mode on the atlas page.
-             pma: rt.legacy ? false : (loaded.atlas.pages[0] ? loaded.atlas.pages[0].pma : true)};
+             pma: atlasPma(rt, loaded.atlas)};
   stageChars.set(entry.uid, c);
+  notice("");
   setCharAnimation(c, want.animation);
   post("/report", {model: model.id, animations: loaded.names});
   if (editMode) { renderChars(); renderAnims(); }
@@ -1280,22 +1395,33 @@ async function createStageChar(entry) {
 
 function setCharAnimation(c, requested) {
   c.requested = requested;
-  const pick = [requested, c.model.defaultAnimation, "idle", c.names[0]].find(n => c.names.includes(n));
+  const pick = pickAnimation(c.names, requested, c.model.defaultAnimation);
   if (!pick) return;
   c.animName = pick;
   c.state.setAnimation(0, pick, true);
 }
 
 // Draw order is layer by layer, because a canvas cannot interleave with another runtime's canvas.
-// A layer ranks by its topmost character, and hit testing walks the same order backwards.
+// A layer ranks by its topmost character, and a layer holding only scenes ranks lowest.
+// The canvases stack in the same order (`stackLayers`), so the picture and hit testing agree.
 function drawSequence() {
-  const rank = new Map();
-  layout.forEach((e, i) => { const c = stageChars.get(e.uid); if (c) rank.set(c.layer, Math.max(rank.get(c.layer) ?? -1, i)); });
   const ordered = [];
   layout.forEach((e, i) => { const c = stageChars.get(e.uid); if (c) ordered.push({c, e, i}); });
-  // A scene is a backdrop, so it draws before every character whatever its layer or position in the list.
   const isScene = x => x.c.model.kind === "scene";
-  return ordered.sort((a, b) => isScene(b) - isScene(a) || rank.get(a.c.layer) - rank.get(b.c.layer) || a.i - b.i);
+  const rank = new Map();
+  for (const x of ordered) rank.set(x.c.layer, Math.max(rank.get(x.c.layer) ?? -1, isScene(x) ? -1 : x.i));
+  // Inside one canvas a scene still draws first, because the draw calls run in this order.
+  ordered.sort((a, b) => rank.get(a.c.layer) - rank.get(b.c.layer) || (a.c.layer.key < b.c.layer.key ? -1 : a.c.layer.key > b.c.layer.key ? 1 : 0)
+    || isScene(b) - isScene(a) || a.i - b.i);
+  ordered.layers = [...new Set(ordered.map(x => x.c.layer))];
+  return ordered;
+}
+
+function stackLayers(sequence) {
+  sequence.layers.forEach((layer, i) => {
+    const z = String(i);
+    if (layer.canvas.style.zIndex !== z) layer.canvas.style.zIndex = z;
+  });
 }
 
 function onScreen(c, entry) {
@@ -1306,14 +1432,15 @@ function onScreen(c, entry) {
 }
 
 function stageFrame(now) {
+  if (!multi) { stageRaf = 0; return; }
   stageRaf = requestAnimationFrame(stageFrame);
-  if (!multi) return;
   const interval = layout.length >= MANY_CHARACTERS ? FRAME_INTERVAL_MS.many : FRAME_INTERVAL_MS.few;
   if (now - lastFrameAt < interval - 2) return;
   // The first frame and any frame after a pause advance by a capped step, so animations never jump.
   const dt = lastFrameAt ? Math.min((now - lastFrameAt) / 1000, 0.1) : 0;
   lastFrameAt = now;
   const sequence = drawSequence();
+  stackLayers(sequence);
   for (const layer of layers.values()) {
     layer.gl.viewport(0, 0, layer.canvas.width, layer.canvas.height);
     layer.gl.clearColor(0, 0, 0, 0);
@@ -1340,6 +1467,8 @@ function stageFrame(now) {
 
 // Point in triangle by sign of the edge cross products. The point is inside when none disagrees.
 function inTriangle(px, py, ax, ay, bx, by, cx, cy) {
+  // A NaN vertex makes every sign test fail, which reads as inside. It must read as a miss.
+  if (!Number.isFinite(px + py + ax + ay + bx + by + cx + cy)) return false;
   const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
   const d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
   const d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
@@ -1361,7 +1490,7 @@ function charContains(c, entry, px, py) {
     if (!att || !att.uvs || slot.color.a < HIT_ALPHA_MIN || (att.color && att.color.a < HIT_ALPHA_MIN) || slot.bone.active === false) continue;
     const need = att.worldVerticesLength !== undefined ? att.worldVerticesLength : 8;
     if (hitBuffer.length < need) hitBuffer = new Float32Array(need * 2);
-    attachmentWorld(slot, att, hitBuffer, c.rt.legacy);
+    attachmentWorld(slot, att, hitBuffer, c.rt.boneRegion);
     const tri = att.worldVerticesLength !== undefined ? att.triangles : QUAD_TRIANGLES;
     for (let t = 0; t < tri.length; t += 3) {
       const a = tri[t] * 2, b = tri[t + 1] * 2, d = tri[t + 2] * 2;
@@ -1413,8 +1542,10 @@ function layoutMoved() {
 
 function destroyLayers() {
   disposing = true;
+  cancelAnimationFrame(stageRaf);
+  stageRaf = 0;
   for (const layer of layers.values()) {
-    try { layer.assets.dispose(); layer.renderer.dispose(); } catch (e) {}
+    try { for (const id of [...layer.managers.keys()]) releaseModel(layer, id); layer.renderer.dispose(); } catch (e) {}
     const lose = layer.gl.getExtension("WEBGL_lose_context");
     if (lose) lose.loseContext();
     layer.canvas.remove();
@@ -1451,6 +1582,7 @@ function applyCharacters(list) {
     if (!e || e.model !== c.modelId) stageChars.delete(uid);
     else if (e.animation !== c.requested) setCharAnimation(c, e.animation);
   }
+  releaseUnusedModels();
   for (const e of list) if (!stageChars.has(e.uid)) createStageChar(e);
   if (multi && !stageRaf) stageRaf = requestAnimationFrame(stageFrame);
   placeSelbox();
@@ -1466,26 +1598,23 @@ addEventListener("resize", () => {
 });
 
 // The animation list and the preview follow the selected character, or the single player.
+const targetStageChar = () => { const e = multi && targetChar(); return e ? stageChars.get(e.uid) || null : null; };
 function currentAnims() {
-  const e = multi && targetChar();
-  const c = e && stageChars.get(e.uid);
+  const c = targetStageChar();
   return multi ? (c ? c.names : []) : anims;
 }
 function currentAnim() {
-  const e = multi && targetChar();
-  const c = e && stageChars.get(e.uid);
+  const c = targetStageChar();
   return multi ? (c && c.animName) : state.animation;
 }
 function playOnTarget(name) {
   if (!multi) { if (player) player.animationState.setAnimation(0, name, true); return; }
-  const e = targetChar();
-  const c = e && stageChars.get(e.uid);
+  const c = targetStageChar();
   if (c) c.state.setAnimation(0, name, true);
 }
 function chooseAnim(name) {
   const e = multi && targetChar();
-  const path = e ? `set-char-anim/${e.uid}/${encodeURIComponent(name)}` : `set-anim/${encodeURIComponent(name)}`;
-  fetch(`${API}/cmd/${path}`).catch(() => {});
+  cmd(e ? `set-char-anim/${e.uid}/${encodeURIComponent(name)}` : `set-anim/${encodeURIComponent(name)}`);
 }
 
 function renderChars() {
@@ -1505,7 +1634,7 @@ function renderChars() {
     sel.addEventListener("click", () => selectChar(e.uid));
     const rm = el("button", {type: "button", className: "rm", textContent: "✕"});
     rm.setAttribute("aria-label", `Remove ${name}`);
-    rm.addEventListener("click", () => fetch(`${API}/cmd/remove-character/${e.uid}`).catch(() => {}));
+    rm.addEventListener("click", () => cmd(`remove-character/${e.uid}`));
     return el("div", {className: "charrow"}, sel, rm);
   }));
 }
@@ -1515,9 +1644,11 @@ function load(modelId, animation) {
   if (!model) return;
   disposePlayer();
   const runtime = RUNTIMES[model.runtime];
+  if (!runtime) { notice(`The Spine runtime for ${model.name} is not installed. Run scripts/install.sh.`); return; }
   const base = `${API}/${encodeURIComponent(model.id)}`;
   player = new runtime.SpinePlayer("p", {
-    skelUrl: `${base}/${encodeURIComponent(model.skeleton)}`,
+    // The player reads skelUrl as binary only, so a JSON skeleton needs jsonUrl.
+    [model.skeleton.endsWith(".json") ? "jsonUrl" : "skelUrl"]: `${base}/${encodeURIComponent(model.skeleton)}`,
     atlasUrl: `${base}/${encodeURIComponent(model.atlas)}`,
     skin: model.skin,
     backgroundColor: "#000000",
@@ -1533,7 +1664,7 @@ function load(modelId, animation) {
         const update = p.skeleton.updateWorldTransform;
         p.skeleton.updateWorldTransform = function (...args) { hide(); return update.apply(this, args); };
       }
-      const pick = [animation, model.defaultAnimation, "idle", anims[0]].find(n => anims.includes(n));
+      const pick = pickAnimation(anims, animation, model.defaultAnimation);
       // The camera frames once, on the first animation. Re-framing per animation rescales the model
       // whenever an animation has wider bounds, such as a sword swing. An empty viewport blanks the canvas.
       // The player starts paused and only calls play() itself when no animation is set yet.
@@ -1548,9 +1679,10 @@ function load(modelId, animation) {
       post("/report", {model: model.id, animations: anims, playing: pick});
       // The server learns the playing animation from this report and bumps no revision, so mark it here.
       state.animation = pick;
+      notice("");
       if (editMode) renderAnims();
     },
-    error: (p, msg) => console.log("spine load error", model.id, msg)
+    error: (p, msg) => { console.log("spine load error", model.id, msg); notice(`Could not load ${model.name}.`); }
   });
 }
 
@@ -1563,11 +1695,13 @@ async function poll() {
       crev = s.crev;
       applyCharacters(Array.isArray(s.characters) ? s.characters : []);
     }
-    if (s.vrev !== state.vrev && !dragging) {
+    // The revision is kept apart from `state`, which is replaced whole. A change that lands mid-drag or
+    // while a push waits stays unseen until it can apply.
+    if (s.vrev !== viewRev && !dragging && !viewPending) {
       view = {scale: s.scale, x: s.x, y: s.y};
+      viewRev = s.vrev;
       applyView();
     }
-    state.vrev = s.vrev;
     if (s.rev !== state.rev) {
       const modelChanged = s.model !== state.model || state.rev === -1;
       state = s;
@@ -1583,5 +1717,22 @@ async function poll() {
   setTimeout(poll, POLL_MS);
 }
 
-fetch(`${API}/models`).then(r => r.json()).then(list => { models = list; poll(); });
+// The server may start after the page, so the model list retries. Polling starts at once and does not wait for it.
+async function fetchModels() {
+  for (let wait = 500; ; wait = Math.min(wait * 2, MODELS_RETRY_MAX_MS)) {
+    try {
+      const res = await fetch(`${API}/models`);
+      if (!res.ok) throw new Error(res.status);
+      setModels(await res.json());
+      crev = -1;
+      if (ui) renderPicker();
+      return;
+    } catch (e) {
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+}
+
+poll();
+fetchModels();
 </script></body></html>

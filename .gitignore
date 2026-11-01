@@ -6,3 +6,9 @@ __pycache__/
 models/
 spine-player*.js
 spine-player*.css
+.lavish/
+.env
+*.png
+*.webp
+*.jpg
+!docs/**/*.png

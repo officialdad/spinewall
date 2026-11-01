@@ -12,20 +12,24 @@ if [ ! -d "$system_dir" ]; then
   exit 1
 fi
 
-backup=""
-if [ -d "$local_dir" ]; then
-  backup="$local_dir.bak.$(date +%s)"
-  mv "$local_dir" "$backup"
-  echo "Moved the previous local copy to $backup"
-fi
-
 mkdir -p "$(dirname "$local_dir")"
-cp -r "$system_dir" "$local_dir"
-if ! patch -p1 -d "$local_dir" < "$root/plasma/desktopcontainment.patch"; then
-  rm -rf "$local_dir"
-  [ -n "$backup" ] && mv "$backup" "$local_dir"
+# The patch runs on a copy beside the target, so a failure leaves the current local copy untouched.
+candidate="$(mktemp -d "$local_dir.new.XXXXXX")"
+trap 'rm -rf "$candidate"' EXIT
+cp -r "$system_dir/." "$candidate/"
+if ! patch -p1 -d "$candidate" < "$root/plasma/desktopcontainment.patch"; then
   echo "error: patch does not apply to this plasma-desktop version. Update plasma/desktopcontainment.patch." >&2
   exit 1
 fi
+find "$candidate" \( -name '*.rej' -o -name '*.orig' \) -delete
+
+# Only the latest backup stays.
+if [ -d "$local_dir" ]; then
+  rm -rf "$local_dir.bak"
+  mv "$local_dir" "$local_dir.bak"
+  echo "Moved the previous local copy to $local_dir.bak"
+fi
+mv "$candidate" "$local_dir"
+trap - EXIT
 
 echo "Patched. Run: systemctl --user restart plasma-plasmashell.service"

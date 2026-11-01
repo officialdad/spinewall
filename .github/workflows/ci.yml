@@ -1,0 +1,17 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python compiles
+        run: python3 -m py_compile server/spinewall-server.py
+      - name: Shell lint
+        run: shellcheck scripts/*.sh bin/spinewall
+      - name: No assets or runtimes tracked
+        run: |
+          if git ls-files | grep -E '\.(skel|atlas)$|spine-player.*\.(js|css)$'; then
+            echo "error: models or runtime files are tracked. The runtime license forbids redistribution."
+            exit 1
+          fi

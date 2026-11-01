@@ -1,9 +1,21 @@
 [Unit]
 Description=Spinewall control server
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 ExecStart=%h/.local/bin/spinewall-server
 Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/state/spinewall %h/.cache/spinewall
+RestrictAddressFamilies=AF_INET AF_UNIX
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+LockPersonality=yes
 
 [Install]
 WantedBy=default.target

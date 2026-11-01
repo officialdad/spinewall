@@ -7,16 +7,23 @@ import random
 import re
 import secrets
 import sys
+import tempfile
+import threading
 import urllib.parse
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-PORT = int(os.environ.get("SPINEWALL_PORT", "8777"))
+try:
+    PORT = int(os.environ.get("SPINEWALL_PORT", "8777"))
+except ValueError:
+    sys.exit("spinewall: SPINEWALL_PORT must be an integer")
 MODELS_DIR = os.environ.get(
     "SPINEWALL_MODELS", os.path.expanduser("~/.local/share/spinewall/models")
 )
 STATE_FILE = os.environ.get(
-    "SPINEWALL_STATE", os.path.expanduser("~/.local/state/spinewall.json")
+    "SPINEWALL_STATE", os.path.expanduser("~/.local/state/spinewall/state.json")
 )
+# Older installs kept the state beside the directory. It is read once when the new file is absent.
+LEGACY_STATE_FILE = os.path.expanduser("~/.local/state/spinewall.json")
 
 THUMB_DIR = os.environ.get(
     "SPINEWALL_THUMBS", os.path.expanduser("~/.cache/spinewall/thumbs")
@@ -47,6 +54,16 @@ KINDS = ("character", "scene")
 SCENE_NAME = re.compile(r"^(bg|background|scene|diorama)|bg_", re.IGNORECASE)
 VIEW_DEFAULT = {"scale": 1.0, "x": 0.0, "y": 0.0}
 INPUT_KEYS = ("wheel", "pointerdown", "pointermove", "pointerup", "fired", "keydown")
+BODY_MAX_BYTES = 1024 * 1024
+INPUT_STEP_MAX = 1000
+INPUT_TOTAL_MAX = 10**12
+REPORT_ANIMATIONS_MAX = 500
+# The page fetches only these from a model directory. model.json is read by the server, never by the page.
+SERVED_EXTENSIONS = (".skel", ".json", ".atlas", ".png", ".jpg", ".jpeg", ".webp", ".txt")
+HIDDEN_FILES = ("model.json",)
+
+# One lock covers all state, because ThreadingHTTPServer runs each request on its own thread.
+LOCK = threading.RLock()
 
 
 def read_binary_version(path):
@@ -69,9 +86,13 @@ def read_binary_version(path):
 
 def read_json_version(path):
     with open(path) as f:
-        skeleton = json.load(f).get("skeleton", {})
+        data = json.load(f)
+    skeleton = data.get("skeleton") if isinstance(data, dict) else None
+    if not isinstance(skeleton, dict):
+        return None
     # Spine's own JSON export writes "spine". Some converters write "version".
-    return skeleton.get("spine") or skeleton.get("version")
+    version = skeleton.get("spine") or skeleton.get("version")
+    return None if version is None else str(version)
 
 
 def read_atlas_regions(path):
@@ -90,7 +111,11 @@ def read_atlas_regions(path):
 
 def read_json_slots(path):
     with open(path) as f:
-        return [s.get("name", "") for s in json.load(f).get("slots", [])]
+        data = json.load(f)
+    slots = data.get("slots") if isinstance(data, dict) else None
+    if not isinstance(slots, list):
+        return []
+    return [s["name"] for s in slots if isinstance(s, dict) and isinstance(s.get("name"), str)]
 
 
 def classify_kind(names):
@@ -101,6 +126,15 @@ def classify_kind(names):
     return "scene" if hits * 2 > len(names) else "character"
 
 
+def text_or(value, default):
+    return value if isinstance(value, str) and value else default
+
+
+def is_plain_filename(value):
+    # An override must name a file in the model directory, so it cannot point elsewhere.
+    return isinstance(value, str) and value not in ("", ".", "..") and "/" not in value and "\\" not in value
+
+
 def scan_model(directory):
     """Returns (model, None) or (None, reason)."""
     files = sorted(os.listdir(directory))
@@ -108,6 +142,11 @@ def scan_model(directory):
     if "model.json" in files:
         with open(os.path.join(directory, "model.json")) as f:
             overrides = json.load(f)
+        if not isinstance(overrides, dict):
+            return None, "model.json must be a JSON object"
+    for key in ("skeleton", "atlas"):
+        if overrides.get(key) is not None and not is_plain_filename(overrides[key]):
+            return None, f"model.json {key} must be a file name in the model directory"
     skeleton = overrides.get("skeleton") or next(
         (n for n in files if n.endswith(".skel")),
         next((n for n in files if n.endswith(".json") and n != "model.json"), None),
@@ -115,6 +154,8 @@ def scan_model(directory):
     atlas = overrides.get("atlas") or next((n for n in files if n.endswith(".atlas")), None)
     if not skeleton or not atlas:
         return None, "needs one skeleton (.skel or .json) and one .atlas file"
+    if not os.path.isfile(os.path.join(directory, skeleton)) or not os.path.isfile(os.path.join(directory, atlas)):
+        return None, "the skeleton or atlas named in model.json does not exist"
     path = os.path.join(directory, skeleton)
     version = read_json_version(path) if skeleton.endswith(".json") else read_binary_version(path)
     runtime = RUNTIME_BY_VERSION.get(".".join((version or "").split(".")[:2]))
@@ -126,7 +167,7 @@ def scan_model(directory):
         try:
             names = read_json_slots(path) if skeleton.endswith(".json") else []
             names = names or read_atlas_regions(os.path.join(directory, atlas))
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             names = []
         kind = classify_kind(names)
     hide_slots = overrides.get("hideSlots")
@@ -134,17 +175,17 @@ def scan_model(directory):
         hide_slots = []
     return {
         "id": model_id,
-        "name": overrides.get("name", model_id),
-        "group": overrides.get("group"),
-        "character": overrides.get("character"),
+        "name": text_or(overrides.get("name"), model_id),
+        "group": text_or(overrides.get("group"), None),
+        "character": text_or(overrides.get("character"), None),
         "skeleton": skeleton,
         "atlas": atlas,
         "version": version,
         "runtime": runtime,
-        "skin": overrides.get("skin", "default"),
+        "skin": text_or(overrides.get("skin"), "default"),
         "kind": kind,
         "hideSlots": [s for s in hide_slots if isinstance(s, str) and s],
-        "defaultAnimation": overrides.get("defaultAnimation", "idle"),
+        "defaultAnimation": text_or(overrides.get("defaultAnimation"), "idle"),
     }, None
 
 
@@ -158,8 +199,8 @@ def scan_models():
             continue
         try:
             model, reason = scan_model(directory)
-        except (OSError, ValueError) as e:
-            model, reason = None, str(e)
+        except Exception as e:  # noqa: BLE001 - one bad model must never stop the server
+            model, reason = None, f"{type(e).__name__}: {e}"
         if model:
             models.append(model)
         else:
@@ -201,33 +242,53 @@ EDIT = {"on": 0}
 INPUT = dict.fromkeys(INPUT_KEYS, 0)
 
 
-def load_state():
-    state = {"model": first_character_id(MODELS), "animation": None, "rev": 0}
+def read_json_dict(path):
+    """Returns the object stored at `path`, or None when the file is absent, unreadable, or not an object."""
     try:
-        with open(STATE_FILE) as f:
-            saved = json.load(f)
-        if saved.get("model") in IDS:
-            state.update(saved)
-    except (OSError, ValueError):
-        pass
-    for key, value in VIEW_DEFAULT.items():
-        state.setdefault(key, value)
-    state.setdefault("vrev", 0)
-    return state
-
-
-STATE = load_state()
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError, RecursionError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def clamp(value, low, high, fallback):
+    if isinstance(value, str) and not value.strip():
+        return fallback
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return fallback
     # NaN compares unequal to itself. json.dump would write it and the page could not parse it back.
     if number != number:
         return fallback
     return max(low, min(high, number))
+
+
+def plain_int(value, fallback=0):
+    # bool is an int subclass, so it needs its own check.
+    return value if isinstance(value, int) and not isinstance(value, bool) else fallback
+
+
+def load_state():
+    state = {"model": first_character_id(MODELS), "animation": None, "rev": 0, **VIEW_DEFAULT, "vrev": 0}
+    saved = read_json_dict(STATE_FILE)
+    if saved is None and not os.path.exists(STATE_FILE):
+        saved = read_json_dict(LEGACY_STATE_FILE)
+    if saved is None or saved.get("model") not in IDS:
+        return state
+    state["model"] = saved["model"]
+    animation = saved.get("animation")
+    state["animation"] = animation if isinstance(animation, str) and 0 < len(animation) <= ANIMATION_MAX_CHARS else None
+    state["rev"] = max(0, plain_int(saved.get("rev")))
+    state["vrev"] = max(0, plain_int(saved.get("vrev")))
+    state["scale"] = clamp(saved.get("scale"), 0.3, 8.0, VIEW_DEFAULT["scale"])
+    state["x"] = clamp(saved.get("x"), -2.0, 2.0, VIEW_DEFAULT["x"])
+    state["y"] = clamp(saved.get("y"), -2.0, 2.0, VIEW_DEFAULT["y"])
+    return state
+
+
+STATE = load_state()
 
 
 def new_uid(taken):
@@ -274,13 +335,10 @@ def clean_characters(raw, allowed_uids=None):
 
 
 def load_layout():
-    try:
-        with open(LAYOUT_FILE) as f:
-            saved = json.load(f)
-    except (OSError, ValueError):
+    saved = read_json_dict(LAYOUT_FILE)
+    if saved is None:
         return [], 0
-    crev = saved.get("crev")
-    return clean_characters(saved.get("characters")), crev if isinstance(crev, int) else 0
+    return clean_characters(saved.get("characters")), max(0, plain_int(saved.get("crev")))
 
 
 # An empty list is single-character mode. Only a non-empty list switches the page to the shared stage.
@@ -289,10 +347,8 @@ STATE["characters"], STATE["crev"] = load_layout()
 
 def load_prefs():
     prefs = {"favorites": [], "recent": [], "layout": "grid", "sort": "name", "kind": "character", "variants": True}
-    try:
-        with open(PREFS_FILE) as f:
-            saved = json.load(f)
-    except (OSError, ValueError):
+    saved = read_json_dict(PREFS_FILE)
+    if saved is None:
         return prefs
     for key in ("favorites", "recent"):
         if isinstance(saved.get(key), list):
@@ -309,13 +365,24 @@ def load_prefs():
 PREFS = load_prefs()
 
 
-def write_json_atomic(path, obj):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+def write_atomic(path, data):
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
     # A rename is atomic, so a crash mid-write cannot leave a half-written file.
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(obj, f)
-    os.replace(tmp, path)
+    # A unique temp name keeps two writers from sharing one.
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def write_json_atomic(path, obj):
+    write_atomic(path, json.dumps(obj).encode())
 
 
 def save_prefs():
@@ -358,9 +425,7 @@ LAYOUT_KEYS = ("characters", "crev")
 
 
 def save():
-    os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-    with open(STATE_FILE, "w") as f:
-        json.dump({k: v for k, v in STATE.items() if k not in LAYOUT_KEYS}, f)
+    write_json_atomic(STATE_FILE, {k: v for k, v in STATE.items() if k not in LAYOUT_KEYS})
 
 
 def save_layout():
@@ -474,12 +539,13 @@ def set_layout(body):
 
 
 def set_view(scale=None, x=None, y=None):
+    # An unusable value keeps the current one, so a bad push never writes NaN into the state.
     if scale is not None:
-        STATE["scale"] = max(0.3, min(8.0, float(scale)))
+        STATE["scale"] = clamp(scale, 0.3, 8.0, STATE["scale"])
     if x is not None:
-        STATE["x"] = max(-2.0, min(2.0, float(x)))
+        STATE["x"] = clamp(x, -2.0, 2.0, STATE["x"])
     if y is not None:
-        STATE["y"] = max(-2.0, min(2.0, float(y)))
+        STATE["y"] = clamp(y, -2.0, 2.0, STATE["y"])
     STATE["vrev"] += 1
     save()
 
@@ -522,6 +588,11 @@ def thumb_path(model_id):
 
 
 def command(cmd, arg=None):
+    with LOCK:
+        run_command(cmd, arg)
+
+
+def run_command(cmd, arg=None):
     if not IDS:
         return
     current = STATE["model"]
@@ -555,7 +626,7 @@ def command(cmd, arg=None):
         else:
             change_animation(random.choice(names))
     elif cmd == "set-anim" and arg:
-        change_animation(arg)
+        change_animation(arg[:ANIMATION_MAX_CHARS])
     elif cmd == "add-character":
         add_character(arg)
     elif cmd == "clear-characters" and STATE["characters"]:
@@ -573,6 +644,8 @@ def command(cmd, arg=None):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    cors_origin = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=MODELS_DIR, **kwargs)
 
@@ -580,7 +653,9 @@ class Handler(SimpleHTTPRequestHandler):
         pass
 
     def end_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        if self.cors_origin:
+            self.send_header("Access-Control-Allow-Origin", self.cors_origin)
+            self.send_header("Vary", "Origin")
         self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
@@ -592,30 +667,96 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def allowed_origins(self):
+        # The theme page is a local file, so its origin is "null" or file://. A web page cannot send these.
+        return ("null", "file://", f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}")
+
+    def guard(self):
+        """Refuse DNS rebinding and cross-site requests. Returns True when the request may go on."""
+        # A rebound host name reaches this server with its own name in Host.
+        if self.headers.get("Host") not in (f"127.0.0.1:{PORT}", f"localhost:{PORT}"):
+            self.send_json({"error": "bad host"}, 403)
+            return False
+        origin = self.headers.get("Origin")
+        if origin is not None:
+            if origin not in self.allowed_origins():
+                self.send_json({"error": "origin not allowed"}, 403)
+                return False
+            self.cors_origin = origin
+        elif self.headers.get("Sec-Fetch-Site") == "cross-site":
+            # A no-cors request, such as an <img> or <script> tag on another site, sends no Origin.
+            self.send_json({"error": "cross-site request"}, 403)
+            return False
+        return True
+
     def read_json_body(self):
-        length = int(self.headers.get("Content-Length", 0))
+        """Returns the JSON object of the body, or None after sending the error reply."""
         try:
-            return json.loads(self.rfile.read(length))
+            length = int(self.headers.get("Content-Length", 0))
         except ValueError:
-            return {}
+            length = -1
+        if length < 0:
+            self.send_json({"error": "bad Content-Length"}, 400)
+            return None
+        if length > BODY_MAX_BYTES:
+            self.send_json({"error": "body too large"}, 413)
+            return None
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+        except (ValueError, RecursionError):
+            body = None
+        if not isinstance(body, dict):
+            self.send_json({"error": "body must be a JSON object"}, 400)
+            return None
+        return body
 
     def do_OPTIONS(self):
+        if not self.guard():
+            return
         self.send_response(204)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
+    def do_HEAD(self):
+        self.send_error(405)
+
+    def list_directory(self, path):
+        self.send_error(404)
+        return None
+
+    def is_served_file(self):
+        parts = [urllib.parse.unquote(p) for p in self.path.split("?", 1)[0].split("/") if p]
+        # A model file sits one directory deep. Hidden files and other extensions are never served.
+        return (
+            len(parts) == 2
+            and not parts[1].startswith(".")
+            and parts[1] not in HIDDEN_FILES
+            and parts[1].lower().endswith(SERVED_EXTENSIONS)
+        )
+
     def do_GET(self):
+        if not self.guard():
+            return
+        with LOCK:
+            if self.handle_get():
+                return
+        if not self.is_served_file():
+            return self.send_json({"error": "not found"}, 404)
+        super().do_GET()
+
+    def handle_get(self):
+        """Answers the API paths. Returns False for a path that is a model file."""
         if self.path == "/state":
-            return self.send_json({**STATE, "edit": EDIT["on"]})
-        if self.path == "/prefs":
-            return self.send_json(PREFS)
-        if self.path == "/models":
-            return self.send_json(MODELS)
-        if self.path.startswith("/thumb/") and self.path.endswith(".png"):
+            self.send_json({**STATE, "edit": EDIT["on"]})
+        elif self.path == "/prefs":
+            self.send_json(PREFS)
+        elif self.path == "/models":
+            self.send_json(MODELS)
+        elif self.path.startswith("/thumb/") and self.path.endswith(".png"):
             path = thumb_path(urllib.parse.unquote(self.path[7:-4]))
             if not path or not os.path.isfile(path):
-                return self.send_json({"error": "no thumbnail"}, 404)
+                return self.send_json({"error": "no thumbnail"}, 404) or True
             with open(path, "rb") as f:
                 body = f.read()
             self.send_response(200)
@@ -623,12 +764,11 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-            return
-        if self.path == "/rescan":
+        elif self.path == "/rescan":
             rescan()
-            return self.send_json(MODELS)
-        if self.path == "/info":
-            return self.send_json(
+            self.send_json(MODELS)
+        elif self.path == "/info":
+            self.send_json(
                 {
                     "state": STATE,
                     "animations": ANIMS.get(STATE["model"], []),
@@ -638,34 +778,56 @@ class Handler(SimpleHTTPRequestHandler):
                     "input": INPUT,
                 }
             )
-        if self.path.startswith("/edit/"):
+        elif self.path.startswith("/edit/"):
             EDIT["on"] = 1 if self.path.endswith("/1") else 0
-            return self.send_json(EDIT)
-        if self.path.startswith("/cmd/"):
+            self.send_json(EDIT)
+        elif self.path.startswith("/cmd/"):
             name, _, arg = self.path[5:].partition("/")
             command(name, urllib.parse.unquote(arg) or None)
-            return self.send_json(STATE)
-        return super().do_GET()
+            self.send_json(STATE)
+        else:
+            return False
+        return True
 
     def do_POST(self):
+        if not self.guard():
+            return
+        # A cross-site form can send text/plain without a preflight. JSON forces one.
+        if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
+            return self.send_json({"error": "Content-Type must be application/json"}, 415)
         body = self.read_json_body()
+        if body is None:
+            return
+        with LOCK:
+            self.handle_post(body)
+
+    def handle_post(self, body):
         if self.path == "/report":
-            if body.get("model") and isinstance(body.get("animations"), list):
-                ANIMS[body["model"]] = body["animations"]
-                if body["model"] == STATE["model"] and not STATE["animation"]:
-                    STATE["animation"] = body.get("playing")
+            model, animations = body.get("model"), body.get("animations")
+            valid = (
+                isinstance(model, str)
+                and model in IDS
+                and isinstance(animations, list)
+                and len(animations) <= REPORT_ANIMATIONS_MAX
+                and all(isinstance(a, str) and 0 < len(a) <= ANIMATION_MAX_CHARS for a in animations)
+            )
+            if not valid:
+                return self.send_json({"error": "bad report"}, 400)
+            ANIMS[model] = animations
+            playing = body.get("playing")
+            if model == STATE["model"] and not STATE["animation"] and isinstance(playing, str) and playing:
+                STATE["animation"] = playing[:ANIMATION_MAX_CHARS]
             return self.send_json({"ok": True})
         if self.path.startswith("/thumb/"):
             path = thumb_path(urllib.parse.unquote(self.path[7:]))
+            encoded = body.get("png")
             try:
-                png = base64.b64decode(body.get("png", ""), validate=True)
+                png = base64.b64decode(encoded, validate=True) if isinstance(encoded, str) else b""
             except (binascii.Error, ValueError):
                 png = b""
             if not path or not png.startswith(PNG_MAGIC) or len(png) > THUMB_MAX_BYTES:
                 return self.send_json({"error": "bad thumbnail"}, 400)
-            os.makedirs(THUMB_DIR, exist_ok=True)
-            with open(path, "wb") as f:
-                f.write(png)
+            write_atomic(path, png)
             return self.send_json({"ok": True})
         if self.path.startswith("/fav/"):
             if not toggle_favorite(urllib.parse.unquote(self.path[5:])):
@@ -685,7 +847,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"ok": True})
         if self.path == "/input":
             for key in INPUT_KEYS:
-                INPUT[key] += int(body.get(key, 0))
+                step = max(0, min(INPUT_STEP_MAX, plain_int(body.get(key))))
+                INPUT[key] = min(INPUT_TOTAL_MAX, INPUT[key] + step)
             return self.send_json({"ok": True})
         self.send_json({"error": "not found"}, 404)
 

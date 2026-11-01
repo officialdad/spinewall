@@ -97,25 +97,21 @@ Data flow, state keys, and rules are in `CLAUDE.md`.
 
 ## Test models
 
-Models are never committed. These sets were used to test, and each stays under its own license.
+Models are never committed. Test with the Esoteric Software example projects from the [spine-runtimes](https://github.com/EsotericSoftware/spine-runtimes) repo (`spineboy`, `raptor`, `goblins`, `hero`, `vine`, `stretchyman`, in 4.0 and 4.1), and with models you own.
 
-| Set | Spine | Use |
-|---|---|---|
-| Spine example projects: `spineboy`, `raptor`, `goblins`, `hero`, `vine`, `stretchyman` (4.0 and 4.1) | 4.0, 4.1 | Baseline for the 4.0 and 4.1 runtimes |
-| Nikke, for example `777`, `c810_02`, `c850` (Eve), `c820` (Rem) | 4.0, 4.1 | Default model, variant grouping, scene versus character (`777` carries a `bg` backdrop) |
-| Blue Archive, Arknights, Azur Lane, Guardian Tales | 3.8 | 3.8 runtime, `premultipliedAlpha: false` for halos |
-| Brown Dust 2, Genshin Impact, Honkai Star Rail | 4.x | 4.2 runtime, `skin` and `defaultAnimation` keys |
+1. Copy a model directory into `~/.local/share/spinewall/models/`.
+2. Run `spinewall rescan`.
+3. Run `spinewall set-model spineboy-4.1`.
 
-To reproduce, copy the Esoteric example projects into `~/.local/share/spinewall/models/`, run `spinewall rescan`, then `spinewall set-model spineboy-4.1`. See [docs/assets.md](docs/assets.md) for the layout.
+See [docs/assets.md](docs/assets.md) for the layout.
 
 ## Credits
 
-See [docs/credits.md](docs/credits.md). Short list:
+See [docs/credits.md](docs/credits.md).
 
-- [Esoteric Software](https://esotericsoftware.com), Spine and the [spine-runtimes](https://github.com/EsotericSoftware/spine-runtimes).
-- [webwallpaper-kde](https://github.com/ekoputrapratama/webwallpaper-kde), the web page wallpaper plugin.
-- [Nikke-db](https://github.com/Nikke-db), [nikke-db.pages.dev](https://nikke-db.pages.dev/visualiser), and [nikkeviewer.com](https://nikkeviewer.com), for viewer behavior and the Nikke id and name table.
-- [Waifuland](https://github.com/shinkuan/Waifuland), a reference for a multi-game viewer.
+- [Esoteric Software](https://esotericsoftware.com): Spine and [spine-runtimes](https://github.com/EsotericSoftware/spine-runtimes).
+- [webwallpaper-kde](https://github.com/ekoputrapratama/webwallpaper-kde): the web page wallpaper plugin.
+- [Nikke-db](https://github.com/Nikke-db) and [Waifuland](https://github.com/shinkuan/Waifuland): open-source viewers studied for design.
 
 ## Plasmoid patch warning
 
@@ -127,6 +123,42 @@ The patch has three effects:
 - The containment tells the server when edit mode starts and stops.
 
 Run `scripts/patch-plasmoid.sh` again after every `plasma-desktop` update. A stale copy can break the desktop. To undo, remove the local directory and restart plasmashell.
+
+## Legal notice
+
+Spinewall is a viewer. It includes no models and no Spine runtime. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. Game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
+
+## Configuration
+
+| Variable | Default | Use |
+|---|---|---|
+| `SPINEWALL_PORT` | `8777` | Server and CLI port. The theme and the Plasma patch hardcode `8777`, so a changed port breaks the wallpaper. |
+| `SPINEWALL_MODELS` | `~/.local/share/spinewall/models` | Model directory. |
+| `SPINEWALL_STATE` | `~/.local/state/spinewall/state.json` | Current model, animation, and view. |
+| `SPINEWALL_PREFS` | `~/.local/state/spinewall/prefs.json` | Favorites, recents, sort, filters. |
+| `SPINEWALL_LAYOUT` | `~/.local/state/spinewall/layout.json` | Several-character layout. |
+| `SPINEWALL_THUMBS` | `~/.cache/spinewall/thumbs` | Thumbnail cache. |
+
+The server listens on `127.0.0.1` only and rejects requests with another `Host` header. It has no login. Any local user can send it commands.
+
+## Troubleshooting
+
+| Symptom | Action |
+|---|---|
+| Blank wallpaper | Run `spinewall info`. Check `models` and `skipped`. Restart plasmashell. |
+| A model is missing | Run `spinewall rescan`. Read its reason under `skipped`. |
+| A model has no picture | Run the atlas page check in [docs/assets.md](docs/assets.md). |
+| Clicks do nothing | Run `scripts/patch-plasmoid.sh` again and restart plasmashell. Check that `input.fired` rises. |
+| Black or broken after a screen lock | Restart plasmashell. The page reloads on resume. |
+
+## Uninstall
+
+1. Run `systemctl --user disable --now spinewall.service`.
+2. Remove `~/.local/bin/spinewall`, `~/.local/bin/spinewall-server`, and `~/.config/systemd/user/spinewall.service`.
+3. Remove `~/.local/share/webwallpaper/themes/spinewall`.
+4. Remove `~/.local/share/plasma/plasmoids/org.kde.desktopcontainment`.
+5. Remove `~/.local/state/spinewall` and `~/.cache/spinewall` if you want to drop your prefs.
+6. Restart plasmashell.
 
 ## Not included
 

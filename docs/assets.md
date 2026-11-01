@@ -34,7 +34,7 @@ Put one directory per model in `~/.local/share/spinewall/models/`. The directory
 
 The server reads the version from the skeleton file. It skips a model with another version and prints the reason. `spinewall info` lists skipped models under `skipped`.
 
-Spine 3.7 and older, and 4.3, are not supported yet. Blue Archive, Arknights, and Azur Lane models use 3.8.
+Spine 3.7 and older, and 4.3, are not supported yet. Many mobile game exports use 3.8.
 
 ## Optional `model.json`
 
@@ -92,7 +92,7 @@ Command line: `spinewall add-character [ID]`, `remove-character UID`, `clear-cha
 ## Check a model
 
 1. Copy the model directory into `~/.local/share/spinewall/models/`.
-2. Restart the server: `systemctl --user restart spinewall.service`. The server scans the directory at start only.
+2. Run `spinewall rescan`. Entering edit mode also rescans.
 3. Run `spinewall info`. The `models` count rises by one, or the model appears under `skipped` with a reason.
 4. Run `spinewall set-model <id>`.
 
@@ -100,7 +100,7 @@ Command line: `spinewall add-character [ID]`, `remove-character UID`, `clear-cha
 
 - Your own Spine projects, exported with "Pack atlas" enabled.
 - Spine example projects from Esoteric Software, for testing.
-- Game assets you own. Check the game's terms first.
+- Assets you own, or have a license to use. Check the owner's terms first.
 
 ## Atlas page check
 
