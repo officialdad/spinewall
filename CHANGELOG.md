@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/officialdad/spinewall/compare/v0.3.0...v0.3.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* draw straight-alpha 4.x atlases without white lines ([b4b02e1](https://github.com/officialdad/spinewall/commit/b4b02e1215ddbcc834649b4924769b43577dfffd))
+* draw straight-alpha 4.x atlases without white lines ([ed9d476](https://github.com/officialdad/spinewall/commit/ed9d476c41f82ffee7af65cebf509c4d696073de))
+
 ## [0.3.0](https://github.com/officialdad/spinewall/compare/v0.2.0...v0.3.0) (2026-11-02)
 
 
