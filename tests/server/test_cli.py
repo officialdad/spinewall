@@ -1,16 +1,15 @@
 """bin/spinewall against a live server on a temp port."""
 
 import json
-import os
 import subprocess
 import unittest
 
-from tests.server.support import CLI, ServerCase
+from tests.server.support import CLI, ServerCase, cli_path
 
 
 class CliCase(ServerCase):
     def run_cli(self, *args, port=None):
-        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.tmp), "SPINEWALL_PORT": str(port or self.server.port)}
+        env = {"PATH": cli_path(), "HOME": str(self.tmp), "SPINEWALL_PORT": str(port or self.server.port)}
         return subprocess.run([str(CLI), *args], env=env, capture_output=True, text=True, timeout=20)
 
 

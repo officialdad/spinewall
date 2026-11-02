@@ -33,6 +33,12 @@ PNG_1X1 = base64.b64decode(
 _counter = itertools.count()
 
 
+def cli_path():
+    # bin/spinewall runs `python3` under a temp HOME. A version manager shim fails there, so the
+    # interpreter that runs the tests goes first.
+    return os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")
+
+
 def binary_skel(version, layout="4x"):
     """A skeleton header that carries only the version, which is all the server reads."""
     text = version.encode()

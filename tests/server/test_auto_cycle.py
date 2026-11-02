@@ -1,11 +1,10 @@
 """Per-character auto-cycle flag: validation, commands, folding, persistence, and the CLI."""
 
 import json
-import os
 import subprocess
 import unittest
 
-from tests.server.support import CLI, ServerCase
+from tests.server.support import CLI, ServerCase, cli_path
 
 
 class AutoCycle(ServerCase):
@@ -125,7 +124,7 @@ class AutoCycle(ServerCase):
 
 class AutoCycleCli(ServerCase):
     def run_cli(self, *args):
-        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.tmp), "SPINEWALL_PORT": str(self.server.port)}
+        env = {"PATH": cli_path(), "HOME": str(self.tmp), "SPINEWALL_PORT": str(self.server.port)}
         return subprocess.run([str(CLI), *args], env=env, capture_output=True, text=True, timeout=20)
 
     def test_cli_toggles_single_mode(self):

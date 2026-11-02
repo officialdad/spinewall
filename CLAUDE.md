@@ -76,7 +76,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 
 ## Run the tests
 
-1. Python: `python3 -I -m unittest discover -s tests -t . -v`. Put the system `python3` first on `PATH`. A mise shim fails under the temp `HOME` of the CLI tests.
+1. Python: `python3 -I -m unittest discover -s tests -t . -v`.
 2. Page: `cd tests/page && npm install && SPINEWALL_PORT_TEST=18777 npx playwright test`. A running wallpaper server holds port 8777, so set the port. The run takes about 2 min.
 3. Shell: `shellcheck scripts/*.sh bin/spinewall tests/page/setup.sh`.
 4. The suites use a throwaway `HOME` and their own ports. They never touch the real wallpaper or models.

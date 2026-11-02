@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -23,6 +23,9 @@ async function until(fn, ms = 10_000) {
 }
 
 // A fresh state directory per server, so no test sees another test's favorites or layout.
+// A version manager shim for python3 fails under the temp HOME the server gets, so spawn the real interpreter.
+const PYTHON = execFileSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
+
 export async function startServer({ models = MODELS, wait = true } = {}) {
   const state = fs.mkdtempSync(path.join(os.tmpdir(), "spinewall-state-"));
   const env = {
@@ -39,7 +42,7 @@ export async function startServer({ models = MODELS, wait = true } = {}) {
   // Another server on this port would answer instead of ours, and every test would read the wrong state.
   const taken = await fetch(`${API}/state`).then(() => true, () => false);
   if (taken) throw new Error(`port ${PORT} is in use. Stop that server or set SPINEWALL_PORT_TEST to a free port.`);
-  const child = spawn("python3", ["-I", SERVER], { env, stdio: ["ignore", "ignore", "pipe"] });
+  const child = spawn(PYTHON, ["-I", SERVER], { env, stdio: ["ignore", "ignore", "pipe"] });
   let log = "";
   child.stderr.on("data", (d) => { log += d; });
   const server = {
