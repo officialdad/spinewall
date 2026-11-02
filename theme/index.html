@@ -1149,8 +1149,9 @@ async function loadOrMakeThumb(model) {
 }
 
 const THUMB_PX = 128;
-// 3.8 atlases are straight alpha. Later runtimes record the mode on the atlas page.
-const atlasPma = (rt, atlas) => rt.legacy ? false : (atlas.pages[0] ? atlas.pages[0].pma : true);
+// 3.8 atlases are straight alpha. 4.1 and later record the mode on the atlas page, and 4.0 has no such field,
+// so its atlas keeps the premultiplied default of its player.
+const atlasPma = (rt, atlas) => rt.legacy ? false : (atlas.pages[0] && atlas.pages[0].pma !== undefined ? atlas.pages[0].pma : true);
 
 // Region attachments take (slot, out, offset, stride). Mesh attachments take (slot, start, count, out, offset, stride).
 // The 3.8 and 4.0 region attachments take the bone where 4.1 and later take the slot (`boneRegion` marks them).
@@ -1787,6 +1788,10 @@ function load(modelId, animation) {
     mipmaps: false,
     showControls: false,
     success: p => {
+      // The player assumes a premultiplied atlas before it reads the atlas. A straight-alpha atlas drawn that way
+      // shows the colour under transparent pixels, which leaves white lines and a haze around each region.
+      // The 3.x players were already set to straight alpha above and have no such asset manager.
+      if (!runtime.legacy) p.config.premultipliedAlpha = atlasPma(runtime, p.assetManager.require(p.config.atlasUrl));
       anims = drawingAnimations(runtime, p.skeleton.data, model);
       const hide = hideSlotsOf(p.skeleton, model);
       if (model.hideSlots && model.hideSlots.length) {

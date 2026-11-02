@@ -1,5 +1,5 @@
 import { test, expect, cmd, get, reported } from "../lib/fixture.mjs";
-import { SOLO, ANIMATION_NAMES, BLANK } from "../lib/models.mjs";
+import { SOLO, PMA_VERSION, ANIMATION_NAMES, BLANK } from "../lib/models.mjs";
 
 for (const [version, id] of Object.entries(SOLO)) {
   test(`a ${version} model loads and reports animations`, async ({ open, consoleErrors }) => {
@@ -45,3 +45,13 @@ test("an animation that draws nothing stays out of the animation list", async ({
   await expect.poll(reported(BLANK.id)).toEqual(expect.arrayContaining(["idle", "wave", "spin"]));
   expect(await get("/info").then((i) => i.animations)).not.toContain(BLANK.animation);
 });
+
+// The player assumes a premultiplied atlas until told otherwise. A straight-alpha atlas drawn that way gets white lines.
+for (const version of ["4.1", PMA_VERSION]) {
+  test(`a ${version} model draws with the alpha mode of its atlas`, async ({ open, page }) => {
+    const id = SOLO[version];
+    await open({ model: id });
+    await expect.poll(reported(id)).toBeTruthy();
+    expect(await page.evaluate(() => player.config.premultipliedAlpha)).toBe(version === PMA_VERSION);
+  });
+}
