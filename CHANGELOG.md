@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/officialdad/spinewall/compare/v0.2.0...v0.3.0) (2026-11-02)
+
+
+### Features
+
+* support Spine 3.7 models in JSON export ([91917b4](https://github.com/officialdad/spinewall/commit/91917b4a471a53eb3626f8c6bed8412d0012143c))
+
 ## [0.2.0](https://github.com/officialdad/spinewall/compare/v0.1.0...v0.2.0) (2026-11-01)
 
 
