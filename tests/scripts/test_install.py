@@ -13,6 +13,7 @@ from pathlib import Path
 from tests.scripts.support import ROOT, SCRIPTS, ScriptCase, write_stub
 
 TOOLS = ("npm", "curl", "sha256sum", "python3", "systemctl", "tar", "sed")
+STUBBED = ("npm", "curl", "sha256sum", "systemctl")
 CORE = ("bash", "dirname", "mktemp", "mkdir", "cp", "rm", "cat", "grep", "install", "echo", "printf")
 
 NPM_STUB = r"""
@@ -158,16 +159,20 @@ class Failures(InstallCase):
     def test_each_missing_tool_is_named_and_stops_the_install(self):
         for tool in TOOLS:
             with self.subTest(tool=tool):
-                path = self.path_without(tool, tools=TOOLS + CORE)
-                if tool in ("npm", "curl", "sha256sum", "systemctl"):
-                    for stub in ("npm", "curl", "sha256sum", "systemctl"):
-                        if stub != tool and not (Path(path) / stub).exists():
-                            (Path(path) / stub).symlink_to(self.stubs / stub)
-                done = self.run_script(SCRIPTS / "install.sh", path=path, env_extra={"STUB_LOG": str(self.log)})
-                self.assertEqual(done.returncode, 1)
-                self.assertIn(f"error: {tool} is required", done.stderr)
-                self.assert_theme_untouched()
-                shutil.rmtree(path)
+                # The stubs stand in for the network tools, so the test needs no real npm. The directory is
+                # removed even when an assertion fails, because a leftover link hides the next tool as present.
+                path = self.path_without(tool, tools=[t for t in TOOLS + CORE if t not in STUBBED])
+                self.addCleanup(shutil.rmtree, path, True)
+                for stub in STUBBED:
+                    if stub != tool:
+                        (Path(path) / stub).symlink_to(self.stubs / stub)
+                try:
+                    done = self.run_script(SCRIPTS / "install.sh", path=path, env_extra={"STUB_LOG": str(self.log)})
+                    self.assertEqual(done.returncode, 1)
+                    self.assertIn(f"error: {tool} is required", done.stderr)
+                    self.assert_theme_untouched()
+                finally:
+                    shutil.rmtree(path, True)
 
     def test_a_bad_hash_stops_the_install_before_anything_is_written(self):
         done = self.install(STUB_SHA_FAIL="1")
