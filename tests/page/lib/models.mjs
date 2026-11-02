@@ -19,8 +19,8 @@ function squarePng(rgb) {
   return PNG.sync.write(png);
 }
 
-function atlas(id, regions) {
-  const head = `${id}.png\nsize: 64,64\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n`;
+function atlas(id, regions, pma) {
+  const head = `${id}.png\nsize: 64,64\nformat: RGBA8888\nfilter: Linear,Linear\nrepeat: none\n${pma ? "pma: true\n" : ""}`;
   const body = regions
     .map((r) => `${r}\n  rotate: false\n  xy: 0, 0\n  size: 64, 64\n  orig: 64, 64\n  offset: 0, 0\n  index: -1\n`)
     .join("");
@@ -60,11 +60,11 @@ function skeleton(version, slots, blankAnimation) {
   };
 }
 
-function writeModel(dir, id, { version, slots, meta = {}, color = [200, 80, 80], blankAnimation }) {
+function writeModel(dir, id, { version, slots, meta = {}, color = [200, 80, 80], blankAnimation, pma }) {
   const modelDir = path.join(dir, id);
   fs.mkdirSync(modelDir, { recursive: true });
   fs.writeFileSync(path.join(modelDir, `${id}.json`), JSON.stringify(skeleton(version, slots, blankAnimation)));
-  fs.writeFileSync(path.join(modelDir, `${id}.atlas`), atlas(id, slots.map((s) => s.name)));
+  fs.writeFileSync(path.join(modelDir, `${id}.atlas`), atlas(id, slots.map((s) => s.name), pma));
   fs.writeFileSync(path.join(modelDir, `${id}.png`), squarePng(color));
   if (Object.keys(meta).length) fs.writeFileSync(path.join(modelDir, "model.json"), JSON.stringify(meta));
 }
@@ -75,6 +75,8 @@ const SCENE = [
   { name: "bg_floor", size: 400, y: 0 },
 ];
 
+// The solo model of this version has a premultiplied atlas page. The others have a straight-alpha one.
+export const PMA_VERSION = "4.2";
 export const SOLO = { "3.7": "v37-solo", "3.8": "v38-solo", "4.0": "v40-solo", "4.1": "v41-solo", "4.2": "v42-solo" };
 export const SCENES = { "4.0": "scene-v40", "4.2": "scene-v42" };
 export const HIDE = "hide-v40";
@@ -93,7 +95,7 @@ export function generateModels(dir) {
   let count = 0;
   const add = (id, spec) => { writeModel(dir, id, spec); count++; };
   for (const [version, id] of Object.entries(SOLO)) {
-    add(id, { version, slots: BODY, meta: { name: `Solo ${version}`, group: version.startsWith("3.") ? "Legacy" : "Modern" } });
+    add(id, { version, slots: BODY, meta: { name: `Solo ${version}`, group: version.startsWith("3.") ? "Legacy" : "Modern" }, pma: version === PMA_VERSION });
   }
   for (const [version, id] of Object.entries(SCENES)) {
     add(id, { version, slots: SCENE, color: [60, 90, 200], meta: { name: `Scene ${version}`, group: "Modern" } });
