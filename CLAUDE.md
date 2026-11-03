@@ -21,7 +21,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 | `docs/assets.md` | Model directory layout and `model.json` keys. |
 | `docs/credits.md` | Sources, tools, and test models. Add a row when you use a new source. |
 | `README.md` | Install steps, CLI, and the code map by function. Keep the code map in step with the code. |
-| `~/.local/state/spinewall/prefs.json` | Favorites, recents, layout, sort, variants. Server-owned, apart from `STATE`, never bumps `rev` or `vrev`. Endpoints: `GET /prefs`, `POST /prefs`, `POST /fav/<id>`. |
+| `~/.local/state/spinewall/prefs.json` | Favorites, recents, layout, sort, variants, presets. Server-owned, apart from `STATE`, never bumps `rev` or `vrev`. Endpoints: `GET /prefs`, `POST /prefs`, `POST /fav/<id>`, `GET /presets`. |
 
 ## Data flow
 
@@ -47,6 +47,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 - The server scans models at start and on `GET /rescan` (`spinewall rescan`). A new model appears after a rescan.
 - `additional_model_dirs` in `~/.config/spinewall/config.json` (env `SPINEWALL_CONFIG`) adds scan roots. `MODEL_DIRS` maps each id to its directory and `translate_path` serves from it. The main directory wins a duplicate id. Only that file can add a directory, never a request.
 - `model.json` `kind` is `character` or `scene`. The server detects it from region names when absent. A scene draws first in multi mode and never takes a click. `hideSlots` removes backdrop slots from drawing, framing, thumbnails, and hit tests.
+- A preset is `{name, characters}` with no uids, in `prefs.json` under `presets`. One character is the single layout. `load-preset` always bumps `crev`, and for one character also `rev` and `vrev`. A model that is gone is skipped. Only `save-preset`, `load-preset`, and `delete-preset` change presets, never `POST /prefs`. Up to 50 presets, names up to 40 printable characters.
 - The picker filter `kind` (Characters, Scenes, All) lives in `prefs.json`.
 - Position `x` and `y` are fractions of the window size. Scale ranges from 0.3 to 8.
 - In multi mode, edit-mode drag and wheel move the selected character. A press on a character selects it.

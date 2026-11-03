@@ -108,6 +108,17 @@ Edit mode shows a Characters strip above the model list.
 
 Characters of one Spine version draw in the order of the list. Characters of different versions share order by layer only, so two overlapping characters of different versions can appear in the wrong order.
 
+## Presets
+
+A preset saves the characters on screen with each model, animation, position, size, and auto-cycle flag. One character is a preset of one. Loading a preset replaces the layout, so it is a quick way to switch scenes.
+
+- Edit mode: press **Presets** in the Characters strip. Type a name and press **Save**. Press a preset name in the list to load it, or its ✕ to delete it.
+- Saving under an existing name replaces that preset. A name takes up to 40 letters. The list takes up to 50 presets.
+- A load skips a model that is gone. One model left loads as the single layout. No model left changes nothing, and the page says so.
+- Characters get new UIDs on each load.
+- The server keeps presets in `prefs.json` under `presets`. Local mode keeps them in `localStorage`.
+- Command line: `spinewall presets`, `save-preset NAME`, `load-preset NAME`, `delete-preset NAME`. Quote a name that has spaces.
+
 Command line: `spinewall add-character [ID]`, `remove-character UID`, `clear-characters`, `next-char-anim UID`, `set-char-anim UID NAME`, `set-char-model UID ID`. `spinewall info` lists each UID under `state.characters`.
 
 ## Auto-cycle animations

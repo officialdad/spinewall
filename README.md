@@ -35,6 +35,7 @@ In edit mode you can:
 
 - Search models with fuzzy matching, and filter by source, favorites, recents, and Characters, Scenes, or All.
 - Group the variants of one character into a single card.
+- Save the characters, positions, and sizes on screen as a named preset, and load it again later.
 - Play any animation from the list, with a preview on hover.
 - Drag the character to move it. Scroll the mouse wheel to scale it.
 - Add more characters with "Add character". Press a character to select it. A click changes only the topmost character under the pointer.
@@ -123,6 +124,7 @@ spinewall zoom-in | zoom-out | move-left | move-right | move-up | move-down | re
 spinewall rescan
 spinewall add-character [ID] | remove-character UID | clear-characters
 spinewall next-char-anim UID | prev-char-anim UID | set-char-anim UID NAME | set-char-model UID ID
+spinewall presets | save-preset NAME | load-preset NAME | delete-preset NAME
 ```
 
 Bind these to global shortcuts in System Settings, under Shortcuts, with a custom command.
@@ -174,8 +176,9 @@ Local mode starts with `?local=<models index url>` or `window.SPINEWALL_LOCAL = 
 | Model scan | `read_binary_version`, `read_json_version`, `read_atlas_regions`, `classify_kind`, `scan_model`, `scan_models`, `assign_characters`, `rescan` |
 | State | `STATE`, `load_state`, `save`, `change_model`, `change_animation`, `set_view` |
 | Prefs | `load_prefs`, `save_prefs`, `toggle_favorite`, `record_recent`, `set_prefs` |
+| Presets | `save_preset`, `load_preset`, `delete_preset`, `current_characters`, `clean_preset`, `clean_presets`, `clean_preset_name` |
 | Characters | `add_character`, `remove_character`, `update_character`, `cycle_character_animation`, `set_layout`, `clean_characters` |
-| HTTP | `command`, `Handler`: `/state`, `/models`, `/prefs`, `/info`, `/rescan`, `/thumb/<id>.png`, `/cmd/...`, `/edit/0\|1`, `/report`, `/fav/<id>`, `/layout`, `/view`, `/input` |
+| HTTP | `command`, `Handler`: `/state`, `/models`, `/prefs`, `/info`, `/rescan`, `/presets`, `/thumb/<id>.png`, `/cmd/...`, `/edit/0\|1`, `/report`, `/fav/<id>`, `/layout`, `/view`, `/input` |
 
 Data flow, state keys, and rules are in `CLAUDE.md`.
 
@@ -235,7 +238,7 @@ Spinewall is a viewer. It includes no Spine runtime. The only models are the few
 | `SPINEWALL_MODELS` | `~/.local/share/spinewall/models` | Model directory. |
 | `SPINEWALL_CONFIG` | `~/.config/spinewall/config.json` | Config file. `additional_model_dirs` lists more model directories, see [docs/assets.md](docs/assets.md). |
 | `SPINEWALL_STATE` | `~/.local/state/spinewall/state.json` | Current model, animation, and view. |
-| `SPINEWALL_PREFS` | `~/.local/state/spinewall/prefs.json` | Favorites, recents, sort, filters. |
+| `SPINEWALL_PREFS` | `~/.local/state/spinewall/prefs.json` | Favorites, recents, sort, filters, presets. |
 | `SPINEWALL_LAYOUT` | `~/.local/state/spinewall/layout.json` | Several-character layout. |
 | `SPINEWALL_THUMBS` | `~/.cache/spinewall/thumbs` | Thumbnail cache. |
 

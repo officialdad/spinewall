@@ -10,6 +10,7 @@ Headless Playwright tests for `theme/index.html`. They run the real page in Chro
 | `specs/input.spec.mjs` | Normal-mode click and `input.fired`. Edit-mode drag and wheel. Scale clamp. The 30 px click rule. |
 | `specs/multi.spec.mjs` | Add and remove characters. Topmost hit test. Empty-space click. Scene order and click pass-through. Canvas z-order. |
 | `specs/picker.spec.mjs` | Windowed list, fuzzy search, kind filter, Alt+F favorite, variants, keyboard, `/models` retry when the server starts late. |
+| `specs/presets.spec.mjs` | Save, load, and delete a preset from the picker. Multi and single layouts. Reload keeps presets. |
 | `specs/a11y.spec.mjs` | axe-core scan of the picker. Fails on serious or critical WCAG 2.2 AA violations, color contrast included. Console errors. |
 
 Models are synthetic. `lib/models.mjs` writes flat colored squares with a one-bone skeleton, so no game data is involved.

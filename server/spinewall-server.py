@@ -39,6 +39,8 @@ LAYOUT_FILE = os.environ.get(
     "SPINEWALL_LAYOUT", os.path.expanduser("~/.local/state/spinewall/layout.json")
 )
 RECENT_MAX = 20
+PRESET_MAX = 50
+PRESET_NAME_MAX_CHARS = 40
 UID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 ANIMATION_MAX_CHARS = 200
 PREF_CHOICES = {
@@ -344,17 +346,21 @@ def new_uid(taken):
             return uid
 
 
-def clean_characters(raw, allowed_uids=None):
+def clean_characters(raw, allowed_uids=None, known_only=True):
     """Return the valid characters of `raw`, in z order (last draws on top).
 
     An entry with a uid outside `allowed_uids` is dropped, so a stale page cannot bring back a removed character.
     An entry without a uid is new and gets one.
+    A saved preset keeps a model that is missing now, so `known_only=False` skips the scan check for it.
     """
     if not isinstance(raw, list):
         return []
     cleaned, seen = [], set()
     for entry in raw:
-        if not isinstance(entry, dict) or entry.get("model") not in IDS:
+        if not isinstance(entry, dict):
+            continue
+        model = entry.get("model")
+        if not isinstance(model, str) or not model or (known_only and model not in IDS):
             continue
         uid = entry.get("uid")
         if uid is None:
@@ -393,8 +399,47 @@ def load_layout():
 STATE["characters"], STATE["crev"] = load_layout()
 
 
+def clean_preset_name(value):
+    if not isinstance(value, str):
+        return None
+    name = value.strip()
+    if not name or len(name) > PRESET_NAME_MAX_CHARS or not name.isprintable():
+        return None
+    return name
+
+
+def clean_preset(raw):
+    """Return a stored preset, or None. A preset is a name and its characters in z order, with no uids.
+
+    One character is the single-character layout. More than one is multi mode.
+    """
+    if not isinstance(raw, dict):
+        return None
+    name = clean_preset_name(raw.get("name"))
+    # Uids are dropped because a load creates fresh characters, so two loads never share an id.
+    characters = [
+        {k: v for k, v in c.items() if k != "uid"}
+        for c in clean_characters(raw.get("characters"), known_only=False)
+    ]
+    if name is None or not characters:
+        return None
+    return {"name": name, "characters": characters}
+
+
+def clean_presets(raw):
+    if not isinstance(raw, list):
+        return []
+    presets, names = [], set()
+    for entry in raw:
+        preset = clean_preset(entry)
+        if preset and preset["name"] not in names and len(presets) < PRESET_MAX:
+            names.add(preset["name"])
+            presets.append(preset)
+    return presets
+
+
 def load_prefs():
-    prefs = {"favorites": [], "recent": [], "layout": "grid", "sort": "name", "kind": "character", "variants": True}
+    prefs = {"favorites": [], "recent": [], "layout": "grid", "sort": "name", "kind": "character", "variants": True, "presets": []}
     saved = read_json_dict(PREFS_FILE)
     if saved is None:
         return prefs
@@ -406,6 +451,7 @@ def load_prefs():
             prefs[key] = saved[key]
     if isinstance(saved.get("variants"), bool):
         prefs["variants"] = saved["variants"]
+    prefs["presets"] = clean_presets(saved.get("presets"))
     return prefs
 
 
@@ -611,6 +657,60 @@ def set_layout(body):
         set_characters(cleaned)
 
 
+def current_characters():
+    """The characters on screen. The single-character layout counts as a list of one."""
+    if STATE["characters"]:
+        return [{k: v for k, v in c.items() if k != "uid"} for c in STATE["characters"]]
+    return [{k: STATE[k] for k in ("model", "animation", "x", "y", "scale", "auto")}]
+
+
+def save_preset(raw_name):
+    """Store the current layout under a name. The same name replaces its preset in place."""
+    name = clean_preset_name(raw_name)
+    preset = clean_preset({"name": name, "characters": current_characters()})
+    if not preset:
+        return False
+    presets = PREFS["presets"]
+    index = next((i for i, p in enumerate(presets) if p["name"] == name), None)
+    if index is None and len(presets) >= PRESET_MAX:
+        return False
+    if index is None:
+        presets.append(preset)
+    else:
+        presets[index] = preset
+    save_prefs()
+    return True
+
+
+def delete_preset(name):
+    presets = [p for p in PREFS["presets"] if p["name"] != name]
+    if len(presets) == len(PREFS["presets"]):
+        return False
+    PREFS["presets"] = presets
+    save_prefs()
+    return True
+
+
+def load_preset(name):
+    """Replace the layout with a preset. A model that is gone is skipped, and no model left changes nothing."""
+    preset = next((p for p in PREFS["presets"] if p["name"] == name), None)
+    chars = clean_characters(preset["characters"]) if preset else []
+    if not chars:
+        return False
+    if len(chars) == 1:
+        # One character is the single-character layout, so the old keys carry it, as in remove_character.
+        only = chars[0]
+        STATE.update(model=only["model"], animation=only["animation"], auto=only["auto"])
+        STATE["rev"] += 1
+        STATE.update(scale=only["scale"], x=only["x"], y=only["y"])
+        STATE["vrev"] += 1
+        save()
+        record_recent(only["model"])
+        chars = []
+    set_characters(chars)
+    return True
+
+
 def set_view(scale=None, x=None, y=None):
     # An unusable value keeps the current one, so a bad push never writes NaN into the state.
     if scale is not None:
@@ -702,6 +802,12 @@ def run_command(cmd, arg=None):
         change_animation(arg[:ANIMATION_MAX_CHARS])
     elif cmd == "add-character":
         add_character(arg)
+    elif cmd == "save-preset" and arg:
+        save_preset(arg)
+    elif cmd == "load-preset" and arg:
+        load_preset(arg)
+    elif cmd == "delete-preset" and arg:
+        delete_preset(arg)
     elif cmd == "clear-characters" and STATE["characters"]:
         set_characters([])
     elif cmd == "remove-character" and arg:
@@ -836,6 +942,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({**STATE, "edit": EDIT["on"]})
         elif self.path == "/prefs":
             self.send_json(PREFS)
+        elif self.path == "/presets":
+            self.send_json([{"name": p["name"], "characters": len(p["characters"])} for p in PREFS["presets"]])
         elif self.path == "/models":
             self.send_json(MODELS)
         elif self.path.startswith("/thumb/") and self.path.endswith(".png"):

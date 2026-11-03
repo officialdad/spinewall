@@ -5,6 +5,7 @@
 #        | add-character [ID] | remove-character UID | clear-characters
 #        | next-char-anim UID | prev-char-anim UID | set-char-anim UID NAME | set-char-model UID ID
 #        | auto-cycle on|off | auto-cycle UID on|off
+#        | presets | save-preset NAME | load-preset NAME | delete-preset NAME
 set -euo pipefail
 base="http://127.0.0.1:${SPINEWALL_PORT:-8777}"
 cmd="${1:-info}"
@@ -22,6 +23,7 @@ encode() {
 case "$cmd" in
   info) curl -fsS "$base/info" ;;
   rescan) curl -fsS "$base/rescan" ;;
+  presets) curl -fsS "$base/presets" ;;
   *)
     path="$base/cmd/$(encode "$cmd")"
     # set-char-anim and set-char-model carry two values, which the server reads as UID/VALUE.

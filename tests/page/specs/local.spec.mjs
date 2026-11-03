@@ -72,3 +72,18 @@ test("the edit button is absent in server mode", async ({ page }) => {
   await page.goto(THEME_URL);
   await expect(page.locator("#editToggle")).toBeHidden();
 });
+
+test("a preset saves and loads in local mode and survives a reload", async ({ page }) => {
+  await page.goto(LOCAL_URL());
+  await expect.poll(async () => (await stateOf(page)).model).toBeTruthy();
+  await command(page, `add-character/${A}`);
+  await expect.poll(async () => (await stateOf(page)).characters.length).toBe(2);
+  await command(page, "save-preset/duo");
+  await command(page, "clear-characters");
+  await expect.poll(async () => (await stateOf(page)).characters.length).toBe(0);
+  await page.reload();
+  await command(page, "load-preset/duo");
+  await expect.poll(async () => (await stateOf(page)).characters.length).toBe(2);
+  const presets = await page.evaluate(async () => (await (await api("/presets")).json()));
+  expect(presets).toEqual([{ name: "duo", characters: 2 }]);
+});

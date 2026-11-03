@@ -2,6 +2,7 @@
 // It answers the same paths as server/spinewall-server.py. Change both together.
 (() => {
 const SCALE_MIN = 0.3, SCALE_MAX = 8, POS_MAX = 2, RECENT_MAX = 20, ANIMATION_MAX_CHARS = 200;
+const PRESET_MAX = 50, PRESET_NAME_MAX_CHARS = 40;
 const VIEW_DEFAULT = {scale: 1, x: 0, y: 0};
 const PREF_CHOICES = {layout: ["grid", "list"], sort: ["name", "recent", "source"], kind: ["character", "scene", "all"]};
 const UID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
@@ -55,11 +56,13 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     try { storage.setItem(STORAGE_KEY, JSON.stringify({state: persistedState(), characters: state.characters, crev: state.crev, prefs})); } catch (e) {}
   };
 
-  function cleanCharacters(raw, allowedUids) {
+  // A saved preset keeps a model that is missing now, so `knownOnly = false` skips the index check for it.
+  function cleanCharacters(raw, allowedUids, knownOnly = true) {
     if (!Array.isArray(raw)) return [];
     const cleaned = [], seen = new Set();
     for (const entry of raw) {
-      if (!entry || typeof entry !== "object" || !ids.includes(entry.model)) continue;
+      if (!entry || typeof entry !== "object" || typeof entry.model !== "string" || !entry.model) continue;
+      if (knownOnly && !ids.includes(entry.model)) continue;
       let uid = entry.uid;
       if (uid == null) uid = randomUid(new Set([...seen, ...(allowedUids || [])]));
       else if (typeof uid !== "string" || !UID_PATTERN.test(uid) || seen.has(uid)) continue;
@@ -90,11 +93,33 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
   state.characters = cleanCharacters(saved.characters);
   state.crev = Math.max(0, Number.isInteger(saved.crev) ? saved.crev : 0);
 
-  const prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true};
+  const cleanPresetName = value => {
+    if (typeof value !== "string") return null;
+    const name = value.trim();
+    // The server drops unprintable names. This pattern covers the same control and separator characters.
+    return name && [...name].length <= PRESET_NAME_MAX_CHARS && !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(name) ? name : null;
+  };
+  const cleanPreset = raw => {
+    if (!raw || typeof raw !== "object") return null;
+    const name = cleanPresetName(raw.name);
+    const characters = cleanCharacters(raw.characters, null, false).map(({uid, ...rest}) => rest);
+    return name && characters.length ? {name, characters} : null;
+  };
+  const cleanPresets = raw => {
+    const presets = [], names = new Set();
+    for (const entry of Array.isArray(raw) ? raw : []) {
+      const preset = cleanPreset(entry);
+      if (preset && !names.has(preset.name) && presets.length < PRESET_MAX) { names.add(preset.name); presets.push(preset); }
+    }
+    return presets;
+  };
+
+  const prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true, presets: []};
   const sp = saved.prefs || {};
   for (const key of ["favorites", "recent"]) if (Array.isArray(sp[key])) prefs[key] = sp[key].filter(i => typeof i === "string");
   for (const [key, choices] of Object.entries(PREF_CHOICES)) if (choices.includes(sp[key])) prefs[key] = sp[key];
   if (typeof sp.variants === "boolean") prefs.variants = sp.variants;
+  prefs.presets = cleanPresets(sp.presets);
 
   const setCharacters = chars => { state.characters = chars; state.crev++; persist(); };
   const findCharacter = uid => state.characters.find(c => c.uid === uid);
@@ -120,6 +145,43 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     if (view.y != null) state.y = clamp(view.y, -POS_MAX, POS_MAX, state.y);
     state.vrev++; persist();
   };
+
+  const currentCharacters = () => state.characters.length
+    ? state.characters.map(({uid, ...rest}) => rest)
+    : [{model: state.model, animation: state.animation, x: state.x, y: state.y, scale: state.scale, auto: state.auto}];
+
+  function savePreset(rawName) {
+    const name = cleanPresetName(rawName);
+    const preset = cleanPreset({name, characters: currentCharacters()});
+    if (!preset) return;
+    const index = prefs.presets.findIndex(p => p.name === name);
+    if (index < 0 && prefs.presets.length >= PRESET_MAX) return;
+    if (index < 0) prefs.presets.push(preset); else prefs.presets[index] = preset;
+    persist();
+  }
+
+  function deletePreset(name) {
+    const presets = prefs.presets.filter(p => p.name !== name);
+    if (presets.length === prefs.presets.length) return;
+    prefs.presets = presets;
+    persist();
+  }
+
+  function loadPreset(name) {
+    const preset = prefs.presets.find(p => p.name === name);
+    let chars = preset ? cleanCharacters(preset.characters) : [];
+    if (!chars.length) return;
+    if (chars.length === 1) {
+      const [only] = chars;
+      Object.assign(state, {model: only.model, animation: only.animation, auto: only.auto});
+      state.rev++;
+      Object.assign(state, {scale: only.scale, x: only.x, y: only.y});
+      state.vrev++;
+      prefs.recent = [only.model, ...prefs.recent.filter(i => i !== only.model)].slice(0, RECENT_MAX);
+      chars = [];
+    }
+    setCharacters(chars);
+  }
 
   function addCharacter(id) {
     let chars = state.characters;
@@ -209,6 +271,9 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     else if (name === "random-anim") { if (names && names.length) changeAnimation(names[Math.floor(Math.random() * names.length)]); }
     else if (name === "set-anim" && arg) changeAnimation(arg.slice(0, ANIMATION_MAX_CHARS));
     else if (name === "add-character") addCharacter(arg);
+    else if (name === "save-preset" && arg) savePreset(arg);
+    else if (name === "load-preset" && arg) loadPreset(arg);
+    else if (name === "delete-preset" && arg) deletePreset(arg);
     else if (name === "clear-characters" && state.characters.length) setCharacters([]);
     else if (name === "remove-character" && arg) removeCharacter(arg);
     else if ((name === "next-char-anim" || name === "prev-char-anim") && arg) cycleCharacterAnimation(arg, name === "next-char-anim" ? 1 : -1);
@@ -230,6 +295,7 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     if (method === "GET") {
       if (path === "/state") return json(state);
       if (path === "/prefs") return json(prefs);
+      if (path === "/presets") return json(prefs.presets.map(p => ({name: p.name, characters: p.characters.length})));
       if (path === "/models" || path === "/rescan") return json(models);
       if (path.startsWith("/thumb/") && path.endsWith(".png")) {
         const blob = thumbs.get(decodeURIComponent(path.slice(7, -4)));

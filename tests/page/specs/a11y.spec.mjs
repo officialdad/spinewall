@@ -50,6 +50,15 @@ test("the characters strip has no serious or critical violations", async ({ open
   expect(await scan(page)).toEqual([]);
 });
 
+test("the presets pane has no serious or critical violations", async ({ open, page }) => {
+  await openPicker(open, page);
+  await page.getByRole("button", { name: "Presets", exact: true }).click();
+  await page.getByRole("textbox", { name: "Preset name" }).fill("desk");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  expect(await scan(page)).toEqual([]);
+});
+
 test("a favorite cell has no serious or critical violations", async ({ open, page }) => {
   await openPicker(open, page);
   await post(`/fav/${A}`, {});
