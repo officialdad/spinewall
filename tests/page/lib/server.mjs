@@ -35,6 +35,7 @@ export async function startServer({ models = MODELS, wait = true } = {}) {
     SPINEWALL_STATE: path.join(state, "state.json"),
     SPINEWALL_PREFS: path.join(state, "prefs.json"),
     SPINEWALL_LAYOUT: path.join(state, "layout.json"),
+    SPINEWALL_SCREENS: path.join(state, "screens.json"),
     SPINEWALL_THUMBS: THUMBS,
     HOME: state,
   };

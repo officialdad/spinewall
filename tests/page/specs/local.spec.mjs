@@ -87,3 +87,21 @@ test("a preset saves and loads in local mode and survives a reload", async ({ pa
   const presets = await page.evaluate(async () => (await (await api("/presets")).json()));
   expect(presets).toEqual([{ name: "duo", characters: 2 }]);
 });
+
+test("next and previous preset cycle in local mode and wrap", async ({ page }) => {
+  await page.goto(LOCAL_URL());
+  await expect.poll(async () => (await stateOf(page)).model).toBeTruthy();
+  await command(page, `set-model/${A}`);
+  await command(page, "save-preset/one");
+  await command(page, `set-model/${B}`);
+  await command(page, "save-preset/two");
+  await command(page, "next-preset");
+  await expect.poll(async () => (await stateOf(page)).preset).toBe("one");
+  await command(page, "next-preset");
+  await expect.poll(async () => (await stateOf(page)).preset).toBe("two");
+  await command(page, "next-preset");
+  await expect.poll(async () => (await stateOf(page)).preset).toBe("one");
+  await command(page, "prev-preset");
+  await expect.poll(async () => (await stateOf(page)).preset).toBe("two");
+  expect((await stateOf(page)).model).toBe(B);
+});

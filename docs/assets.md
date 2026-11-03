@@ -119,6 +119,27 @@ A preset saves the characters on screen with each model, animation, position, si
 - The server keeps presets in `prefs.json` under `presets`. Local mode keeps them in `localStorage`.
 - Command line: `spinewall presets`, `save-preset NAME`, `load-preset NAME`, `delete-preset NAME`. Quote a name that has spaces.
 
+### Presets per monitor
+
+Each monitor shows its own layout, so each can run its own preset. The page names its monitor and the server keeps one layout per name.
+
+- A new monitor starts as a copy of the layout it first finds. Edit mode then changes that monitor only.
+- A lone monitor keeps the old behavior. Its page uses the default layout, and the CLI needs no `--screen`.
+- **Previous** and **Next** in the Presets pane step this monitor through the saved presets and wrap around. The preset loaded last is highlighted.
+- `spinewall next-preset` and `prev-preset` do the same from a shortcut. Without `--screen KEY` they step every monitor, each from its own preset. Add `--screen KEY` to step one.
+- `spinewall screens` lists the monitors the server knows, with the last preset of each. Use `--screen KEY` on `load-preset`, `save-preset`, and any other command to act on one monitor.
+- A command without `--screen` reaches every monitor. `save-preset` is the exception: it saves the default layout, so name the monitor on a multi-monitor desktop.
+- A preset whose models are all gone is skipped when cycling.
+- The server keeps the monitor layouts in `screens.json`, up to 16 monitors.
+
+#### Monitor names
+
+The page builds the key from the screen size and position, for example `3440x1440+0+0`, when the desktop has several monitors. Open the page with `?screen=NAME` to choose the key yourself. The key can change when a panel moves or a monitor moves in the display settings. The old key then keeps its layout, and the monitor starts again from the default layout.
+
+#### Shortcuts
+
+Bind `spinewall next-preset --screen current` and `spinewall prev-preset --screen current` as global shortcuts. `current` is the monitor KWin reports as active, which follows the pointer, so the shortcut cycles the monitor you are using. It needs `qdbus6` and `kscreen-doctor`, and a wallpaper page must be connected on that monitor. Without `--screen`, the shortcut cycles every monitor.
+
 Command line: `spinewall add-character [ID]`, `remove-character UID`, `clear-characters`, `next-char-anim UID`, `set-char-anim UID NAME`, `set-char-model UID ID`. `spinewall info` lists each UID under `state.characters`.
 
 ## Auto-cycle animations

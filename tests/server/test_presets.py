@@ -39,11 +39,11 @@ class Presets(ServerCase):
         self.assertNotIn("uid", preset["characters"][0])
         self.assertEqual(self.get("/presets").json, [{"name": "duo", "characters": 2}])
 
-    def test_saving_does_not_touch_the_state(self):
+    def test_saving_changes_only_the_last_preset(self):
         self.layout_two()
         before = self.state()
         self.cmd("save-preset", "duo")
-        self.assertEqual(self.state(), before)
+        self.assertEqual(self.state(), {**before, "preset": "duo"})
 
     def test_loads_a_multi_character_layout_with_new_uids(self):
         self.layout_two()
