@@ -77,7 +77,7 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     return cleaned;
   }
 
-  const state = {model: firstCharacter(), animation: null, rev: 0, ...VIEW_DEFAULT, vrev: 0, auto: false, characters: [], crev: 0, edit: 0};
+  const state = {model: firstCharacter(), animation: null, rev: 0, ...VIEW_DEFAULT, vrev: 0, auto: false, preset: null, characters: [], crev: 0, edit: 0};
   const persistedState = () => { const {characters, crev, edit, ...rest} = state; return rest; };
   const s = saved.state;
   if (s && ids.includes(s.model)) {
@@ -105,6 +105,7 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     const characters = cleanCharacters(raw.characters, null, false).map(({uid, ...rest}) => rest);
     return name && characters.length ? {name, characters} : null;
   };
+  state.preset = cleanPresetName(s && s.preset);
   const cleanPresets = raw => {
     const presets = [], names = new Set();
     for (const entry of Array.isArray(raw) ? raw : []) {
@@ -157,6 +158,7 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     const index = prefs.presets.findIndex(p => p.name === name);
     if (index < 0 && prefs.presets.length >= PRESET_MAX) return;
     if (index < 0) prefs.presets.push(preset); else prefs.presets[index] = preset;
+    state.preset = name;
     persist();
   }
 
@@ -164,13 +166,15 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     const presets = prefs.presets.filter(p => p.name !== name);
     if (presets.length === prefs.presets.length) return;
     prefs.presets = presets;
+    if (state.preset === name) state.preset = null;
     persist();
   }
 
   function loadPreset(name) {
     const preset = prefs.presets.find(p => p.name === name);
     let chars = preset ? cleanCharacters(preset.characters) : [];
-    if (!chars.length) return;
+    if (!chars.length) return false;
+    state.preset = name;
     if (chars.length === 1) {
       const [only] = chars;
       Object.assign(state, {model: only.model, animation: only.animation, auto: only.auto});
@@ -181,6 +185,17 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
       chars = [];
     }
     setCharacters(chars);
+    return true;
+  }
+
+  // Steps from the preset loaded last and wraps. A preset whose models are all gone is skipped.
+  function stepPreset(step) {
+    const names = prefs.presets.map(p => p.name);
+    if (!names.length) return;
+    const start = names.includes(state.preset) ? names.indexOf(state.preset) : (step > 0 ? -1 : 0);
+    for (let offset = 1; offset <= names.length; offset++) {
+      if (loadPreset(names[(((start + step * offset) % names.length) + names.length) % names.length])) return;
+    }
   }
 
   function addCharacter(id) {
@@ -274,6 +289,7 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     else if (name === "save-preset" && arg) savePreset(arg);
     else if (name === "load-preset" && arg) loadPreset(arg);
     else if (name === "delete-preset" && arg) deletePreset(arg);
+    else if (name === "next-preset" || name === "prev-preset") stepPreset(name === "next-preset" ? 1 : -1);
     else if (name === "clear-characters" && state.characters.length) setCharacters([]);
     else if (name === "remove-character" && arg) removeCharacter(arg);
     else if ((name === "next-char-anim" || name === "prev-char-anim") && arg) cycleCharacterAnimation(arg, name === "next-char-anim" ? 1 : -1);

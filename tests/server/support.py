@@ -175,6 +175,7 @@ class ServerProcess:
             "SPINEWALL_STATE": str(self.state_file),
             "SPINEWALL_PREFS": str(self.prefs_file),
             "SPINEWALL_LAYOUT": str(self.layout_file),
+            "SPINEWALL_SCREENS": str(self.state_dir / "screens.json"),
             "SPINEWALL_THUMBS": str(self.thumbs),
         }
         env.update(self.extra_env)
@@ -323,6 +324,7 @@ def load_server_module(models_dir, root):
         "SPINEWALL_STATE": str(root / "state" / "state.json"),
         "SPINEWALL_PREFS": str(root / "state" / "prefs.json"),
         "SPINEWALL_LAYOUT": str(root / "state" / "layout.json"),
+        "SPINEWALL_SCREENS": str(root / "state" / "screens.json"),
         "SPINEWALL_THUMBS": str(root / "cache" / "thumbs"),
         "SPINEWALL_PORT": "1",
     }

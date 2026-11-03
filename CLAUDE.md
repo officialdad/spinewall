@@ -21,6 +21,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 | `docs/assets.md` | Model directory layout and `model.json` keys. |
 | `docs/credits.md` | Sources, tools, and test models. Add a row when you use a new source. |
 | `README.md` | Install steps, CLI, and the code map by function. Keep the code map in step with the code. |
+| `~/.local/state/spinewall/screens.json` | One stage per monitor. Server-owned. The default stage stays in `state.json` and `layout.json`. |
 | `~/.local/state/spinewall/prefs.json` | Favorites, recents, layout, sort, variants, presets. Server-owned, apart from `STATE`, never bumps `rev` or `vrev`. Endpoints: `GET /prefs`, `POST /prefs`, `POST /fav/<id>`, `GET /presets`. |
 
 ## Data flow
@@ -38,7 +39,9 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 - The Spine players define the global `spine`. The install script renames the 4.x players to `spine40`, `spine41`, and `spine42` with `sed`. It wraps the 3.7 and 3.8 players in a function that returns `spine37` or `spine38`, because those players name `spine` internally. The 3.7 player reads JSON only, so the server skips a 3.7 `.skel` model. Keep the theme and the script in step.
 - Local mode (`?local=<index url>` or `window.SPINEWALL_LOCAL`) routes every state call through `api()` to `theme/local-host.js`, with no server. It keeps state, prefs, and layout in `localStorage`. Thumbnails stay in memory. Server mode stays the default and never loads the index.
 - The page drops animations that draw no image slot, such as an animation that hides every region and mesh. `drawingAnimations` decides, and a model with no drawing animation keeps all of them.
-- Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`, `auto`, `characters`, `crev`. The page and server share them. Change both together.
+- Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`, `auto`, `preset`, `characters`, `crev`. The page and server share them. Change both together.
+- A stage is one set of state keys. Each monitor has one, found by `?screen=KEY` on every page request, and the default stage serves `screen=` and a lone monitor. The server creates a stage only when a page asks, up to 16, as a copy of the default stage. A command with no `screen` runs on every stage. A command with `screen` runs on that stage and answers 404 for a name it does not know. `save-preset` and `delete-preset` run once. The page derives the key from the screen geometry when `screen.isExtended`, and `?screen=` overrides it. Local mode has one stage.
+- `preset` is the name this stage loaded or saved last. `next-preset` and `prev-preset` step from it through the preset list, wrap, and skip a preset with no model left. A delete clears it on every stage. It bumps no revision, so the page reads it on each poll.
 - `characters` is a list of `{uid, model, animation, x, y, scale, auto}` in z order, last on top. `crev` bumps on each change. An empty list means single-character mode, which uses the old keys alone. The list persists in `layout.json` (env `SPINEWALL_LAYOUT`), apart from `STATE_FILE`.
 - Several characters share one canvas per Spine runtime. Layers stack by their topmost character, so characters of different runtimes interleave by layer only. Two overlapping characters of different versions can draw in the wrong order.
 - Removing down to one character folds it back into `model`, `animation`, `scale`, `x`, `y`, `auto`.

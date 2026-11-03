@@ -42,6 +42,8 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #presets-pane[hidden]{display:none}
 #presets-pane .row>button{flex:none}
 #presets-pane .row>input{flex:1}
+#presets-pane .cycle>button{flex:1}
+#presetlist .sel[aria-current="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
 #presetlist{display:flex;flex-direction:column;gap:6px;max-height:144px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.6) transparent}
 #presetlist .sel{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 12px}
 #presetlist .rm{flex:none;width:44px;padding:0;font-size:18px}
@@ -170,6 +172,12 @@ const API = "http://127.0.0.1:8777";
 const LOCAL = window.SPINEWALL_LOCAL
   || (new URLSearchParams(location.search).get("local") ? {modelsUrl: new URLSearchParams(location.search).get("local")} : null);
 const MODEL_ROOT = LOCAL ? new URL(".", new URL(LOCAL.modelsUrl, location.href)).href.replace(/\/$/, "") : API;
+// Each monitor runs its own page, and each page shows its own stage on the server. A lone monitor uses the default stage,
+// so a single-screen setup behaves as before. `?screen=<key>` names the monitor when the page cannot tell.
+// `screen.isExtended` is true when the desktop spans several monitors.
+const SCREEN = LOCAL ? "" : (new URLSearchParams(location.search).get("screen")
+  ?? (screen.isExtended ? `${screen.width}x${screen.height}+${screen.availLeft ?? 0}+${screen.availTop ?? 0}` : ""));
+if (SCREEN) console.log("spinewall screen:", SCREEN);
 const POLL_MS = 700;
 const CLICK_MAX_MS = 500;
 const CLICK_MAX_PX = 30;
@@ -197,6 +205,8 @@ const WARN_ABOVE = 25;
 // The limits match the server, which enforces them.
 const PRESET_NAME_MAX_CHARS = 40, PRESET_MAX = 50;
 let state = {model: null, animation: null, rev: -1, auto: false};
+// The preset this screen loaded or saved last. The server stores it per screen, and a load may not bump `rev`.
+let lastPreset = null;
 let editMode = false, dragging = false, click = null;
 let view = {scale: 1, x: 0, y: 0}, viewRev = -1;
 const emptyCounts = () => ({wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0});
@@ -205,7 +215,7 @@ let counts = emptyCounts();
 let localHost = null;
 // One entry point for every state call, so server mode and local mode share all page code above it.
 const api = (path, init) => {
-  if (!LOCAL) return fetch(`${API}${path}`, init);
+  if (!LOCAL) return fetch(`${API}${path}${path.includes("?") ? "&" : "?"}screen=${encodeURIComponent(SCREEN)}`, init);
   localHost ||= fetch(LOCAL.modelsUrl).then(res => {
     if (!res.ok) throw new Error(`models index ${res.status}`);
     return res.json();
@@ -547,13 +557,19 @@ function ensureChrome() {
   const presetNone = el("p", {className: "none", textContent: "No presets yet."});
   const presetName = el("input", {type: "text", placeholder: "Preset name", autocomplete: "off", spellcheck: false, maxLength: PRESET_NAME_MAX_CHARS});
   presetName.setAttribute("aria-label", "Preset name");
+  const prevPresetBtn = el("button", {type: "button", textContent: "Previous"});
+  prevPresetBtn.title = "Load the previous preset on this screen";
+  const nextPresetBtn = el("button", {type: "button", textContent: "Next"});
+  nextPresetBtn.title = "Load the next preset on this screen";
   const savePresetBtn = el("button", {type: "button", textContent: "Save"});
   savePresetBtn.title = "Save the characters, positions, and sizes on screen";
   const presetNote = el("p", {className: "note"});
   presetNote.setAttribute("role", "status");
   const presetsPane = el("div", {className: "pane", id: "presets-pane", hidden: true},
     el("h2", {textContent: "Presets"}),
+    ...(SCREEN ? [el("p", {className: "none", textContent: `Screen ${SCREEN}. Each screen keeps its own layout and preset.`})] : []),
     presetNone, presetList,
+    el("div", {className: "row cycle"}, prevPresetBtn, nextPresetBtn),
     el("div", {className: "row"}, presetName, savePresetBtn),
     presetNote);
   const tabModels = el("button", {type: "button", textContent: "Models"});
@@ -573,6 +589,8 @@ function ensureChrome() {
     // A preset saved from the CLI or another page shows up only after a fresh read.
     refreshPrefs().then(renderPresets);
   });
+  prevPresetBtn.addEventListener("click", () => stepPreset(-1));
+  nextPresetBtn.addEventListener("click", () => stepPreset(1));
   savePresetBtn.addEventListener("click", () => savePreset(presetName.value));
   presetName.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); savePreset(presetName.value); } });
   autoBox.addEventListener("change", () => setAuto(targetChar(), autoBox.checked));
@@ -626,6 +644,7 @@ function renderPresets() {
   const focused = document.activeElement && document.activeElement.dataset.focusKey;
   ui.presetList.replaceChildren(...presets.map(p => {
     const load = el("button", {type: "button", className: "sel", textContent: `${p.name} (${p.characters.length})`, title: `Load preset ${p.name}`});
+    if (p.name === lastPreset) load.setAttribute("aria-current", "true");
     load.dataset.focusKey = `load:${p.name}`;
     load.addEventListener("click", () => loadPreset(p.name));
     const rm = el("button", {type: "button", className: "rm", textContent: "✕"});
@@ -663,7 +682,20 @@ async function loadPreset(name) {
   let reply = null;
   try { reply = await (await api(`/cmd/load-preset/${encodeURIComponent(name)}`)).json(); } catch (e) {}
   // A load always bumps the layout revision, so an unchanged one means the preset's models are gone.
-  showPresetNote(reply && reply.crev !== before ? `Loaded "${name}".` : `Cannot load "${name}". Its models are missing.`);
+  const loaded = !!reply && reply.crev !== before;
+  if (loaded) { lastPreset = name; renderPresets(); }
+  showPresetNote(loaded ? `Loaded "${name}".` : `Cannot load "${name}". Its models are missing.`);
+}
+
+// Steps this screen through the saved presets. Another screen keeps its own.
+async function stepPreset(step) {
+  // A preset saved from the CLI or another screen shows up only after a fresh read.
+  await refreshPrefs();
+  if (!(prefs.presets || []).length) { renderPresets(); showPresetNote("No presets yet."); return; }
+  let reply = null;
+  try { reply = await (await api(`/cmd/${step > 0 ? "next" : "prev"}-preset`)).json(); } catch (e) {}
+  if (reply && reply.preset) { lastPreset = reply.preset; renderPresets(); }
+  showPresetNote(reply && reply.preset ? `Loaded "${reply.preset}".` : "Cannot load a preset. Its models are missing.");
 }
 
 async function deletePreset(name) {
@@ -1922,6 +1954,8 @@ async function poll() {
   try {
     const s = await (await api("/state")).json();
     setEditMode(!!s.edit);
+    const preset = s.preset || null;
+    if (preset !== lastPreset) { lastPreset = preset; if (editMode && ui) renderPresets(); }
     // A drag in progress owns the layout, so a server copy waits until the push has landed.
     if (s.crev !== crev && !dragging && !layoutPending) {
       crev = s.crev;
