@@ -7,6 +7,23 @@ body:
       value: |
         Do not attach game models, textures, `.skel`, `.atlas`, or Spine runtime files. Name the model format and Spine version instead.
   - type: input
+    id: needs_you
+    attributes:
+      label: Needs you
+      description: One line. What the maintainer must do.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: 2 to 4 short sentences. What is wrong and where.
+    validations:
+      required: true
+  - type: input
+    id: risk
+    attributes:
+      label: Risk
+      description: One line, or None known.
+  - type: input
     id: plasma
     attributes:
       label: Plasma version and session

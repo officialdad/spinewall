@@ -6,6 +6,23 @@ body:
     attributes:
       value: |
         Do not attach game models, textures, or Spine runtime files. Spinewall stays free of game-specific code.
+  - type: input
+    id: needs_you
+    attributes:
+      label: Needs you
+      description: One line. What the maintainer must do.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: 2 to 4 short sentences. What is needed and why.
+    validations:
+      required: true
+  - type: input
+    id: risk
+    attributes:
+      label: Risk
+      description: One line, or None known.
   - type: textarea
     id: problem
     attributes:
