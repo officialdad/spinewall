@@ -46,9 +46,12 @@ out = next((o for o in outputs if o["name"] == name and o["enabled"]), None)
 if out is None:
     sys.exit(f"error: KWin reports monitor {name}, which kscreen-doctor does not list.")
 suffix = "+{}+{}".format(out["pos"]["x"], out["pos"]["y"])
-match = [k for k in known if k.endswith(suffix)]
+exact = "{}x{}{}".format(out["size"]["width"], out["size"]["height"], suffix)
+# A monitor that once ran in another mode leaves an old key at the same position, so the exact key wins.
+# Position alone is the fallback, because a scaled monitor reports a size the page does not use.
+match = [exact] if exact in known else [k for k in known if k.endswith(suffix)]
 if len(match) != 1:
-    sys.exit(f"error: no wallpaper page is connected on monitor {name} at {suffix}. Run: spinewall screens")
+    sys.exit(f"error: cannot pick the wallpaper screen of monitor {name} at {suffix} from {known}. Name it with --screen KEY.")
 print(match[0], end="")
 ' "$name"
 }
