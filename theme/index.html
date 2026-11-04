@@ -38,6 +38,17 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #models-pane{flex:1}
 #anims-pane{flex:none;max-height:30%;border-top:2px solid #767676;padding-top:8px}
 #chars-pane{flex:none;gap:6px}
+#presets-pane{flex:none;gap:6px}
+#presets-pane[hidden]{display:none}
+#presets-pane .row>button{flex:none}
+#presets-pane .row>input{flex:1}
+#presets-pane .cycle>button{flex:1}
+#presetlist .sel[aria-current="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
+#presetlist{display:flex;flex-direction:column;gap:6px;max-height:144px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.6) transparent}
+#presetlist .sel{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 12px}
+#presetlist .rm{flex:none;width:44px;padding:0;font-size:18px}
+#presets-pane .none{margin:0;font-size:14px}
+#presets-pane .note{margin:0;font-size:14px;min-height:20px}
 #chars-pane [hidden]{display:none}
 .charhead{display:flex;align-items:center;gap:8px}
 .charhead h2{flex:1;min-width:0}
@@ -139,7 +150,7 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 @media (max-height:719px){
   .tabs{display:flex}
   .pane>h2{display:none}
-  #picker[data-tab="models"] #anims-pane,#picker[data-tab="anims"] #models-pane,#picker[data-tab="anims"] #chars-pane{display:none}
+  #picker[data-tab="models"] #anims-pane,#picker[data-tab="anims"] #models-pane,#picker[data-tab="anims"] #chars-pane,#picker[data-tab="anims"] #presets-pane{display:none}
   #anims-pane{max-height:none;flex:1;border-top:0;padding-top:0}
 }
 </style>
@@ -161,6 +172,12 @@ const API = "http://127.0.0.1:8777";
 const LOCAL = window.SPINEWALL_LOCAL
   || (new URLSearchParams(location.search).get("local") ? {modelsUrl: new URLSearchParams(location.search).get("local")} : null);
 const MODEL_ROOT = LOCAL ? new URL(".", new URL(LOCAL.modelsUrl, location.href)).href.replace(/\/$/, "") : API;
+// Each monitor runs its own page, and each page shows its own stage on the server. A lone monitor uses the default stage,
+// so a single-screen setup behaves as before. `?screen=<key>` names the monitor when the page cannot tell.
+// `screen.isExtended` is true when the desktop spans several monitors.
+const SCREEN = LOCAL ? "" : (new URLSearchParams(location.search).get("screen")
+  ?? (screen.isExtended ? `${screen.width}x${screen.height}+${screen.availLeft ?? 0}+${screen.availTop ?? 0}` : ""));
+if (SCREEN) console.log("spinewall screen:", SCREEN);
 const POLL_MS = 700;
 const CLICK_MAX_MS = 500;
 const CLICK_MAX_PX = 30;
@@ -185,7 +202,11 @@ let models = [], player = null, anims = [];
 // Several characters share one stage. `layout` mirrors the server list, and an empty list means the single player.
 let multi = false, layout = [], selectedUid = null, crev = -1, layoutPending = false;
 const WARN_ABOVE = 25;
+// The limits match the server, which enforces them.
+const PRESET_NAME_MAX_CHARS = 40, PRESET_MAX = 50;
 let state = {model: null, animation: null, rev: -1, auto: false};
+// The preset this screen loaded or saved last. The server stores it per screen, and a load may not bump `rev`.
+let lastPreset = null;
 let editMode = false, dragging = false, click = null;
 let view = {scale: 1, x: 0, y: 0}, viewRev = -1;
 const emptyCounts = () => ({wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0});
@@ -194,7 +215,7 @@ let counts = emptyCounts();
 let localHost = null;
 // One entry point for every state call, so server mode and local mode share all page code above it.
 const api = (path, init) => {
-  if (!LOCAL) return fetch(`${API}${path}`, init);
+  if (!LOCAL) return fetch(`${API}${path}${path.includes("?") ? "&" : "?"}screen=${encodeURIComponent(SCREEN)}`, init);
   localHost ||= fetch(LOCAL.modelsUrl).then(res => {
     if (!res.ok) throw new Error(`models index ${res.status}`);
     return res.json();
@@ -339,7 +360,7 @@ const KINDS = [["character", "Characters"], ["scene", "Scenes"], ["all", "All"]]
 const groupOf = m => m.group || NO_GROUP;
 
 // Favorites, recents, layout, and sort live on the server so a plasmashell restart keeps them.
-let prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true};
+let prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true, presets: []};
 let query = "";
 let sourceSel = new Set();
 let expanded = new Set();
@@ -516,6 +537,9 @@ function ensureChrome() {
   const charsTitle = el("h2", {textContent: "Characters"});
   const addBtn = el("button", {type: "button", textContent: "Add character"});
   addBtn.title = "Add the highlighted model as another character";
+  const presetsBtn = el("button", {type: "button", textContent: "Presets"});
+  presetsBtn.setAttribute("aria-expanded", "false");
+  presetsBtn.setAttribute("aria-controls", "presets-pane");
   const charsWarn = el("p", {className: "warn", hidden: true});
   charsWarn.setAttribute("role", "status");
   const autoBox = el("input", {type: "checkbox", id: "auto-target"});
@@ -525,15 +549,50 @@ function ensureChrome() {
   charsList.setAttribute("role", "group");
   charsList.setAttribute("aria-label", "Characters on screen");
   const charsPane = el("div", {className: "pane", id: "chars-pane"},
-    el("div", {className: "charhead"}, charsTitle, addBtn), autoLabel, charsWarn, charsList);
+    el("div", {className: "charhead"}, charsTitle, presetsBtn, addBtn), autoLabel, charsWarn, charsList);
+  // A native select opens its list in a separate popup window, which a wallpaper view may not show. Buttons always draw.
+  const presetList = el("div", {id: "presetlist"});
+  presetList.setAttribute("role", "group");
+  presetList.setAttribute("aria-label", "Saved presets");
+  const presetNone = el("p", {className: "none", textContent: "No presets yet."});
+  const presetName = el("input", {type: "text", placeholder: "Preset name", autocomplete: "off", spellcheck: false, maxLength: PRESET_NAME_MAX_CHARS});
+  presetName.setAttribute("aria-label", "Preset name");
+  const prevPresetBtn = el("button", {type: "button", textContent: "Previous"});
+  prevPresetBtn.title = "Load the previous preset on this screen";
+  const nextPresetBtn = el("button", {type: "button", textContent: "Next"});
+  nextPresetBtn.title = "Load the next preset on this screen";
+  const savePresetBtn = el("button", {type: "button", textContent: "Save"});
+  savePresetBtn.title = "Save the characters, positions, and sizes on screen";
+  const presetNote = el("p", {className: "note"});
+  presetNote.setAttribute("role", "status");
+  const presetsPane = el("div", {className: "pane", id: "presets-pane", hidden: true},
+    el("h2", {textContent: "Presets"}),
+    ...(SCREEN ? [el("p", {className: "none", textContent: `Screen ${SCREEN}. Each screen keeps its own layout and preset.`})] : []),
+    presetNone, presetList,
+    el("div", {className: "row cycle"}, prevPresetBtn, nextPresetBtn),
+    el("div", {className: "row"}, presetName, savePresetBtn),
+    presetNote);
   const tabModels = el("button", {type: "button", textContent: "Models"});
   const tabAnims = el("button", {type: "button", textContent: "Animations"});
   const tabs = el("div", {className: "tabs"}, tabModels, tabAnims);
-  picker.replaceChildren(tabs, charsPane, modelsPane, animsPane);
+  picker.replaceChildren(tabs, charsPane, presetsPane, modelsPane, animsPane);
   picker.dataset.tab = "models";
   ui = {kindBtns, search, sourceBtn, menu, sortSel, gridBtn, listBtn, varBtn, list, spacer, rail, bubble, listbox, empty,
-        animGroupSel, animList, charsTitle, charsWarn, charsList, autoBox};
+        animGroupSel, animList, charsTitle, charsWarn, charsList, autoBox,
+        presetList, presetNone, presetName, presetNote};
   addBtn.addEventListener("click", addHighlighted);
+  presetsBtn.addEventListener("click", () => {
+    presetsPane.hidden = !presetsPane.hidden;
+    presetsBtn.setAttribute("aria-expanded", String(!presetsPane.hidden));
+    if (presetsPane.hidden) return;
+    presetName.focus();
+    // A preset saved from the CLI or another page shows up only after a fresh read.
+    refreshPrefs().then(renderPresets);
+  });
+  prevPresetBtn.addEventListener("click", () => stepPreset(-1));
+  nextPresetBtn.addEventListener("click", () => stepPreset(1));
+  savePresetBtn.addEventListener("click", () => savePreset(presetName.value));
+  presetName.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); savePreset(presetName.value); } });
   autoBox.addEventListener("change", () => setAuto(targetChar(), autoBox.checked));
 
   const setTab = t => {
@@ -575,6 +634,76 @@ function ensureChrome() {
   animSearch.addEventListener("keydown", e => {
     if (e.key === "Escape" && animSearch.value) { e.preventDefault(); animSearch.value = animQuery = ""; renderAnims(); }
   });
+}
+
+function renderPresets() {
+  const presets = prefs.presets || [];
+  ui.presetNone.hidden = presets.length > 0;
+  ui.presetList.hidden = !presets.length;
+  // A rebuilt row loses focus, so a keyboard user who just loaded a preset would be sent back to the top.
+  const focused = document.activeElement && document.activeElement.dataset.focusKey;
+  ui.presetList.replaceChildren(...presets.map(p => {
+    const load = el("button", {type: "button", className: "sel", textContent: `${p.name} (${p.characters.length})`, title: `Load preset ${p.name}`});
+    if (p.name === lastPreset) load.setAttribute("aria-current", "true");
+    load.dataset.focusKey = `load:${p.name}`;
+    load.addEventListener("click", () => loadPreset(p.name));
+    const rm = el("button", {type: "button", className: "rm", textContent: "✕"});
+    rm.dataset.focusKey = `delete:${p.name}`;
+    rm.setAttribute("aria-label", `Delete preset ${p.name}`);
+    rm.addEventListener("click", () => deletePreset(p.name));
+    return el("div", {className: "charrow"}, load, rm);
+  }));
+  if (focused) {
+    const again = [...ui.presetList.querySelectorAll("[data-focus-key]")].find(x => x.dataset.focusKey === focused);
+    if (again) again.focus();
+  }
+}
+
+function showPresetNote(text) {
+  ui.presetNote.textContent = text;
+}
+
+async function savePreset(raw) {
+  const name = raw.trim();
+  if (!name) { showPresetNote("Type a name first."); ui.presetName.focus(); return; }
+  const replaced = (prefs.presets || []).some(p => p.name === name);
+  await cmd(`save-preset/${encodeURIComponent(name)}`);
+  await refreshPrefs();
+  if (!(prefs.presets || []).some(p => p.name === name)) { showPresetNote(`Cannot save "${name}". A name takes up to ${PRESET_NAME_MAX_CHARS} letters, and the list takes up to ${PRESET_MAX} presets.`); return; }
+  // The box may hold a newer name by now, and that one must stay.
+  if (ui.presetName.value.trim() === name) ui.presetName.value = "";
+  showPresetNote(`${replaced ? "Replaced" : "Saved"} "${name}".`);
+  renderPicker();
+}
+
+async function loadPreset(name) {
+  if (!name) return;
+  const before = crev;
+  let reply = null;
+  try { reply = await (await api(`/cmd/load-preset/${encodeURIComponent(name)}`)).json(); } catch (e) {}
+  // A load always bumps the layout revision, so an unchanged one means the preset's models are gone.
+  const loaded = !!reply && reply.crev !== before;
+  if (loaded) { lastPreset = name; renderPresets(); }
+  showPresetNote(loaded ? `Loaded "${name}".` : `Cannot load "${name}". Its models are missing.`);
+}
+
+// Steps this screen through the saved presets. Another screen keeps its own.
+async function stepPreset(step) {
+  // A preset saved from the CLI or another screen shows up only after a fresh read.
+  await refreshPrefs();
+  if (!(prefs.presets || []).length) { renderPresets(); showPresetNote("No presets yet."); return; }
+  let reply = null;
+  try { reply = await (await api(`/cmd/${step > 0 ? "next" : "prev"}-preset`)).json(); } catch (e) {}
+  if (reply && reply.preset) { lastPreset = reply.preset; renderPresets(); }
+  showPresetNote(reply && reply.preset ? `Loaded "${reply.preset}".` : "Cannot load a preset. Its models are missing.");
+}
+
+async function deletePreset(name) {
+  if (!name) return;
+  await cmd(`delete-preset/${encodeURIComponent(name)}`);
+  await refreshPrefs();
+  showPresetNote(`Deleted "${name}".`);
+  renderPicker();
 }
 
 function toggleMenu(open = ui.menu.hidden) {
@@ -634,6 +763,7 @@ function renderPicker() {
   ui.sourceBtn.textContent = `Source: ${sources}`;
   ui.sourceBtn.title = ui.sourceBtn.textContent;
   renderChars();
+  renderPresets();
   ui.sortSel.value = prefs.sort;
   ui.sortSel.disabled = !!query.trim();
   for (const [b, on] of [[ui.gridBtn, prefs.layout === "grid"], [ui.listBtn, prefs.layout === "list"], [ui.varBtn, prefs.variants]])
@@ -1824,6 +1954,8 @@ async function poll() {
   try {
     const s = await (await api("/state")).json();
     setEditMode(!!s.edit);
+    const preset = s.preset || null;
+    if (preset !== lastPreset) { lastPreset = preset; if (editMode && ui) renderPresets(); }
     // A drag in progress owns the layout, so a server copy waits until the push has landed.
     if (s.crev !== crev && !dragging && !layoutPending) {
       crev = s.crev;

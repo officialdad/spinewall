@@ -5,8 +5,57 @@
 #        | add-character [ID] | remove-character UID | clear-characters
 #        | next-char-anim UID | prev-char-anim UID | set-char-anim UID NAME | set-char-model UID ID
 #        | auto-cycle on|off | auto-cycle UID on|off
+#        | presets | save-preset NAME | load-preset NAME | delete-preset NAME | next-preset | prev-preset
+#        | screens
+# Add --screen KEY (or --screen current for the active monitor) to act on one monitor. Without it, a command reaches every monitor.
 set -euo pipefail
 base="http://127.0.0.1:${SPINEWALL_PORT:-8777}"
+
+# A monitor is named by its screen key, which `spinewall screens` lists.
+screen=""
+args=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --screen)
+      [ "$#" -ge 2 ] || { echo "error: --screen needs a screen key. Run 'spinewall screens' to list them." >&2; exit 2; }
+      screen="$2"
+      shift 2
+      ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- ${args[@]+"${args[@]}"}
+
+# `current` is the monitor KWin calls active, which follows the pointer. A shortcut then acts on the monitor you are using.
+# Positions match the page's key because both use logical coordinates, so a scaled monitor still matches.
+current_screen() {
+  local name outputs known
+  name="$(qdbus6 org.kde.KWin /KWin org.kde.KWin.activeOutputName 2>/dev/null)" \
+    || { echo "error: cannot read the active monitor from KWin. Name it with --screen KEY." >&2; exit 1; }
+  outputs="$(kscreen-doctor -j)"
+  known="$(curl -fsS "$base/screens")"
+  OUTPUTS="$outputs" KNOWN="$known" python3 -c '
+import json, os, sys
+name = sys.argv[1]
+outputs = json.loads(os.environ["OUTPUTS"])["outputs"]
+known = [s["screen"] for s in json.loads(os.environ["KNOWN"])]
+out = next((o for o in outputs if o["name"] == name and o["enabled"]), None)
+if out is None:
+    sys.exit(f"error: KWin reports monitor {name}, which kscreen-doctor does not list.")
+suffix = "+{}+{}".format(out["pos"]["x"], out["pos"]["y"])
+exact = "{}x{}{}".format(out["size"]["width"], out["size"]["height"], suffix)
+# A monitor that once ran in another mode leaves an old key at the same position, so the exact key wins.
+# Position alone is the fallback, because a scaled monitor reports a size the page does not use.
+match = [exact] if exact in known else [k for k in known if k.endswith(suffix)]
+if len(match) != 1:
+    sys.exit(f"error: cannot pick the wallpaper screen of monitor {name} at {suffix} from {known}. Name it with --screen KEY.")
+print(match[0], end="")
+' "$name"
+}
+if [ "$screen" = "current" ]; then screen="$(current_screen)"; fi
 cmd="${1:-info}"
 
 if [ "$#" -gt 3 ]; then
@@ -22,12 +71,16 @@ encode() {
 case "$cmd" in
   info) curl -fsS "$base/info" ;;
   rescan) curl -fsS "$base/rescan" ;;
+  presets) curl -fsS "$base/presets" ;;
+  screens) curl -fsS "$base/screens" ;;
   *)
     path="$base/cmd/$(encode "$cmd")"
     # set-char-anim and set-char-model carry two values, which the server reads as UID/VALUE.
     for value in "${@:2}"; do
       path="$path/$(encode "$value")"
     done
+    # An absent query reaches every monitor. A present one, even an empty key, reaches that monitor only.
+    if [ -n "$screen" ]; then path="$path?screen=$(encode "$screen")"; fi
     curl -fsS "$path"
     ;;
 esac

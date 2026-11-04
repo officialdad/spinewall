@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import base64
 import binascii
+import contextlib
+import copy
 import json
 import os
 import random
@@ -38,7 +40,15 @@ PREFS_FILE = os.environ.get(
 LAYOUT_FILE = os.environ.get(
     "SPINEWALL_LAYOUT", os.path.expanduser("~/.local/state/spinewall/layout.json")
 )
+# One stage per monitor. A stage holds what that monitor shows, so each monitor can run its own preset.
+SCREENS_FILE = os.environ.get(
+    "SPINEWALL_SCREENS", os.path.expanduser("~/.local/state/spinewall/screens.json")
+)
+SCREEN_MAX = 16
+SCREEN_KEY_MAX_CHARS = 60
 RECENT_MAX = 20
+PRESET_MAX = 50
+PRESET_NAME_MAX_CHARS = 40
 UID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 ANIMATION_MAX_CHARS = 200
 PREF_CHOICES = {
@@ -315,26 +325,6 @@ def plain_int(value, fallback=0):
     return value if isinstance(value, int) and not isinstance(value, bool) else fallback
 
 
-def load_state():
-    state = {"model": first_character_id(MODELS), "animation": None, "rev": 0, **VIEW_DEFAULT, "vrev": 0, "auto": False}
-    saved = read_json_dict(STATE_FILE)
-    if saved is None and not os.path.exists(STATE_FILE):
-        saved = read_json_dict(LEGACY_STATE_FILE)
-    if saved is None or saved.get("model") not in IDS:
-        return state
-    state["model"] = saved["model"]
-    animation = saved.get("animation")
-    state["animation"] = animation if isinstance(animation, str) and 0 < len(animation) <= ANIMATION_MAX_CHARS else None
-    state["rev"] = max(0, plain_int(saved.get("rev")))
-    state["auto"] = saved.get("auto") is True
-    state["vrev"] = max(0, plain_int(saved.get("vrev")))
-    state["scale"] = clamp(saved.get("scale"), 0.3, 8.0, VIEW_DEFAULT["scale"])
-    state["x"] = clamp(saved.get("x"), -2.0, 2.0, VIEW_DEFAULT["x"])
-    state["y"] = clamp(saved.get("y"), -2.0, 2.0, VIEW_DEFAULT["y"])
-    return state
-
-
-STATE = load_state()
 
 
 def new_uid(taken):
@@ -344,17 +334,21 @@ def new_uid(taken):
             return uid
 
 
-def clean_characters(raw, allowed_uids=None):
+def clean_characters(raw, allowed_uids=None, known_only=True):
     """Return the valid characters of `raw`, in z order (last draws on top).
 
     An entry with a uid outside `allowed_uids` is dropped, so a stale page cannot bring back a removed character.
     An entry without a uid is new and gets one.
+    A saved preset keeps a model that is missing now, so `known_only=False` skips the scan check for it.
     """
     if not isinstance(raw, list):
         return []
     cleaned, seen = [], set()
     for entry in raw:
-        if not isinstance(entry, dict) or entry.get("model") not in IDS:
+        if not isinstance(entry, dict):
+            continue
+        model = entry.get("model")
+        if not isinstance(model, str) or not model or (known_only and model not in IDS):
             continue
         uid = entry.get("uid")
         if uid is None:
@@ -382,19 +376,102 @@ def clean_characters(raw, allowed_uids=None):
     return cleaned
 
 
-def load_layout():
-    saved = read_json_dict(LAYOUT_FILE)
-    if saved is None:
-        return [], 0
-    return clean_characters(saved.get("characters")), max(0, plain_int(saved.get("crev")))
+def clean_screen_key(value):
+    """Return a screen key, or None. The empty key is the default stage, which a lone monitor uses."""
+    if not isinstance(value, str) or len(value) > SCREEN_KEY_MAX_CHARS or not value.isprintable():
+        return None
+    return value
 
 
-# An empty list is single-character mode. Only a non-empty list switches the page to the shared stage.
-STATE["characters"], STATE["crev"] = load_layout()
+def clean_stage(saved):
+    """Return a full stage from stored JSON. A key that is missing or wrong falls back to its default."""
+    stage = {
+        "model": first_character_id(MODELS), "animation": None, "rev": 0, **VIEW_DEFAULT, "vrev": 0,
+        "auto": False, "preset": None, "characters": [], "crev": 0,
+    }
+    if not isinstance(saved, dict):
+        return stage
+    # An empty list is single-character mode. Only a non-empty list switches the page to the shared stage.
+    stage["characters"] = clean_characters(saved.get("characters"))
+    stage["crev"] = max(0, plain_int(saved.get("crev")))
+    stage["preset"] = clean_preset_name(saved.get("preset"))
+    if saved.get("model") not in IDS:
+        return stage
+    stage["model"] = saved["model"]
+    animation = saved.get("animation")
+    stage["animation"] = animation if isinstance(animation, str) and 0 < len(animation) <= ANIMATION_MAX_CHARS else None
+    stage["rev"] = max(0, plain_int(saved.get("rev")))
+    stage["auto"] = saved.get("auto") is True
+    stage["vrev"] = max(0, plain_int(saved.get("vrev")))
+    stage["scale"] = clamp(saved.get("scale"), 0.3, 8.0, VIEW_DEFAULT["scale"])
+    stage["x"] = clamp(saved.get("x"), -2.0, 2.0, VIEW_DEFAULT["x"])
+    stage["y"] = clamp(saved.get("y"), -2.0, 2.0, VIEW_DEFAULT["y"])
+    return stage
+
+
+def load_default_stage():
+    saved = read_json_dict(STATE_FILE)
+    if saved is None and not os.path.exists(STATE_FILE):
+        saved = read_json_dict(LEGACY_STATE_FILE)
+    # The layout lives in its own file, apart from the state file.
+    return clean_stage({**(saved or {}), **(read_json_dict(LAYOUT_FILE) or {})})
+
+
+def load_screens():
+    saved = read_json_dict(SCREENS_FILE) or {}
+    keys = [k for k in saved if clean_screen_key(k)]
+    return {k: clean_stage(saved[k]) for k in keys[:SCREEN_MAX]}
+
+
+
+
+def clean_preset_name(value):
+    if not isinstance(value, str):
+        return None
+    name = value.strip()
+    if not name or len(name) > PRESET_NAME_MAX_CHARS or not name.isprintable():
+        return None
+    return name
+
+
+# The default stage serves a lone monitor and seeds each new screen. The functions below read the stage in `STATE`.
+DEFAULT_STAGE = load_default_stage()
+STATE = DEFAULT_STAGE
+SCREENS = load_screens()
+
+
+def clean_preset(raw):
+    """Return a stored preset, or None. A preset is a name and its characters in z order, with no uids.
+
+    One character is the single-character layout. More than one is multi mode.
+    """
+    if not isinstance(raw, dict):
+        return None
+    name = clean_preset_name(raw.get("name"))
+    # Uids are dropped because a load creates fresh characters, so two loads never share an id.
+    characters = [
+        {k: v for k, v in c.items() if k != "uid"}
+        for c in clean_characters(raw.get("characters"), known_only=False)
+    ]
+    if name is None or not characters:
+        return None
+    return {"name": name, "characters": characters}
+
+
+def clean_presets(raw):
+    if not isinstance(raw, list):
+        return []
+    presets, names = [], set()
+    for entry in raw:
+        preset = clean_preset(entry)
+        if preset and preset["name"] not in names and len(presets) < PRESET_MAX:
+            names.add(preset["name"])
+            presets.append(preset)
+    return presets
 
 
 def load_prefs():
-    prefs = {"favorites": [], "recent": [], "layout": "grid", "sort": "name", "kind": "character", "variants": True}
+    prefs = {"favorites": [], "recent": [], "layout": "grid", "sort": "name", "kind": "character", "variants": True, "presets": []}
     saved = read_json_dict(PREFS_FILE)
     if saved is None:
         return prefs
@@ -406,6 +483,7 @@ def load_prefs():
             prefs[key] = saved[key]
     if isinstance(saved.get("variants"), bool):
         prefs["variants"] = saved["variants"]
+    prefs["presets"] = clean_presets(saved.get("presets"))
     return prefs
 
 
@@ -473,11 +551,44 @@ LAYOUT_KEYS = ("characters", "crev")
 
 
 def save():
-    write_json_atomic(STATE_FILE, {k: v for k, v in STATE.items() if k not in LAYOUT_KEYS})
+    if STATE is DEFAULT_STAGE:
+        write_json_atomic(STATE_FILE, {k: v for k, v in STATE.items() if k not in LAYOUT_KEYS})
+    else:
+        write_json_atomic(SCREENS_FILE, SCREENS)
 
 
 def save_layout():
-    write_json_atomic(LAYOUT_FILE, {"characters": STATE["characters"], "crev": STATE["crev"]})
+    if STATE is DEFAULT_STAGE:
+        write_json_atomic(LAYOUT_FILE, {"characters": STATE["characters"], "crev": STATE["crev"]})
+    else:
+        write_json_atomic(SCREENS_FILE, SCREENS)
+
+
+@contextlib.contextmanager
+def on_stage(stage):
+    """Run the state functions on one stage. Every caller holds LOCK, so the swap is never seen by another request."""
+    global STATE
+    previous, STATE = STATE, stage
+    try:
+        yield
+    finally:
+        STATE = previous
+
+
+def all_stages():
+    return [DEFAULT_STAGE, *SCREENS.values()]
+
+
+def screen_stage(key, create=False):
+    """The stage of a screen, or None. A new screen starts as a copy of the default stage, so it looks the same until edited."""
+    if key == "":
+        return DEFAULT_STAGE
+    stage = SCREENS.get(key)
+    if stage is None and create and len(SCREENS) < SCREEN_MAX:
+        stage = SCREENS[key] = copy.deepcopy(DEFAULT_STAGE)
+        with on_stage(stage):
+            save()
+    return stage
 
 
 def set_characters(characters):
@@ -611,6 +722,85 @@ def set_layout(body):
         set_characters(cleaned)
 
 
+def current_characters():
+    """The characters on screen. The single-character layout counts as a list of one."""
+    if STATE["characters"]:
+        return [{k: v for k, v in c.items() if k != "uid"} for c in STATE["characters"]]
+    return [{k: STATE[k] for k in ("model", "animation", "x", "y", "scale", "auto")}]
+
+
+def save_preset(raw_name):
+    """Store the current layout under a name. The same name replaces its preset in place."""
+    name = clean_preset_name(raw_name)
+    preset = clean_preset({"name": name, "characters": current_characters()})
+    if not preset:
+        return False
+    presets = PREFS["presets"]
+    index = next((i for i, p in enumerate(presets) if p["name"] == name), None)
+    if index is None and len(presets) >= PRESET_MAX:
+        return False
+    if index is None:
+        presets.append(preset)
+    else:
+        presets[index] = preset
+    save_prefs()
+    # The stage now matches this preset, so a cycle continues from it.
+    STATE["preset"] = name
+    save()
+    return True
+
+
+def delete_preset(name):
+    presets = [p for p in PREFS["presets"] if p["name"] != name]
+    if len(presets) == len(PREFS["presets"]):
+        return False
+    PREFS["presets"] = presets
+    save_prefs()
+    for stage in all_stages():
+        if stage["preset"] == name:
+            with on_stage(stage):
+                STATE["preset"] = None
+                save()
+    return True
+
+
+def load_preset(name):
+    """Replace the layout with a preset. A model that is gone is skipped, and no model left changes nothing."""
+    preset = next((p for p in PREFS["presets"] if p["name"] == name), None)
+    chars = clean_characters(preset["characters"]) if preset else []
+    if not chars:
+        return False
+    STATE["preset"] = name
+    if len(chars) == 1:
+        # One character is the single-character layout, so the old keys carry it, as in remove_character.
+        only = chars[0]
+        STATE.update(model=only["model"], animation=only["animation"], auto=only["auto"])
+        STATE["rev"] += 1
+        STATE.update(scale=only["scale"], x=only["x"], y=only["y"])
+        STATE["vrev"] += 1
+        save()
+        record_recent(only["model"])
+        chars = []
+    set_characters(chars)
+    # The multi path writes only the layout file, so the preset name needs its own save.
+    save()
+    return True
+
+
+def step_preset(step):
+    """Load the next (1) or previous (-1) preset after the one this stage loaded last, and wrap around.
+
+    A preset whose models are all gone is skipped. A stage that never loaded one starts at the first or the last.
+    """
+    names = [p["name"] for p in PREFS["presets"]]
+    if not names:
+        return
+    start = names.index(STATE["preset"]) if STATE["preset"] in names else (-1 if step > 0 else 0)
+    for offset in range(1, len(names) + 1):
+        if load_preset(names[(start + step * offset) % len(names)]):
+            return
+
+
 def set_view(scale=None, x=None, y=None):
     # An unusable value keeps the current one, so a bad push never writes NaN into the state.
     if scale is not None:
@@ -643,6 +833,12 @@ def rescan():
     global MODELS, SKIPPED, IDS
     MODELS, SKIPPED = scan_models()
     IDS = [m["id"] for m in MODELS]
+    for stage in all_stages():
+        with on_stage(stage):
+            drop_missing_models()
+
+
+def drop_missing_models():
     # A removed model must not stay selected, or the page loads a missing directory.
     fallback = first_character_id(MODELS)
     if STATE["model"] not in IDS and STATE["model"] != fallback:
@@ -660,9 +856,19 @@ def thumb_path(model_id):
     return os.path.join(THUMB_DIR, model_id + ".png") if model_id in IDS else None
 
 
-def command(cmd, arg=None):
+# These act on the shared preset list, so one run is enough. A broadcast would save the last stage's layout.
+ONCE_COMMANDS = ("save-preset", "delete-preset")
+
+
+def command(cmd, arg=None, stages=None):
+    """Run a command on `stages`, or on every stage when none is named, so a lone CLI call still reaches each monitor."""
     with LOCK:
-        run_command(cmd, arg)
+        targets = stages if stages is not None else all_stages()
+        if cmd in ONCE_COMMANDS:
+            targets = targets[:1]
+        for stage in targets:
+            with on_stage(stage):
+                run_command(cmd, arg)
 
 
 def run_command(cmd, arg=None):
@@ -702,6 +908,14 @@ def run_command(cmd, arg=None):
         change_animation(arg[:ANIMATION_MAX_CHARS])
     elif cmd == "add-character":
         add_character(arg)
+    elif cmd == "save-preset" and arg:
+        save_preset(arg)
+    elif cmd == "load-preset" and arg:
+        load_preset(arg)
+    elif cmd in ("next-preset", "prev-preset"):
+        step_preset(1 if cmd == "next-preset" else -1)
+    elif cmd == "delete-preset" and arg:
+        delete_preset(arg)
     elif cmd == "clear-characters" and STATE["characters"]:
         set_characters([])
     elif cmd == "remove-character" and arg:
@@ -817,7 +1031,7 @@ class Handler(SimpleHTTPRequestHandler):
         )
 
     def do_GET(self):
-        if not self.guard():
+        if not self.guard() or not self.parse_route():
             return
         with LOCK:
             if self.handle_get():
@@ -830,16 +1044,52 @@ class Handler(SimpleHTTPRequestHandler):
             # A NUL byte in the path makes open() raise. A 404 keeps the connection usable.
             self.send_json({"error": "not found"}, 404)
 
+    def parse_route(self):
+        """Split the path from its query and read the screen. Returns False after sending the error reply."""
+        parts = urllib.parse.urlsplit(self.path)
+        self.route = parts.path
+        self.screen = None
+        values = urllib.parse.parse_qs(parts.query, keep_blank_values=True).get("screen")
+        if values:
+            self.screen = clean_screen_key(values[0])
+            if self.screen is None:
+                self.send_json({"error": "bad screen"}, 400)
+                return False
+        return True
+
+    def stage_param(self, create=False):
+        """The stage the request names, or None after sending the error reply. No screen means the default stage.
+
+        Only a page creates a stage. A CLI call with a mistyped name gets a 404 instead of a new screen.
+        """
+        stage = screen_stage(self.screen or "", create=create)
+        if stage is None:
+            if create:
+                self.send_json({"error": f"at most {SCREEN_MAX} screens"}, 400)
+            else:
+                self.send_json({"error": "unknown screen"}, 404)
+        return stage
+
     def handle_get(self):
         """Answers the API paths. Returns False for a path that is a model file."""
-        if self.path == "/state":
-            self.send_json({**STATE, "edit": EDIT["on"]})
-        elif self.path == "/prefs":
+        path = self.route
+        if path == "/state":
+            stage = self.stage_param(create=True)
+            if stage is None:
+                return True
+            self.send_json({**stage, "edit": EDIT["on"]})
+        elif path == "/prefs":
             self.send_json(PREFS)
-        elif self.path == "/models":
+        elif path == "/presets":
+            self.send_json([{"name": p["name"], "characters": len(p["characters"])} for p in PREFS["presets"]])
+        elif path == "/screens":
+            self.send_json(
+                [{"screen": k, "preset": v["preset"], "characters": len(v["characters"])} for k, v in SCREENS.items()]
+            )
+        elif path == "/models":
             self.send_json(MODELS)
-        elif self.path.startswith("/thumb/") and self.path.endswith(".png"):
-            path = thumb_path(urllib.parse.unquote(self.path[7:-4]))
+        elif path.startswith("/thumb/") and path.endswith(".png"):
+            path = thumb_path(urllib.parse.unquote(path[7:-4]))
             if not path or not os.path.isfile(path):
                 return self.send_json({"error": "no thumbnail"}, 404) or True
             with open(path, "rb") as f:
@@ -849,13 +1099,14 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        elif self.path == "/rescan":
+        elif path == "/rescan":
             rescan()
             self.send_json(MODELS)
-        elif self.path == "/info":
+        elif path == "/info":
             self.send_json(
                 {
-                    "state": STATE,
+                    "state": DEFAULT_STAGE,
+                    "screens": SCREENS,
                     "animations": ANIMS.get(STATE["model"], []),
                     "models": len(MODELS),
                     "skipped": SKIPPED,
@@ -864,19 +1115,23 @@ class Handler(SimpleHTTPRequestHandler):
                     "input": INPUT,
                 }
             )
-        elif self.path.startswith("/edit/"):
-            EDIT["on"] = 1 if self.path.endswith("/1") else 0
+        elif path.startswith("/edit/"):
+            EDIT["on"] = 1 if path.endswith("/1") else 0
             self.send_json(EDIT)
-        elif self.path.startswith("/cmd/"):
-            name, _, arg = self.path[5:].partition("/")
-            command(name, urllib.parse.unquote(arg) or None)
-            self.send_json(STATE)
+        elif path.startswith("/cmd/"):
+            name, _, arg = path[5:].partition("/")
+            # A call that names no screen reaches every stage. A named one reaches that stage alone.
+            stage = self.stage_param() if self.screen is not None else DEFAULT_STAGE
+            if stage is None:
+                return True
+            command(name, urllib.parse.unquote(arg) or None, None if self.screen is None else [stage])
+            self.send_json(stage)
         else:
             return False
         return True
 
     def do_POST(self):
-        if not self.guard():
+        if not self.guard() or not self.parse_route():
             return
         # A cross-site form can send text/plain without a preflight. JSON forces one.
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
@@ -888,7 +1143,15 @@ class Handler(SimpleHTTPRequestHandler):
             self.handle_post(body)
 
     def handle_post(self, body):
-        if self.path == "/report":
+        path = self.route
+        stage = self.stage_param(create=True)
+        if stage is None:
+            return
+        with on_stage(stage):
+            self.route_post(path, body)
+
+    def route_post(self, path, body):
+        if path == "/report":
             model, animations = body.get("model"), body.get("animations")
             valid = (
                 isinstance(model, str)
@@ -904,8 +1167,8 @@ class Handler(SimpleHTTPRequestHandler):
             if model == STATE["model"] and not STATE["animation"] and isinstance(playing, str) and playing:
                 STATE["animation"] = playing[:ANIMATION_MAX_CHARS]
             return self.send_json({"ok": True})
-        if self.path.startswith("/thumb/"):
-            path = thumb_path(urllib.parse.unquote(self.path[7:]))
+        if path.startswith("/thumb/"):
+            path = thumb_path(urllib.parse.unquote(path[7:]))
             encoded = body.get("png")
             try:
                 png = base64.b64decode(encoded, validate=True) if isinstance(encoded, str) else b""
@@ -915,23 +1178,23 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"error": "bad thumbnail"}, 400)
             write_atomic(path, png)
             return self.send_json({"ok": True})
-        if self.path.startswith("/fav/"):
-            if not toggle_favorite(urllib.parse.unquote(self.path[5:])):
+        if path.startswith("/fav/"):
+            if not toggle_favorite(urllib.parse.unquote(path[5:])):
                 return self.send_json({"error": "unknown model"}, 404)
             return self.send_json(PREFS)
-        if self.path == "/prefs":
+        if path == "/prefs":
             if not set_prefs(body):
                 return self.send_json({"error": "bad prefs"}, 400)
             return self.send_json(PREFS)
-        if self.path == "/layout":
+        if path == "/layout":
             if not isinstance(body.get("characters"), list):
                 return self.send_json({"error": "bad layout"}, 400)
             set_layout(body)
             return self.send_json({"characters": STATE["characters"], "crev": STATE["crev"]})
-        if self.path == "/view":
+        if path == "/view":
             set_view(body.get("scale"), body.get("x"), body.get("y"))
             return self.send_json({"ok": True})
-        if self.path == "/input":
+        if path == "/input":
             for key in INPUT_KEYS:
                 step = max(0, min(INPUT_STEP_MAX, plain_int(body.get(key))))
                 INPUT[key] = min(INPUT_TOTAL_MAX, INPUT[key] + step)
