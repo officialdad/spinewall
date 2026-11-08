@@ -38,7 +38,8 @@ jobs:
         run: |
           name="spinewall-${TAG#v}"
           git archive --format=tar.gz --prefix="$name/" -o "$name.tar.gz" "$TAG"
-          if tar tzf "$name.tar.gz" | grep -E '\.(skel|atlas)$|spine-player.*\.(js|css)$'; then
+          # docs/demo/models holds the approved sample models for the Pages demo.
+          if tar tzf "$name.tar.gz" | grep -v "^$name/docs/demo/models/" | grep -E '\.(skel|atlas)$|spine-player.*\.(js|css)$'; then
             echo "error: archive holds models or runtime files. Release stops."
             exit 1
           fi
