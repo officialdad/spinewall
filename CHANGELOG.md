@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/officialdad/spinewall/compare/v0.4.0...v0.5.0) (2026-11-08)
+
+
+### Features
+
+* log CLI errors to a file when no terminal is attached ([#13](https://github.com/officialdad/spinewall/issues/13)) ([d49ef81](https://github.com/officialdad/spinewall/commit/d49ef8178ab04820c6e459536fca604540a04f39))
+
+
+### Bug Fixes
+
+* seed new screens from the stage chosen last ([#15](https://github.com/officialdad/spinewall/issues/15)) ([f1341be](https://github.com/officialdad/spinewall/commit/f1341beb578ea2ba7a13f842e9e2f4abf8a752c2))
+
 ## [0.4.0](https://github.com/officialdad/spinewall/compare/v0.3.1...v0.4.0) (2026-11-04)
 
 
