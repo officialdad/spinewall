@@ -191,6 +191,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | Stage (all characters) | `makeLayer`, `createStageChar`, `stageFrame`, `frameOf`, `applyCharacters`, `destroyLayers` |
 | Hit testing | `hitTest`, `charContains`, `inTriangle`, `selectChar` |
 | Scenes | `hideSlotsOf`, `kind` filter in `buildItems` |
+| Presets pane | `setPresetsOpen`, `renderPresets`, `makePresetCard`, `makePresetManage`, `savePreset`, `updatePreset`, `renamePreset`, `loadPreset`, `stepPreset`, `deletePreset`, `revealCurrentPreset` |
 
 ### `theme/local-host.js`
 
@@ -199,6 +200,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | Entry | `createLocalHost` answers the server paths from memory and `localStorage`. |
 | Model list | `completeModels` fills the fields a server scan derives. |
 | State | `runCommand`, `setView`, `changeModel`, `changeAnimation`, `setLayout`, `cleanCharacters` |
+| Presets | `savePreset`, `updatePreset`, `renamePreset`, `loadPreset`, `stepPreset`, `deletePreset` |
 
 Local mode starts with `?local=<models index url>` or `window.SPINEWALL_LOCAL = {modelsUrl}`. The index is `{"runtime": "4.1.56", "models": [...]}` like `docs/demo/models/index.json`. The model folders sit beside it. A visible Edit button replaces the Plasma patch.
 
@@ -210,7 +212,7 @@ Local mode starts with `?local=<models index url>` or `window.SPINEWALL_LOCAL = 
 | State | `STATE`, `clean_stage`, `save`, `change_model`, `change_animation`, `set_view` |
 | Screens | `DEFAULT_STAGE`, `SCREENS`, `screen_stage`, `on_stage`, `all_stages`, `clean_screen_key`, `load_screens` |
 | Prefs | `load_prefs`, `save_prefs`, `toggle_favorite`, `record_recent`, `set_prefs` |
-| Presets | `save_preset`, `load_preset`, `step_preset`, `delete_preset`, `current_characters`, `clean_preset`, `clean_presets`, `clean_preset_name` |
+| Presets | `save_preset`, `update_preset`, `rename_preset`, `load_preset`, `step_preset`, `delete_preset`, `current_characters`, `clean_preset`, `clean_presets`, `clean_preset_name` |
 | Characters | `add_character`, `remove_character`, `update_character`, `cycle_character_animation`, `set_layout`, `clean_characters` |
 | HTTP | `command`, `Handler`: `/state`, `/models`, `/prefs`, `/info`, `/rescan`, `/presets`, `/screens`, `/thumb/<id>.png`, `/cmd/...`, `/edit/0\|1`, `/report`, `/fav/<id>`, `/layout`, `/view`, `/input` |
 
