@@ -116,11 +116,80 @@ class Presets(ServerCase):
                 self.assertEqual(self.presets(), [])
 
     def test_a_preset_list_is_capped(self):
-        for i in range(52):
+        for i in range(202):
             self.cmd("save-preset", f"p{i}")
-        self.assertEqual(len(self.presets()), 50)
+        self.assertEqual(len(self.presets()), 200)
         self.cmd("save-preset", "p0")
-        self.assertEqual(len(self.presets()), 50)
+        self.assertEqual(len(self.presets()), 200)
+
+    def test_update_replaces_the_layout_of_an_existing_preset(self):
+        self.cmd("set-model", "gamma")
+        self.cmd("save-preset", "desk")
+        self.cmd("save-preset", "other")
+        self.layout_two()
+        self.cmd("update-preset", "desk")
+        names = [p["name"] for p in self.presets()]
+        self.assertEqual(names, ["desk", "other"])
+        self.assertEqual([c["model"] for c in self.presets()[0]["characters"]], ["beta", "gamma"])
+        self.assertEqual(len(self.presets()[1]["characters"]), 1)
+        self.assertEqual(self.state()["preset"], "desk")
+
+    def test_update_of_an_unknown_name_creates_nothing(self):
+        self.cmd("update-preset", "typo")
+        self.assertEqual(self.presets(), [])
+        self.assertIsNone(self.state()["preset"])
+
+    def test_rename_keeps_the_position_and_the_layout(self):
+        self.layout_two()
+        self.cmd("save-preset", "a")
+        self.cmd("save-preset", "b")
+        self.cmd("save-preset", "c")
+        before = self.presets()[1]["characters"]
+        self.cmd("rename-preset", "b", "  middle  ")
+        self.assertEqual([p["name"] for p in self.presets()], ["a", "middle", "c"])
+        self.assertEqual(self.presets()[1]["characters"], before)
+
+    def test_rename_moves_the_last_preset_of_every_stage(self):
+        self.cmd("save-preset", "old")
+        self.get("/state?screen=left")
+        self.get("/cmd/load-preset/old?screen=left")
+        self.cmd("rename-preset", "old", "new")
+        self.assertEqual(self.state()["preset"], "new")
+        self.assertEqual(self.get("/state?screen=left").json["preset"], "new")
+
+    def test_rename_with_slashes_in_both_names(self):
+        self.cmd("save-preset", "a/b")
+        self.cmd("rename-preset", "a/b", "c/d e")
+        self.assertEqual([p["name"] for p in self.presets()], ["c/d e"])
+
+    def test_rename_rejects_a_taken_unknown_or_bad_name(self):
+        self.cmd("save-preset", "a")
+        self.cmd("save-preset", "b")
+        self.cmd("rename-preset", "a", "b")
+        self.cmd("rename-preset", "nope", "c")
+        self.cmd("rename-preset", "a", "x" * 41)
+        self.cmd("rename-preset", "a", "   ")
+        self.assertEqual([p["name"] for p in self.presets()], ["a", "b"])
+        self.assertEqual(self.state()["preset"], "b")
+
+    def test_rename_to_the_same_name_changes_nothing(self):
+        self.cmd("save-preset", "a")
+        self.cmd("rename-preset", "a", "a")
+        self.assertEqual([p["name"] for p in self.presets()], ["a"])
+
+    def test_rename_needs_exactly_two_names(self):
+        self.cmd("save-preset", "a")
+        self.get("/cmd/rename-preset/a")
+        self.get("/cmd/rename-preset/a/b/c")
+        self.get("/cmd/rename-preset/a/")
+        self.assertEqual([p["name"] for p in self.presets()], ["a"])
+
+    def test_rename_survives_a_restart(self):
+        self.cmd("save-preset", "a")
+        self.cmd("rename-preset", "a", "b")
+        self.server.restart()
+        self.assertEqual([p["name"] for p in self.presets()], ["b"])
+        self.assertEqual(self.state()["preset"], "b")
 
     def test_delete_removes_one_preset(self):
         self.cmd("save-preset", "a")
@@ -227,6 +296,15 @@ class PresetCli(ServerCase):
         self.assertEqual(self.state()["model"], "gamma")
         self.assertEqual(self.run_cli("delete-preset", "my desk").returncode, 0)
         self.assertEqual(json.loads(self.run_cli("presets").stdout), [])
+
+    def test_update_and_rename(self):
+        self.cmd("set-model", "gamma")
+        self.run_cli("save-preset", "my desk")
+        self.cmd("set-model", "beta")
+        self.assertEqual(self.run_cli("update-preset", "my desk").returncode, 0)
+        self.assertEqual(self.run_cli("rename-preset", "my desk", "new desk/2").returncode, 0)
+        [preset] = self.get("/prefs").json["presets"]
+        self.assertEqual((preset["name"], preset["characters"][0]["model"]), ("new desk/2", "beta"))
 
 
 if __name__ == "__main__":

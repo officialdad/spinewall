@@ -5,7 +5,7 @@
 #        | add-character [ID] | remove-character UID | clear-characters
 #        | next-char-anim UID | prev-char-anim UID | set-char-anim UID NAME | set-char-model UID ID
 #        | auto-cycle on|off | auto-cycle UID on|off
-#        | presets | save-preset NAME | load-preset NAME | delete-preset NAME | next-preset | prev-preset
+#        | presets | save-preset NAME | load-preset NAME | update-preset NAME | rename-preset OLD NEW | delete-preset NAME | next-preset | prev-preset
 #        | screens
 # Add --screen KEY (or --screen current for the active monitor) to act on one monitor. Without it, a command reaches every monitor.
 set -euo pipefail

@@ -3,7 +3,7 @@ import { SOLO } from "../lib/models.mjs";
 
 const A = SOLO["4.0"], B = SOLO["4.1"];
 const pane = (page) => page.locator("#presets-pane");
-const rows = (page) => pane(page).getByRole("group", { name: "Saved presets" }).locator(".sel");
+const rows = (page) => pane(page).getByRole("group", { name: "Saved presets" }).locator(".pload");
 
 // Each monitor runs its own page. `?screen=` names the monitor, as the Plasma wallpaper cannot pass it any other way.
 async function openScreen(context, name) {

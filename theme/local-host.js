@@ -2,7 +2,7 @@
 // It answers the same paths as server/spinewall-server.py. Change both together.
 (() => {
 const SCALE_MIN = 0.3, SCALE_MAX = 8, POS_MAX = 2, RECENT_MAX = 20, ANIMATION_MAX_CHARS = 200;
-const PRESET_MAX = 50, PRESET_NAME_MAX_CHARS = 40;
+const PRESET_MAX = 200, PRESET_NAME_MAX_CHARS = 40;
 const VIEW_DEFAULT = {scale: 1, x: 0, y: 0};
 const PREF_CHOICES = {layout: ["grid", "list"], sort: ["name", "recent", "source"], kind: ["character", "scene", "all"]};
 const UID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
@@ -162,6 +162,21 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     persist();
   }
 
+  // An unknown name creates nothing, so a typo cannot add a preset.
+  function updatePreset(name) {
+    if (prefs.presets.some(p => p.name === name)) savePreset(name);
+  }
+
+  // Renames in place, so the cycle order stays. A name that is taken or invalid changes nothing.
+  function renamePreset(old, rawNew) {
+    const next = cleanPresetName(rawNew);
+    const index = prefs.presets.findIndex(p => p.name === old);
+    if (index < 0 || next === null || (next !== old && prefs.presets.some(p => p.name === next))) return;
+    prefs.presets[index] = {...prefs.presets[index], name: next};
+    if (state.preset === old) state.preset = next;
+    persist();
+  }
+
   function deletePreset(name) {
     const presets = prefs.presets.filter(p => p.name !== name);
     if (presets.length === prefs.presets.length) return;
@@ -287,6 +302,8 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     else if (name === "set-anim" && arg) changeAnimation(arg.slice(0, ANIMATION_MAX_CHARS));
     else if (name === "add-character") addCharacter(arg);
     else if (name === "save-preset" && arg) savePreset(arg);
+    else if (name === "update-preset" && arg) updatePreset(arg);
+    else if (name === "rename-preset" && Array.isArray(arg)) renamePreset(...arg);
     else if (name === "load-preset" && arg) loadPreset(arg);
     else if (name === "delete-preset" && arg) deletePreset(arg);
     else if (name === "next-preset" || name === "prev-preset") stepPreset(name === "next-preset" ? 1 : -1);
@@ -320,7 +337,12 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
       if (path.startsWith("/edit/")) { state.edit = path.endsWith("/1") ? 1 : 0; return json({on: state.edit}); }
       if (path.startsWith("/cmd/")) {
         const rest = path.slice(5), slash = rest.indexOf("/");
-        runCommand(slash < 0 ? rest : rest.slice(0, slash), slash < 0 ? null : decodeURIComponent(rest.slice(slash + 1)) || null);
+        const name = slash < 0 ? rest : rest.slice(0, slash), raw = slash < 0 ? "" : rest.slice(slash + 1);
+        if (name === "rename-preset") {
+          // A preset name may hold a slash, so the two names split before they decode.
+          const names = raw.split("/").map(decodeURIComponent);
+          runCommand(name, names.length === 2 && names.every(Boolean) ? names : null);
+        } else runCommand(name, decodeURIComponent(raw) || null);
         return json(state);
       }
       return json({error: "not found"}, 404);

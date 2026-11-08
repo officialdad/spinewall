@@ -88,6 +88,22 @@ test("a preset saves and loads in local mode and survives a reload", async ({ pa
   expect(presets).toEqual([{ name: "duo", characters: 2 }]);
 });
 
+test("update and rename preset work in local mode", async ({ page }) => {
+  await page.goto(LOCAL_URL());
+  await expect.poll(async () => (await stateOf(page)).model).toBeTruthy();
+  await command(page, "save-preset/a/b");
+  await command(page, "save-preset/other");
+  await command(page, "update-preset/typo");
+  await command(page, `add-character/${A}`);
+  await expect.poll(async () => (await stateOf(page)).characters.length).toBe(2);
+  await command(page, "update-preset/a%2Fb");
+  await command(page, `rename-preset/${encodeURIComponent("a/b")}/${encodeURIComponent("c/d e")}`);
+  await command(page, `rename-preset/other/${encodeURIComponent("c/d e")}`);
+  const presets = await page.evaluate(async () => (await (await api("/presets")).json()));
+  expect(presets).toEqual([{ name: "c/d e", characters: 2 }, { name: "other", characters: 1 }]);
+  expect((await stateOf(page)).preset).toBe("c/d e");
+});
+
 test("next and previous preset cycle in local mode and wrap", async ({ page }) => {
   await page.goto(LOCAL_URL());
   await expect.poll(async () => (await stateOf(page)).model).toBeTruthy();

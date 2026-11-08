@@ -57,6 +57,15 @@ test("the presets pane has no serious or critical violations", async ({ open, pa
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
   expect(await scan(page)).toEqual([]);
+  // The open row, the armed confirm, and the rename box carry their own colors.
+  await page.getByRole("button", { name: "Manage preset desk" }).click();
+  await page.getByRole("button", { name: "Delete preset desk" }).click();
+  await expect(page.getByRole("button", { name: "Confirm: delete preset desk" })).toBeVisible();
+  expect(await scan(page)).toEqual([]);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Rename preset desk" }).click();
+  await expect(page.getByRole("textbox", { name: "New name for preset desk" })).toBeVisible();
+  expect(await scan(page)).toEqual([]);
 });
 
 test("a favorite cell has no serious or critical violations", async ({ open, page }) => {
