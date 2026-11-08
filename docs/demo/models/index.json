@@ -1,11 +1,11 @@
 {
   "runtime": "4.1.56",
   "models": [
-    {"id": "c810", "character": "Sword fighter", "name": "Variant 1, base", "skeleton": "c810_00.skel", "atlas": "c810_00.atlas", "spine": "4.1.20"},
-    {"id": "c810_02", "character": "Sword fighter", "name": "Variant 2, uniform", "skeleton": "c810_02_00.skel", "atlas": "c810_02_00.atlas", "spine": "4.1.20"},
-    {"id": "c810_03", "character": "Sword fighter", "name": "Variant 3, waterfront", "skeleton": "c810_03_00.skel", "atlas": "c810_03_00.atlas", "spine": "4.1.20"},
-    {"id": "c850", "character": "Engineer", "name": "Variant 1, base", "skeleton": "c850_00.skel", "atlas": "c850_00.atlas", "spine": "4.1.20"},
-    {"id": "c850_02", "character": "Engineer", "name": "Variant 2, suit", "skeleton": "c850_02_00.skel", "atlas": "c850_02_00.atlas", "spine": "4.1.20"},
-    {"id": "c850_03", "character": "Engineer", "name": "Variant 3, swimsuit", "skeleton": "c850_03_00.skel", "atlas": "c850_03_00.atlas", "spine": "4.1.20"}
+    {"id": "c860", "character": "Short-haired student", "name": "Variant 1, base", "skeleton": "c860_00.skel", "atlas": "c860_00.atlas", "spine": "4.1.20"},
+    {"id": "c860_01", "character": "Short-haired student", "name": "Variant 2, training wear", "skeleton": "c860_01_00.skel", "atlas": "c860_01_00.atlas", "spine": "4.1.20"},
+    {"id": "c860_02", "character": "Short-haired student", "name": "Variant 3, stage outfit", "skeleton": "c860_02_00.skel", "atlas": "c860_02_00.atlas", "spine": "4.1.20"},
+    {"id": "c861", "character": "Long-haired student", "name": "Variant 1, base", "skeleton": "c861_00.skel", "atlas": "c861_00.atlas", "spine": "4.1.20"},
+    {"id": "c861_01", "character": "Long-haired student", "name": "Variant 2, training wear", "skeleton": "c861_01_00.skel", "atlas": "c861_01_00.atlas", "spine": "4.1.20"},
+    {"id": "c861_02", "character": "Long-haired student", "name": "Variant 3, stage outfit", "skeleton": "c861_02_00.skel", "atlas": "c861_02_00.atlas", "spine": "4.1.20"}
   ]
 }
