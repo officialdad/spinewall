@@ -10,7 +10,7 @@ Spinewall works with any Spine 3.7 (JSON export only), 3.8, 4.0, 4.1, or 4.2 mod
 
 <table>
 <tr>
-<td align="center"><img src="docs/images/hero.gif" alt="Two seated Spine characters from different models, each playing its action animation side by side on a black desktop." width="720"><br><sub>Two characters on one wallpaper, each playing its own animation. <a href="docs/images/hero.mp4">Smaller MP4</a></sub></td>
+<td align="center"><img src="docs/images/hero.gif" alt="Chisato in a red school coat and Takina in a blue school coat, side by side on a black desktop. Each plays its own action animation." width="720"><br><sub>Two characters on one wallpaper, each playing its own animation. <a href="docs/images/hero.mp4">Smaller MP4</a></sub></td>
 </tr>
 </table>
 
@@ -78,7 +78,7 @@ Press **Presets** in the Characters strip to open the preset screen. It shows on
 </tr>
 </table>
 
-Chisato and Takina belong to their rights holders. The other characters in these images are the property of SHIFT UP Corporation. Spinewall is not affiliated with either. They are shown to demonstrate the interface only. The only models in this repository are the few samples for the live demo, under `docs/demo/models/`. Spinewall does not install any models.
+Chisato and Takina belong to their rights holders. SHIFT UP Corporation made the models in these images. Spinewall is not affiliated with either. They are shown to demonstrate the interface only. The only models in this repository are the few samples for the live demo, under `docs/demo/models/`. Spinewall does not install any models.
 
 ## Spine, not Live2D Cubism
 
@@ -191,6 +191,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | Stage (all characters) | `makeLayer`, `createStageChar`, `stageFrame`, `frameOf`, `applyCharacters`, `destroyLayers` |
 | Hit testing | `hitTest`, `charContains`, `inTriangle`, `selectChar` |
 | Scenes | `hideSlotsOf`, `kind` filter in `buildItems` |
+| Presets pane | `setPresetsOpen`, `renderPresets`, `makePresetCard`, `makePresetManage`, `savePreset`, `updatePreset`, `renamePreset`, `loadPreset`, `stepPreset`, `deletePreset`, `revealCurrentPreset` |
 
 ### `theme/local-host.js`
 
@@ -199,6 +200,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | Entry | `createLocalHost` answers the server paths from memory and `localStorage`. |
 | Model list | `completeModels` fills the fields a server scan derives. |
 | State | `runCommand`, `setView`, `changeModel`, `changeAnimation`, `setLayout`, `cleanCharacters` |
+| Presets | `savePreset`, `updatePreset`, `renamePreset`, `loadPreset`, `stepPreset`, `deletePreset` |
 
 Local mode starts with `?local=<models index url>` or `window.SPINEWALL_LOCAL = {modelsUrl}`. The index is `{"runtime": "4.1.56", "models": [...]}` like `docs/demo/models/index.json`. The model folders sit beside it. A visible Edit button replaces the Plasma patch.
 
@@ -210,7 +212,7 @@ Local mode starts with `?local=<models index url>` or `window.SPINEWALL_LOCAL = 
 | State | `STATE`, `clean_stage`, `save`, `change_model`, `change_animation`, `set_view` |
 | Screens | `DEFAULT_STAGE`, `SCREENS`, `screen_stage`, `on_stage`, `all_stages`, `clean_screen_key`, `load_screens` |
 | Prefs | `load_prefs`, `save_prefs`, `toggle_favorite`, `record_recent`, `set_prefs` |
-| Presets | `save_preset`, `load_preset`, `step_preset`, `delete_preset`, `current_characters`, `clean_preset`, `clean_presets`, `clean_preset_name` |
+| Presets | `save_preset`, `update_preset`, `rename_preset`, `load_preset`, `step_preset`, `delete_preset`, `current_characters`, `clean_preset`, `clean_presets`, `clean_preset_name` |
 | Characters | `add_character`, `remove_character`, `update_character`, `cycle_character_animation`, `set_layout`, `clean_characters` |
 | HTTP | `command`, `Handler`: `/state`, `/models`, `/prefs`, `/info`, `/rescan`, `/presets`, `/screens`, `/thumb/<id>.png`, `/cmd/...`, `/edit/0\|1`, `/report`, `/fav/<id>`, `/layout`, `/view`, `/input` |
 
@@ -262,7 +264,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT
 
 ## Legal notice
 
-Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters and all related art and models are the property of SHIFT UP Corporation. Chisato and Takina in the README images belong to their rights holders. Spinewall is a fan project. Neither SHIFT UP nor those rights holders sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
+Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters (Chisato and Takina) belong to their rights holders. SHIFT UP Corporation made the demo models and owns the related art and models. Spinewall is a fan project. Neither SHIFT UP nor those rights holders sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
 
 ## Configuration
 

@@ -1,6 +1,6 @@
 # spinewall
 
-Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubism is not supported. Any Spine 3.7 (JSON export only), 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs. One exception: `docs/windows.md` and `docs/credits.md` link the community model pack and name its publisher. The user approved that on 2026-11-01. Add nothing else.
+Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubism is not supported. Any Spine 3.7 (JSON export only), 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs. One exception: `docs/windows.md` and `docs/credits.md` link the community model pack and name its publisher. The user approved that on 2026-11-01. Add nothing else. A second exception: `README.md` names the characters Chisato and Takina in its example images and captions. The user approved that on 2026-11-08. Name no game.
 
 ## Layout
 
