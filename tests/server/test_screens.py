@@ -129,6 +129,17 @@ class ScreenPresets(ScreenCase):
         self.assertEqual(self.state_of(LEFT)["model"], "alpha")
         self.assertEqual(self.state_of(RIGHT)["model"], "beta")
 
+    def test_a_screen_key_the_server_has_not_seen_shows_the_preset_chosen_last(self):
+        # A monitor that changes position while a page reloads asks for a new key. It must not fall back to an old default.
+        self.scoped(LEFT, "load-preset", "two")
+        moved = self.state_of("1920x1080+0+0")
+        self.assertEqual(moved["preset"], "two")
+        self.assertEqual(moved["model"], "beta")
+
+    def test_a_layout_pushed_from_a_screen_seeds_the_next_new_screen(self):
+        self.post(f"/layout?screen={RIGHT}", {"replace": True, "characters": [{"model": "beta"}, {"model": "gamma"}]})
+        self.assertEqual(len(self.state_of("1920x1080+0+0")["characters"]), 2)
+
     def test_next_preset_moves_one_screen_and_wraps(self):
         self.scoped(LEFT, "load-preset", "two")
         self.scoped(RIGHT, "load-preset", "one")
