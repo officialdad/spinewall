@@ -40,15 +40,47 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #chars-pane{flex:none;gap:6px}
 #presets-pane{flex:none;gap:6px}
 #presets-pane[hidden]{display:none}
+/* An open presets pane is a screen of its own, so a long list gets the whole height of the panel. */
+#picker[data-presets="open"] #models-pane,#picker[data-presets="open"] #anims-pane{display:none}
+#picker[data-presets="open"] #presets-pane{flex:1}
+#presets-toggle[aria-expanded="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
 #presets-pane .row>button{flex:none}
 #presets-pane .row>input{flex:1}
 #presets-pane .cycle>button{flex:1}
-#presetlist .sel[aria-current="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
-#presetlist{display:flex;flex-direction:column;gap:6px;max-height:144px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.6) transparent}
-#presetlist .sel{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 12px}
-#presetlist .rm{flex:none;width:44px;padding:0;font-size:18px}
 #presets-pane .none{margin:0;font-size:14px}
 #presets-pane .note{margin:0;font-size:14px;min-height:20px}
+#presets-pane .heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+#presets-pane .count{font-size:14px;color:#cfcfcf}
+#presetlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px;flex:1;min-height:96px;align-content:start;grid-auto-rows:max-content;
+  overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.6) transparent;touch-action:pan-y}
+.pcard{display:flex;flex-wrap:wrap;box-sizing:border-box;border:2px solid #767676;border-radius:6px;overflow:hidden}
+.pcard:hover,.pcard:focus-within{border-color:#fff}
+.pcard[data-current]{background:#fff;color:#000;border-color:#fff}
+.pcard[data-open]{grid-column:1/-1}
+#presetlist .pload{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;border:0;border-radius:0;background:transparent;color:inherit;
+  padding:6px 4px;text-align:center}
+#presetlist .pload:focus-visible,#presetlist .pmore:focus-visible{outline-offset:-3px}
+#presetlist .pcard[data-current] .pmore{border-left-color:#000}
+.pcard[data-current] :focus-visible{outline-color:#000}
+.pthumbs{display:flex;justify-content:center;height:36px;padding:0 4px 0 14px}
+.pth{position:relative;flex:none;width:36px;height:36px;margin-left:-14px;border-radius:50%;background:#2b2b2b;border:2px solid #000;box-sizing:border-box;overflow:hidden}
+.pth img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 12%;visibility:hidden}
+.pth[data-ready] img{visibility:visible}
+.pth[data-failed]::after,.pth.more::after{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font:700 14px/1 system-ui,sans-serif}
+.pth[data-failed]::after{content:"?"}
+.pth.more{background:#4a4a4a}
+.pth.more::after{content:attr(data-more)}
+.pname{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-width:100%;font-size:14px;line-height:1.2;overflow:hidden;overflow-wrap:anywhere}
+.pcard[data-current] .pname{font-weight:700}
+.pmeta{font-size:13px;line-height:1.2;color:#cfcfcf}
+.pcard[data-current] .pmeta{color:#000}
+/* A strip of its own keeps the button off the pictures, whatever the card width. */
+#presetlist .pmore{flex:none;width:32px;min-height:0;padding:0;border:0;border-left:2px solid #767676;border-radius:0;font-size:22px;line-height:1;
+  background:transparent;color:inherit}
+#presetlist .pmore[aria-expanded="true"]{background:#ffd54a;color:#000}
+.pmanage{flex:1 0 100%;box-sizing:border-box;display:flex;gap:6px;padding:6px;border-top:2px solid #767676;background:#000;color:#fff}
+.pmanage>*{flex:1;min-width:0;padding:4px 8px}
+#presetlist .pmanage button.armed{background:#ffd54a;color:#000;border-color:#ffd54a;font-weight:700}
 #chars-pane [hidden]{display:none}
 .charhead{display:flex;align-items:center;gap:8px}
 .charhead h2{flex:1;min-width:0}
@@ -207,6 +239,11 @@ const PRESET_NAME_MAX_CHARS = 40, PRESET_MAX = 50;
 let state = {model: null, animation: null, rev: -1, auto: false};
 // The preset this screen loaded or saved last. The server stores it per screen, and a load may not bump `rev`.
 let lastPreset = null;
+// The presets pane state. `presetManaged` is the card whose Rename, Update, and Delete row is open.
+// `presetArmed` is a Delete or Update that waits for a second press, and `presetRenaming` is a card with its name box open.
+let presetQuery = "", presetManaged = null, presetArmed = null, presetRenaming = null, presetArmTimer = 0;
+let presetThumbCancels = [], presetObserver = null;
+const PRESET_AVATARS = 3;
 let editMode = false, dragging = false, click = null;
 let view = {scale: 1, x: 0, y: 0}, viewRev = -1;
 const emptyCounts = () => ({wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0});
@@ -537,7 +574,7 @@ function ensureChrome() {
   const charsTitle = el("h2", {textContent: "Characters"});
   const addBtn = el("button", {type: "button", textContent: "Add character"});
   addBtn.title = "Add the highlighted model as another character";
-  const presetsBtn = el("button", {type: "button", textContent: "Presets"});
+  const presetsBtn = el("button", {type: "button", id: "presets-toggle", textContent: "Presets"});
   presetsBtn.setAttribute("aria-expanded", "false");
   presetsBtn.setAttribute("aria-controls", "presets-pane");
   const charsWarn = el("p", {className: "warn", hidden: true});
@@ -555,6 +592,9 @@ function ensureChrome() {
   presetList.setAttribute("role", "group");
   presetList.setAttribute("aria-label", "Saved presets");
   const presetNone = el("p", {className: "none", textContent: "No presets yet."});
+  const presetSearch = el("input", {type: "search", placeholder: "Search presets", autocomplete: "off", spellcheck: false});
+  presetSearch.setAttribute("aria-label", "Search presets");
+  const presetCount = el("span", {className: "count"});
   const presetName = el("input", {type: "text", placeholder: "Preset name", autocomplete: "off", spellcheck: false, maxLength: PRESET_NAME_MAX_CHARS});
   presetName.setAttribute("aria-label", "Preset name");
   const prevPresetBtn = el("button", {type: "button", textContent: "Previous"});
@@ -566,9 +606,9 @@ function ensureChrome() {
   const presetNote = el("p", {className: "note"});
   presetNote.setAttribute("role", "status");
   const presetsPane = el("div", {className: "pane", id: "presets-pane", hidden: true},
-    el("h2", {textContent: "Presets"}),
+    el("div", {className: "heading"}, el("h2", {textContent: "Presets"}), presetCount),
     ...(SCREEN ? [el("p", {className: "none", textContent: `Screen ${SCREEN}. Each screen keeps its own layout and preset.`})] : []),
-    presetNone, presetList,
+    presetSearch, presetNone, presetList,
     el("div", {className: "row cycle"}, prevPresetBtn, nextPresetBtn),
     el("div", {className: "row"}, presetName, savePresetBtn),
     presetNote);
@@ -579,15 +619,28 @@ function ensureChrome() {
   picker.dataset.tab = "models";
   ui = {kindBtns, search, sourceBtn, menu, sortSel, gridBtn, listBtn, varBtn, list, spacer, rail, bubble, listbox, empty,
         animGroupSel, animList, charsTitle, charsWarn, charsList, autoBox,
-        presetList, presetNone, presetName, presetNote};
+        presetList, presetNone, presetName, presetNote, presetSearch, presetCount, presetsPane, presetsBtn};
   addBtn.addEventListener("click", addHighlighted);
-  presetsBtn.addEventListener("click", () => {
-    presetsPane.hidden = !presetsPane.hidden;
-    presetsBtn.setAttribute("aria-expanded", String(!presetsPane.hidden));
-    if (presetsPane.hidden) return;
-    presetName.focus();
-    // A preset saved from the CLI or another page shows up only after a fresh read.
-    refreshPrefs().then(renderPresets);
+  presetsBtn.addEventListener("click", () => setPresetsOpen(presetsPane.hidden));
+  presetSearch.addEventListener("input", () => { presetQuery = presetSearch.value; presetManaged = presetArmed = presetRenaming = null; renderPresets(); });
+  presetsPane.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    // Escape backs out one level at a time: a confirm or a name box, then an open card, then a search, then the pane.
+    if (presetRenaming || presetArmed) {
+      const name = presetManaged;
+      presetArmed = presetRenaming = null;
+      clearTimeout(presetArmTimer);
+      renderPresets();
+      focusPresetControl(`more:${name}`);
+    } else if (presetManaged) {
+      const name = presetManaged;
+      presetManaged = null;
+      renderPresets();
+      focusPresetControl(`more:${name}`);
+    } else if (presetSearch.value) { presetSearch.value = presetQuery = ""; renderPresets(); }
+    else setPresetsOpen(false, true);
+    e.preventDefault();
+    e.stopPropagation();
   });
   prevPresetBtn.addEventListener("click", () => stepPreset(-1));
   nextPresetBtn.addEventListener("click", () => stepPreset(1));
@@ -636,27 +689,155 @@ function ensureChrome() {
   });
 }
 
-function renderPresets() {
-  const presets = prefs.presets || [];
-  ui.presetNone.hidden = presets.length > 0;
-  ui.presetList.hidden = !presets.length;
-  // A rebuilt row loses focus, so a keyboard user who just loaded a preset would be sent back to the top.
-  const focused = document.activeElement && document.activeElement.dataset.focusKey;
-  ui.presetList.replaceChildren(...presets.map(p => {
-    const load = el("button", {type: "button", className: "sel", textContent: `${p.name} (${p.characters.length})`, title: `Load preset ${p.name}`});
-    if (p.name === lastPreset) load.setAttribute("aria-current", "true");
-    load.dataset.focusKey = `load:${p.name}`;
-    load.addEventListener("click", () => loadPreset(p.name));
-    const rm = el("button", {type: "button", className: "rm", textContent: "✕"});
-    rm.dataset.focusKey = `delete:${p.name}`;
-    rm.setAttribute("aria-label", `Delete preset ${p.name}`);
-    rm.addEventListener("click", () => deletePreset(p.name));
-    return el("div", {className: "charrow"}, load, rm);
-  }));
-  if (focused) {
-    const again = [...ui.presetList.querySelectorAll("[data-focus-key]")].find(x => x.dataset.focusKey === focused);
-    if (again) again.focus();
+function setPresetsOpen(open, returnFocus = false) {
+  ui.presetsPane.hidden = !open;
+  ui.presetsBtn.setAttribute("aria-expanded", String(open));
+  if (open) picker.dataset.presets = "open"; else delete picker.dataset.presets;
+  if (!open) {
+    if (returnFocus) ui.presetsBtn.focus();
+    return;
   }
+  presetManaged = presetArmed = presetRenaming = null;
+  ui.presetSearch.focus();
+  // A preset saved from the CLI or another page shows up only after a fresh read.
+  refreshPrefs().then(() => { renderPresets(); revealCurrentPreset(); });
+}
+
+function focusPresetControl(key) {
+  const target = [...ui.presetList.querySelectorAll("[data-focus-key]")].find(x => x.dataset.focusKey === key);
+  if (target) target.focus();
+}
+
+function revealCurrentPreset() {
+  const current = ui.presetList.querySelector(".pcard[data-current]");
+  if (current) current.scrollIntoView({block: "nearest"});
+}
+
+function renderPresets() {
+  // A closed pane has no size, and a rebuild of up to PRESET_MAX cards would run on every keystroke in the model search.
+  if (ui.presetsPane.hidden) return;
+  presetThumbCancels.forEach(cancel => cancel());
+  presetThumbCancels = [];
+  if (presetObserver) presetObserver.disconnect();
+  const all = prefs.presets || [];
+  const q = presetQuery.trim();
+  const rows = all.map(p => ({p, hit: q ? fuzzy(q, p.name) : {idx: []}})).filter(r => r.hit);
+  if (presetManaged && !all.some(p => p.name === presetManaged)) presetManaged = presetArmed = presetRenaming = null;
+  ui.presetNone.textContent = all.length ? `No preset matches "${q}".` : "No presets yet.";
+  ui.presetNone.hidden = rows.length > 0;
+  ui.presetSearch.hidden = !all.length;
+  ui.presetList.hidden = !rows.length;
+  ui.presetCount.textContent = !all.length ? "" : q ? `${rows.length} of ${all.length}` : String(all.length);
+  // A rebuilt card loses focus, so a keyboard user who just loaded a preset would be sent back to the top.
+  const focused = document.activeElement && document.activeElement.dataset.focusKey;
+  // The thumbnails of a card load when it scrolls into view, so a long list does not render every model at once.
+  presetObserver = typeof IntersectionObserver === "function"
+    ? new IntersectionObserver(entries => {
+      for (const entry of entries) if (entry.isIntersecting) { presetObserver.unobserve(entry.target); entry.target._fill(); }
+    }, {root: ui.presetList, rootMargin: "160px"})
+    : null;
+  const byId = new Map(models.map(m => [m.id, m]));
+  ui.presetList.replaceChildren(...rows.map(({p, hit}) => makePresetCard(p, hit, byId)));
+  if (focused) focusPresetControl(focused);
+}
+
+function makePresetCard(p, hit, byId) {
+  const count = p.characters.length;
+  const countText = `${count} character${count === 1 ? "" : "s"}`;
+  const card = el("div", {className: "pcard"});
+  card.dataset.name = p.name;
+  const isCurrent = p.name === lastPreset;
+  if (isCurrent) card.dataset.current = "";
+  const open = presetManaged === p.name;
+  if (open) card.dataset.open = "";
+
+  // A card with more characters than avatars ends in a "+N" chip, so the stack keeps one width.
+  const shown = count > PRESET_AVATARS ? PRESET_AVATARS - 1 : count;
+  const slots = p.characters.slice(0, shown).map(c => {
+    const img = el("img", {alt: ""});
+    return {th: el("span", {className: "pth"}, img), img, model: byId.get(c.model)};
+  });
+  const thumbs = el("span", {className: "pthumbs"}, ...slots.map(slot => slot.th));
+  if (count > shown) {
+    const more = el("span", {className: "pth more"});
+    more.dataset.more = `+${count - shown}`;
+    thumbs.append(more);
+  }
+  // The name and count label the button, so the pictures add nothing for a screen reader.
+  thumbs.setAttribute("aria-hidden", "true");
+  card._fill = () => slots.forEach(slot => {
+    if (!slot.model) { slot.th.dataset.failed = ""; return; }
+    presetThumbCancels.push(wantThumb(slot.model, url => {
+      if (url) { slot.img.src = url; slot.th.dataset.ready = ""; } else slot.th.dataset.failed = "";
+    }));
+  });
+  if (presetObserver) presetObserver.observe(card); else card._fill();
+
+  const name = el("span", {className: "pname"});
+  highlight(name, p.name, hit.idx);
+  const load = el("button", {type: "button", className: "pload", title: `Load preset ${p.name}`}, thumbs, name, el("span", {className: "pmeta", textContent: countText}));
+  if (isCurrent) load.setAttribute("aria-current", "true");
+  load.dataset.focusKey = `load:${p.name}`;
+  load.addEventListener("click", () => loadPreset(p.name));
+
+  const more = el("button", {type: "button", className: "pmore", textContent: "\u22ef", title: `Rename, update, or delete ${p.name}`});
+  more.setAttribute("aria-label", `Manage preset ${p.name}`);
+  more.setAttribute("aria-expanded", String(open));
+  more.dataset.focusKey = `more:${p.name}`;
+  more.addEventListener("click", () => {
+    presetManaged = open ? null : p.name;
+    presetArmed = presetRenaming = null;
+    renderPresets();
+    focusPresetControl(`more:${p.name}`);
+  });
+  card.append(load, more);
+  if (open) card.append(makePresetManage(p.name));
+  return card;
+}
+
+function makePresetManage(name) {
+  const row = el("div", {className: "pmanage"});
+  if (presetRenaming === name) {
+    const box = el("input", {type: "text", value: name, autocomplete: "off", spellcheck: false, maxLength: PRESET_NAME_MAX_CHARS});
+    box.setAttribute("aria-label", `New name for preset ${name}`);
+    box.dataset.focusKey = `rename:${name}`;
+    const save = el("button", {type: "button", textContent: "Save"});
+    save.setAttribute("aria-label", `Save the new name of preset ${name}`);
+    save.addEventListener("click", () => renamePreset(name, box.value));
+    box.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); renamePreset(name, box.value); } });
+    row.append(box, save);
+    return row;
+  }
+  const rename = el("button", {type: "button", textContent: "Rename"});
+  rename.setAttribute("aria-label", `Rename preset ${name}`);
+  rename.dataset.focusKey = `rename-open:${name}`;
+  rename.addEventListener("click", () => {
+    presetRenaming = name;
+    presetArmed = null;
+    renderPresets();
+    focusPresetControl(`rename:${name}`);
+  });
+  // Update and Delete overwrite or lose a layout with no undo, so each asks for a second press.
+  const guarded = (action, label, doneLabel, title, run) => {
+    const armed = !!presetArmed && presetArmed.name === name && presetArmed.action === action;
+    const button = el("button", {type: "button", textContent: armed ? "Confirm" : label, title});
+    if (armed) button.className = "armed";
+    button.setAttribute("aria-label", armed ? `Confirm: ${doneLabel} preset ${name}` : `${label} preset ${name}`);
+    button.dataset.focusKey = `${action}:${name}`;
+    button.addEventListener("click", () => {
+      clearTimeout(presetArmTimer);
+      if (armed) { presetArmed = null; run(name); return; }
+      presetArmed = {name, action};
+      // A press left unanswered must not stay armed for a later stray click.
+      presetArmTimer = setTimeout(() => { presetArmed = null; renderPresets(); }, 5000);
+      renderPresets();
+    });
+    return button;
+  };
+  row.append(rename,
+    guarded("update", "Update", "update", "Replace this preset with the characters, positions, and sizes on screen", updatePreset),
+    guarded("delete", "Delete", "delete", "Delete this preset", deletePreset));
+  return row;
 }
 
 function showPresetNote(text) {
@@ -672,8 +853,40 @@ async function savePreset(raw) {
   if (!(prefs.presets || []).some(p => p.name === name)) { showPresetNote(`Cannot save "${name}". A name takes up to ${PRESET_NAME_MAX_CHARS} letters, and the list takes up to ${PRESET_MAX} presets.`); return; }
   // The box may hold a newer name by now, and that one must stay.
   if (ui.presetName.value.trim() === name) ui.presetName.value = "";
+  lastPreset = name;
   showPresetNote(`${replaced ? "Replaced" : "Saved"} "${name}".`);
   renderPicker();
+  revealCurrentPreset();
+}
+
+async function updatePreset(name) {
+  await cmd(`update-preset/${encodeURIComponent(name)}`);
+  await refreshPrefs();
+  if (!(prefs.presets || []).some(p => p.name === name)) { showPresetNote(`Cannot update "${name}". It is gone.`); renderPicker(); return; }
+  lastPreset = name;
+  showPresetNote(`Updated "${name}" with the layout on screen.`);
+  renderPicker();
+  focusPresetControl(`more:${name}`);
+}
+
+async function renamePreset(old, raw) {
+  const name = raw.trim();
+  if (!name) { showPresetNote("Type a new name first."); focusPresetControl(`rename:${old}`); return; }
+  if (name !== old && (prefs.presets || []).some(p => p.name === name)) { showPresetNote(`Cannot rename. "${name}" is taken.`); focusPresetControl(`rename:${old}`); return; }
+  if (name !== old) {
+    await cmd(`rename-preset/${encodeURIComponent(old)}/${encodeURIComponent(name)}`);
+    await refreshPrefs();
+    if (!(prefs.presets || []).some(p => p.name === name)) {
+      showPresetNote(`Cannot rename "${old}". A name takes up to ${PRESET_NAME_MAX_CHARS} letters.`);
+      focusPresetControl(`rename:${old}`);
+      return;
+    }
+    if (lastPreset === old) lastPreset = name;
+  }
+  presetManaged = presetRenaming = presetArmed = null;
+  showPresetNote(name === old ? `Kept "${old}".` : `Renamed "${old}" to "${name}".`);
+  renderPicker();
+  focusPresetControl(`more:${name}`);
 }
 
 async function loadPreset(name) {
@@ -694,7 +907,7 @@ async function stepPreset(step) {
   if (!(prefs.presets || []).length) { renderPresets(); showPresetNote("No presets yet."); return; }
   let reply = null;
   try { reply = await (await api(`/cmd/${step > 0 ? "next" : "prev"}-preset`)).json(); } catch (e) {}
-  if (reply && reply.preset) { lastPreset = reply.preset; renderPresets(); }
+  if (reply && reply.preset) { lastPreset = reply.preset; renderPresets(); revealCurrentPreset(); }
   showPresetNote(reply && reply.preset ? `Loaded "${reply.preset}".` : "Cannot load a preset. Its models are missing.");
 }
 
@@ -702,8 +915,10 @@ async function deletePreset(name) {
   if (!name) return;
   await cmd(`delete-preset/${encodeURIComponent(name)}`);
   await refreshPrefs();
+  presetManaged = presetArmed = presetRenaming = null;
   showPresetNote(`Deleted "${name}".`);
   renderPicker();
+  ui.presetSearch.hidden ? ui.presetName.focus() : ui.presetSearch.focus();
 }
 
 function toggleMenu(open = ui.menu.hidden) {

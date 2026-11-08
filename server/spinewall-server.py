@@ -47,7 +47,7 @@ SCREENS_FILE = os.environ.get(
 SCREEN_MAX = 16
 SCREEN_KEY_MAX_CHARS = 60
 RECENT_MAX = 20
-PRESET_MAX = 50
+PRESET_MAX = 200
 PRESET_NAME_MAX_CHARS = 40
 UID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 ANIMATION_MAX_CHARS = 200
@@ -759,6 +759,34 @@ def save_preset(raw_name):
     return True
 
 
+def update_preset(name):
+    """Overwrite an existing preset with the layout on screen. An unknown name creates nothing, so a typo cannot add a preset."""
+    if not any(p["name"] == name for p in PREFS["presets"]):
+        return False
+    return save_preset(name)
+
+
+def rename_preset(old, raw_new):
+    """Rename a preset in place, so the cycle order stays. A name that is taken or invalid changes nothing."""
+    new = clean_preset_name(raw_new)
+    presets = PREFS["presets"]
+    index = next((i for i, p in enumerate(presets) if p["name"] == old), None)
+    if index is None or new is None:
+        return False
+    if new == old:
+        return True
+    if any(p["name"] == new for p in presets):
+        return False
+    presets[index] = {**presets[index], "name": new}
+    save_prefs()
+    for stage in all_stages():
+        if stage["preset"] == old:
+            with on_stage(stage):
+                STATE["preset"] = new
+                save()
+    return True
+
+
 def delete_preset(name):
     presets = [p for p in PREFS["presets"] if p["name"] != name]
     if len(presets) == len(PREFS["presets"]):
@@ -866,7 +894,7 @@ def thumb_path(model_id):
 
 
 # These act on the shared preset list, so one run is enough. A broadcast would save the last stage's layout.
-ONCE_COMMANDS = ("save-preset", "delete-preset")
+ONCE_COMMANDS = ("save-preset", "update-preset", "rename-preset", "delete-preset")
 
 
 def command(cmd, arg=None, stages=None):
@@ -919,6 +947,10 @@ def run_command(cmd, arg=None):
         add_character(arg)
     elif cmd == "save-preset" and arg:
         save_preset(arg)
+    elif cmd == "update-preset" and arg:
+        update_preset(arg)
+    elif cmd == "rename-preset" and isinstance(arg, tuple):
+        rename_preset(*arg)
     elif cmd == "load-preset" and arg:
         load_preset(arg)
     elif cmd in ("next-preset", "prev-preset"):
@@ -1128,12 +1160,18 @@ class Handler(SimpleHTTPRequestHandler):
             EDIT["on"] = 1 if path.endswith("/1") else 0
             self.send_json(EDIT)
         elif path.startswith("/cmd/"):
-            name, _, arg = path[5:].partition("/")
+            name, _, raw_arg = path[5:].partition("/")
+            if name == "rename-preset":
+                # A preset name may hold a slash, so the two names split before they decode.
+                names = [urllib.parse.unquote(part) for part in raw_arg.split("/")]
+                arg = tuple(names) if len(names) == 2 and all(names) else None
+            else:
+                arg = urllib.parse.unquote(raw_arg) or None
             # A call that names no screen reaches every stage. A named one reaches that stage alone.
             stage = self.stage_param() if self.screen is not None else DEFAULT_STAGE
             if stage is None:
                 return True
-            command(name, urllib.parse.unquote(arg) or None, None if self.screen is None else [stage])
+            command(name, arg, None if self.screen is None else [stage])
             note_chosen_stage(stage)
             self.send_json(stage)
         else:

@@ -112,12 +112,17 @@ Characters of one Spine version draw in the order of the list. Characters of dif
 
 A preset saves the characters on screen with each model, animation, position, size, and auto-cycle flag. One character is a preset of one. Loading a preset replaces the layout, so it is a quick way to switch scenes.
 
-- Edit mode: press **Presets** in the Characters strip. Type a name and press **Save**. Press a preset name in the list to load it, or its ✕ to delete it.
-- Saving under an existing name replaces that preset. A name takes up to 40 letters. The list takes up to 50 presets.
+- Edit mode: press **Presets** in the Characters strip. The pane takes the whole panel, so the model list steps aside until you close it.
+- Type a name and press **Save** to store the layout on screen. Saving under an existing name replaces that preset. A name takes up to 40 letters. The list takes up to 200 presets.
+- Each preset is a card with a picture of each character, its name, and its character count. A card past three characters ends in a "+N" chip. The card of the loaded preset is white. Press a card to load it.
+- Press the ⋯ button on a card to open its row. **Rename** changes the name and keeps the layout and the position in the list. **Update** replaces the saved layout with the characters on screen. **Delete** removes the preset. Update and Delete ask for a second press, labeled **Confirm**, and drop the question after 5 s.
+- **Search presets** narrows the cards by name. The count beside the heading shows `N of TOTAL` while a search is active. Pictures load for the cards near the viewport only, so a long list stays light.
+- **Previous** and **Next** step through the list in saved order and scroll the loaded card into view. A rename keeps that order.
+- Escape backs out one level: a confirm or a name box, then an open card, then the search, then the pane.
 - A load skips a model that is gone. One model left loads as the single layout. No model left changes nothing, and the page says so.
 - Characters get new UIDs on each load.
 - The server keeps presets in `prefs.json` under `presets`. Local mode keeps them in `localStorage`.
-- Command line: `spinewall presets`, `save-preset NAME`, `load-preset NAME`, `delete-preset NAME`. Quote a name that has spaces.
+- Command line: `spinewall presets`, `save-preset NAME`, `update-preset NAME`, `rename-preset OLD NEW`, `load-preset NAME`, `delete-preset NAME`. Quote a name that has spaces. `update-preset` changes a preset that exists and creates nothing for an unknown name. `rename-preset` fails on a taken or invalid name and changes nothing.
 
 ### Presets per monitor
 
@@ -128,7 +133,7 @@ Each monitor shows its own layout, so each can run its own preset. The page name
 - **Previous** and **Next** in the Presets pane step this monitor through the saved presets and wrap around. The preset loaded last is highlighted.
 - `spinewall next-preset` and `prev-preset` do the same from a shortcut. Without `--screen KEY` they step every monitor, each from its own preset. Add `--screen KEY` to step one.
 - `spinewall screens` lists the monitors the server knows, with the last preset of each. Use `--screen KEY` on `load-preset`, `save-preset`, and any other command to act on one monitor.
-- A command without `--screen` reaches every monitor. `save-preset` is the exception: it saves the default layout, so name the monitor on a multi-monitor desktop.
+- A command without `--screen` reaches every monitor. `save-preset` and `update-preset` are the exceptions: they read the default layout, so name the monitor on a multi-monitor desktop.
 - A preset whose models are all gone is skipped when cycling.
 - The server keeps the monitor layouts in `screens.json`, up to 16 monitors.
 

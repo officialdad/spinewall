@@ -35,7 +35,7 @@ In edit mode you can:
 
 - Search models with fuzzy matching, and filter by source, favorites, recents, and Characters, Scenes, or All.
 - Group the variants of one character into a single card.
-- Save the characters, positions, and sizes on screen as a named preset, and load it again later.
+- Save the characters, positions, and sizes on screen as a named preset, and load it again later. Rename a preset, or update it with the layout on screen. See [Presets](#presets).
 - Run a different preset on each monitor, and step through the presets with Previous and Next or a global shortcut. See [docs/assets.md](docs/assets.md).
 - Play any animation from the list, with a preview on hover.
 - Drag the character to move it. Scroll the mouse wheel to scale it.
@@ -43,17 +43,42 @@ In edit mode you can:
 
 Spinewall draws several characters on one wallpaper. Each character keeps its own model, animation, position, and scale. In edit mode, the Characters list shows every character on screen. A dashed yellow box marks the selected one.
 
+Each character picks its own outfit, position, and size. The same two characters (Chisato and Takina) fill three layouts below. Each layout uses a different outfit pair and a different placement:
+
 <table>
 <tr>
-<td align="center"><img src="docs/images/multi-character.png" alt="Two Spine characters on one black desktop, side by side, with no interface visible." width="440"><br><sub>Two characters, normal mode</sub></td>
-<td align="center"><img src="docs/images/multi-character-edit.png" alt="Edit mode with two characters on screen. A dashed yellow box marks the selected character, and the Characters list on the right shows both." width="440"><br><sub>Two characters, edit mode</sub></td>
-</tr>
-<tr>
-<td align="center" colspan="2"><img src="docs/images/picker-search.png" alt="The model picker after a fuzzy search for a character name, with the matching letters highlighted." width="440"><br><sub>Fuzzy search in the picker</sub></td>
+<td align="center"><img src="docs/images/multi-character.png" alt="Chisato in a red school coat on the left and Takina in a blue school coat on the right, standing apart on a black desktop." width="290"><br><sub>School coats, standing apart</sub></td>
+<td align="center"><img src="docs/images/layout-swapped.png" alt="Takina with a blue bass guitar on the left and Chisato with a red guitar and an amplifier on the right. The two sides are swapped from the first layout." width="290"><br><sub>Band outfits, sides swapped</sub></td>
+<td align="center"><img src="docs/images/layout-close.png" alt="Chisato in a red sports set on the left and Takina in a blue sports set on the right, standing close together." width="290"><br><sub>Sports sets, close together</sub></td>
 </tr>
 </table>
 
-The characters in these images are the property of SHIFT UP Corporation. Spinewall is not affiliated with SHIFT UP. They are shown to demonstrate the interface only. The only models in this repository are the few samples for the live demo, under `docs/demo/models/`. Spinewall does not install any models.
+Save each arrangement as a preset, then switch between them with `spinewall next-preset`.
+
+### Presets
+
+Press **Presets** in the Characters strip to open the preset screen. It shows one card for each preset, with a picture of each character, the name, and the character count. A card past three characters ends in a "+N" chip.
+
+- Press a card to load it. The loaded card is white.
+- Type in **Search presets** to narrow a long list. The list takes up to 200 presets and scrolls inside the panel.
+- Press ⋯ on a card to **Rename** it, **Update** it with the layout on screen, or **Delete** it. Update and Delete ask for a second press.
+- **Previous** and **Next** step through the list in saved order. A rename keeps the order.
+- On the command line, `spinewall update-preset NAME` and `spinewall rename-preset OLD NEW` do the same. See [docs/assets.md](docs/assets.md).
+
+<table>
+<tr>
+<td align="center"><img src="docs/images/presets.png" alt="The preset screen with twelve preset cards in three columns, each with a picture of its characters. One card is white because it is loaded. Another card is open and shows Rename, Update, and Delete." width="640"><br><sub>The preset screen. The white card is loaded, and the open card shows its actions.</sub></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td align="center"><img src="docs/images/multi-character-edit.png" alt="Edit mode with Takina and Chisato on screen. A dashed yellow box marks the selected character, and the Characters list on the right shows both." width="440"><br><sub>Two characters, edit mode</sub></td>
+<td align="center"><img src="docs/images/picker-search.png" alt="The model picker after a fuzzy search for a character name, with the matching letters highlighted." width="440"><br><sub>Fuzzy search in the picker</sub></td>
+</tr>
+</table>
+
+Chisato and Takina belong to their rights holders. The other characters in these images are the property of SHIFT UP Corporation. Spinewall is not affiliated with either. They are shown to demonstrate the interface only. The only models in this repository are the few samples for the live demo, under `docs/demo/models/`. Spinewall does not install any models.
 
 ## Spine, not Live2D Cubism
 
@@ -125,7 +150,8 @@ spinewall zoom-in | zoom-out | move-left | move-right | move-up | move-down | re
 spinewall rescan
 spinewall add-character [ID] | remove-character UID | clear-characters
 spinewall next-char-anim UID | prev-char-anim UID | set-char-anim UID NAME | set-char-model UID ID
-spinewall presets | save-preset NAME | load-preset NAME | delete-preset NAME
+spinewall presets | save-preset NAME | update-preset NAME | rename-preset OLD NEW
+spinewall load-preset NAME | delete-preset NAME
 spinewall next-preset | prev-preset
 spinewall screens
 spinewall --screen KEY next-preset
@@ -236,7 +262,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT
 
 ## Legal notice
 
-Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters and all related art and models are the property of SHIFT UP Corporation. Spinewall is a fan project. SHIFT UP does not sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
+Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters and all related art and models are the property of SHIFT UP Corporation. Chisato and Takina in the README images belong to their rights holders. Spinewall is a fan project. Neither SHIFT UP nor those rights holders sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
 
 ## Configuration
 
