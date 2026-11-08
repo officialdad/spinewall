@@ -21,6 +21,8 @@ async function saveThroughPicker(page, name) {
   if (await pane(page).isHidden()) await openPresets(page);
   await pane(page).getByRole("textbox", { name: "Preset name" }).fill(name);
   await pane(page).getByRole("button", { name: "Save" }).click();
+  // The save runs on the server after the click. A later command must not race it, or the preset holds the wrong layout.
+  await expect(pane(page).getByRole("status")).toHaveText(`Saved "${name}".`);
 }
 
 test("the picker saves a two-character layout and loads it back", async ({ open, page }) => {
