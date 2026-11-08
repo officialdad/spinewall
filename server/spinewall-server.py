@@ -579,13 +579,22 @@ def all_stages():
     return [DEFAULT_STAGE, *SCREENS.values()]
 
 
+# The stage a person changed last. A page that reloads while the monitor layout is in flux asks for a screen key the
+# server has not seen. Seeding that screen from this stage shows what the person chose last, not an old default.
+LAST_CHOSEN = {"stage": DEFAULT_STAGE}
+
+
+def note_chosen_stage(stage):
+    LAST_CHOSEN["stage"] = stage
+
+
 def screen_stage(key, create=False):
-    """The stage of a screen, or None. A new screen starts as a copy of the default stage, so it looks the same until edited."""
+    """The stage of a screen, or None. A new screen starts as a copy of the stage changed last, so it looks the same until edited."""
     if key == "":
         return DEFAULT_STAGE
     stage = SCREENS.get(key)
     if stage is None and create and len(SCREENS) < SCREEN_MAX:
-        stage = SCREENS[key] = copy.deepcopy(DEFAULT_STAGE)
+        stage = SCREENS[key] = copy.deepcopy(LAST_CHOSEN["stage"])
         with on_stage(stage):
             save()
     return stage
@@ -1125,6 +1134,7 @@ class Handler(SimpleHTTPRequestHandler):
             if stage is None:
                 return True
             command(name, urllib.parse.unquote(arg) or None, None if self.screen is None else [stage])
+            note_chosen_stage(stage)
             self.send_json(stage)
         else:
             return False
@@ -1149,6 +1159,8 @@ class Handler(SimpleHTTPRequestHandler):
             return
         with on_stage(stage):
             self.route_post(path, body)
+        if path in ("/layout", "/view"):
+            note_chosen_stage(stage)
 
     def route_post(self, path, body):
         if path == "/report":
