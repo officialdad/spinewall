@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/officialdad/spinewall/compare/v0.5.0...v0.6.0) (2026-11-08)
+
+
+### Features
+
+* manage presets in a searchable card screen ([#16](https://github.com/officialdad/spinewall/issues/16)) ([8fde725](https://github.com/officialdad/spinewall/commit/8fde7253e457a69c360a7d7f622420a6fa4ed552))
+
 ## [0.5.0](https://github.com/officialdad/spinewall/compare/v0.4.0...v0.5.0) (2026-11-08)
 
 
