@@ -12,4 +12,4 @@ Spinewall ships no Spine runtime. The only models are the few samples for the li
 
 Example models for testing come from the Esoteric Software `spine-runtimes` repo.
 
-All game characters and art belong to their owners. Spinewall has no affiliation with them.
+The README example images show Chisato and Takina, who belong to their rights holders. All game characters and art belong to their owners. Spinewall has no affiliation with them.
