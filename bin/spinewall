@@ -11,6 +11,17 @@
 set -euo pipefail
 base="http://127.0.0.1:${SPINEWALL_PORT:-8777}"
 
+# A shortcut runs with no terminal, so an error would vanish. Keep each one in a log, and still pass it to stderr.
+if [ ! -t 2 ]; then
+  log="${SPINEWALL_LOG:-$HOME/.local/state/spinewall/shortcut.log}"
+  mkdir -p "$(dirname "$log")"
+  # A log that grows without bound would fill the disk, so it restarts past 100 KB.
+  if [ -f "$log" ] && [ "$(wc -c <"$log")" -gt 102400 ]; then : >"$log"; fi
+  exec 3>&2
+  exec 2> >(while IFS= read -r line; do printf '%s %s\n' "$(date -Is)" "$line" >>"$log"; printf '%s\n' "$line" >&3; done)
+  trap 'echo "error: spinewall $* (screen: ${screen:-all}) exited with status $?" >&2' ERR
+fi
+
 # A monitor is named by its screen key, which `spinewall screens` lists.
 screen=""
 args=()

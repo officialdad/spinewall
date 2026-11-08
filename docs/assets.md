@@ -138,7 +138,7 @@ The page builds the key from the screen size and position, for example `3440x144
 
 #### Shortcuts
 
-Bind `spinewall next-preset --screen current` and `spinewall prev-preset --screen current` as global shortcuts. `current` is the monitor KWin reports as active, which follows the pointer, so the shortcut cycles the monitor you are using. It needs `qdbus6` and `kscreen-doctor`, and a wallpaper page must be connected on that monitor. Without `--screen`, the shortcut cycles every monitor.
+Bind `spinewall next-preset --screen current` and `spinewall prev-preset --screen current` as global shortcuts. `current` is the monitor KWin reports as active, which follows the pointer, so the shortcut cycles the monitor you are using. It needs `qdbus6` and `kscreen-doctor`, and a wallpaper page must be connected on that monitor. Without `--screen`, the shortcut cycles every monitor. A command that runs without a terminal, such as a shortcut, appends its errors to `~/.local/state/spinewall/shortcut.log` (env `SPINEWALL_LOG`). The log restarts past 100 KB.
 
 Command line: `spinewall add-character [ID]`, `remove-character UID`, `clear-characters`, `next-char-anim UID`, `set-char-anim UID NAME`, `set-char-model UID ID`. `spinewall info` lists each UID under `state.characters`.
 
