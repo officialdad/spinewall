@@ -13,6 +13,22 @@ class CliCase(ServerCase):
         return subprocess.run([str(CLI), *args], env=env, capture_output=True, text=True, timeout=20)
 
 
+class ErrorLog(CliCase):
+    def log_text(self):
+        path = self.tmp / ".local/state/spinewall/shortcut.log"
+        return path.read_text() if path.exists() else ""
+
+    def test_error_without_a_terminal_reaches_stderr_and_the_log(self):
+        done = self.run_cli("info", port=1)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("exited with status", done.stderr)
+        self.assertIn("exited with status", self.log_text())
+
+    def test_success_writes_no_log(self):
+        self.assertEqual(self.run_cli("info").returncode, 0)
+        self.assertEqual(self.log_text(), "")
+
+
 class Commands(CliCase):
     def test_no_argument_runs_info(self):
         done = self.run_cli()
