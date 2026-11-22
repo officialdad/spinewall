@@ -22,7 +22,7 @@ Try it in the browser at [officialdad.github.io/spinewall](https://officialdad.g
 
 In normal mode the desktop shows only the character. Click it to change its animation.
 
-Edit mode opens a panel on the right. Use it to choose models and animations, and to move and scale characters. Right-click the desktop and choose "Enter Edit Mode" to open it.
+Edit mode opens a dock on the right. The dock folds away, and the stage fits the free area. Use it to choose models and animations, and to move and scale characters. Right-click the desktop and choose "Enter Edit Mode" to open it.
 
 <table>
 <tr>
@@ -191,7 +191,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | Thumbnails | `wantThumb`, `pumpThumbs`, `loadOrMakeThumb`, `renderThumb`, `headBox`, `unionBox` |
 | Stage (all characters) | `makeLayer`, `createStageChar`, `stageFrame`, `frameOf`, `applyCharacters`, `destroyLayers` |
 | Hit testing | `hitTest`, `charContains`, `inTriangle`, `selectChar` |
-| Editor dock | `applyDock`, `updateFit`, `setDockFolded`, `dockEdge`, `loadDockPrefs`, `saveDockPrefs` |
+| Editor dock | `applyDock`, `updateFit`, `setDockFolded`, `loadDockPrefs`, `saveDockPrefs` |
 | Scenes | `hideSlotsOf`, `kind` filter in `buildItems` |
 | Presets pane | `setPresetsOpen`, `renderPresets`, `makePresetCard`, `makePresetManage`, `savePreset`, `updatePreset`, `renamePreset`, `loadPreset`, `stepPreset`, `deletePreset`, `revealCurrentPreset` |
 
