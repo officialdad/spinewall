@@ -46,7 +46,7 @@ test("a click advances the animation and the state survives a reload", async ({ 
 
 test("the edit button opens the picker and set-model switches the model", async ({ page }) => {
   await page.goto(LOCAL_URL());
-  const toggle = page.getByRole("button", { name: "Edit" });
+  const toggle = page.getByRole("button", { name: "Edit", exact: true });
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");

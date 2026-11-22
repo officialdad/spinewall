@@ -53,7 +53,7 @@ const drawn = (page) => page.evaluate(() => {
   }));
 });
 
-const openEdit = (page) => page.getByRole("button", { name: "Edit" }).click();
+const openEdit = (page) => page.getByRole("button", { name: "Edit", exact: true }).click();
 
 test("the demo is the real page and draws a character", async ({ page, demoUrl }) => {
   const errors = await ready(page, demoUrl);
