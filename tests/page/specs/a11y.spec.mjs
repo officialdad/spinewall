@@ -76,6 +76,31 @@ test("a favorite cell has no serious or critical violations", async ({ open, pag
   expect(await scan(page)).toEqual([]);
 });
 
+test("the chip bar and handle have no serious or critical WCAG AA violations", async ({ open, page }) => {
+  await open({ model: A });
+  await post("/layout", { replace: true, characters: [
+    { model: A, x: -0.3, y: 0, scale: 1 },
+    { model: SOLO["4.1"], x: 0.3, y: 0, scale: 1 },
+  ] });
+  await expect.poll(() => page.evaluate(() => stageChars.size)).toBe(2);
+  await get("/edit/1");
+  await expect(page.locator("#bar")).toBeVisible();
+  await expect(page.locator("#handle")).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const scanChrome = async () => {
+    const { violations } = await new AxeBuilder({ page })
+      .include("#bar")
+      .include("#handle")
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+      .analyze();
+    return violations.filter((v) => BLOCKING.includes(v.impact)).map((v) => `${v.id} (${v.impact}): ${v.nodes.map((n) => n.target.join(" ")).slice(0, 5).join(" | ")}`);
+  };
+  expect(await scanChrome()).toEqual([]);
+  // A selected chip is white, so its black focus ring and its own colors get a second look.
+  await page.locator('#chips .chip[aria-pressed="true"]').focus();
+  expect(await scanChrome()).toEqual([]);
+});
+
 test("the on-page notice has enough contrast", async ({ open, page, context }) => {
   await context.route("**/spine-player40.js", (r) => r.abort());
   await open({ model: A });
