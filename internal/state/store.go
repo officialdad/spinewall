@@ -108,6 +108,8 @@ func (s *Store) rescanLocked() {
 
 // Skipped returns the skip reasons.
 func (s *Store) Skipped() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	out := make(map[string]string, len(s.skipped))
 	for k, v := range s.skipped {
 		out[k] = v
@@ -117,6 +119,8 @@ func (s *Store) Skipped() map[string]string {
 
 // ModelDir returns a model's directory, or false when the id is unknown.
 func (s *Store) ModelDir(id string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	dir, ok := s.modelDirs[id]
 	return dir, ok
 }
