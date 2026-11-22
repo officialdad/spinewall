@@ -111,7 +111,12 @@ test("the Variants toggle lists each variant on its own", async ({ open, page })
   await expect(cells(page).filter({ hasText: "variants" })).toHaveCount(1);
   await page.getByRole("button", { name: "Variants" }).click();
   await expect(cells(page).filter({ hasText: "variants" })).toHaveCount(0);
-  await expect(cells(page)).toHaveCount(VARIANTS.length);
+  // The list draws only the rows near its viewport, so check each variant through its own search.
+  await expect(page.getByRole("listbox", { name: `Models, ${VARIANTS.length} shown` })).toBeVisible();
+  for (const name of ["Alice A", "Alice B", "Alice C"]) {
+    await search.fill(name);
+    await expect(page.getByRole("option", { name })).toBeVisible();
+  }
   await expect.poll(async () => (await get("/prefs")).variants).toBe(false);
 });
 

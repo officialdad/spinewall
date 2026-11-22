@@ -75,22 +75,30 @@ test("the selection box follows the shrunken stage", async ({ open, page }) => {
   expect(py).toBeLessThan(box.y + box.height);
 });
 
-test("the fold button hides the dock and gives the stage its whole window back", async ({ open, page }) => {
+test("the fold button hides the dock and leaves the stage above the chip bar", async ({ open, page }) => {
   await openDock(open, page);
   const button = foldButton(page);
+  const beforeFold = await fit(page);
   await expect(button).toHaveAttribute("aria-expanded", "true");
   await expect(button).toHaveAccessibleName("Fold editor");
   await button.click();
   await expect(button).toHaveAttribute("aria-expanded", "false");
   await expect(button).toHaveAccessibleName("Show editor");
   await expect(page.locator("#picker")).toHaveAttribute("data-folded", "");
-  expect(await fit(page)).toEqual({ s: 1, ox: 0, oy: 0 });
+  // The chip bar keeps the bottom edge, so the stage stops above it instead of covering a character.
+  const folded = await fit(page);
+  expect(folded.s).toBeGreaterThan(beforeFold.s);
+  // The top strip and the bar still take their share, so the stage keeps its whole width but not its height.
+  expect(folded.oy).toBeGreaterThanOrEqual(0);
+  const stage = await page.locator("#layers").boundingBox();
+  const bar = await page.locator("#bar").boundingBox();
+  expect(stage.y + stage.height).toBeLessThanOrEqual(bar.y + 1);
   const box = await button.boundingBox();
   expect(box.width).toBeGreaterThanOrEqual(44);
   expect(box.height).toBeGreaterThanOrEqual(44);
   await button.click();
   await expect(button).toHaveAttribute("aria-expanded", "true");
-  await expect.poll(async () => (await fit(page)).s).toBeLessThan(1);
+  await expect.poll(async () => (await fit(page)).s).toBeLessThan(folded.s);
 });
 
 test("P folds and shows the dock, and typing a p in a field does not", async ({ open, page }) => {
@@ -122,7 +130,11 @@ test("the fold state survives a reload without touching rev or vrev", async ({ o
   expect([after.rev, after.vrev, after.crev]).toEqual([before.rev, before.vrev, before.crev]);
   await page.reload();
   await expect(foldButton(page)).toHaveAttribute("aria-expanded", "false");
-  expect(await fit(page)).toEqual({ s: 1, ox: 0, oy: 0 });
+  await expect(page.locator("#bar")).toBeVisible();
+  const stage = await page.locator("#layers").boundingBox();
+  const bar = await page.locator("#bar").boundingBox();
+  expect(stage.y + stage.height).toBeLessThanOrEqual(bar.y + 1);
+  expect((await fit(page)).s).toBeLessThan(1);
 });
 
 test("the dock can move to the left edge and the choice persists", async ({ open, page }) => {

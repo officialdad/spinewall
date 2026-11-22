@@ -12,7 +12,8 @@ Headless Playwright tests for `theme/index.html`. They run the real page in Chro
 | `specs/picker.spec.mjs` | Windowed list, fuzzy search, kind filter, Alt+F favorite, variants, keyboard, `/models` retry when the server starts late. |
 | `specs/presets.spec.mjs` | Save, load, and delete a preset from the picker. Multi and single layouts. Reload keeps presets. |
 | `specs/dock.spec.mjs` | Editor dock. Grab, drag, and scale a character that sat under the old panel. Fold button, `P` key, focus, persistence, left edge, phone portrait and landscape, character rows of one model, black focus ring on a selected row. |
-| `specs/a11y.spec.mjs` | axe-core scan of the picker. Fails on serious or critical WCAG 2.2 AA violations, color contrast included. Console errors. |
+| `specs/oncanvas.spec.mjs` | Chip bar and on-canvas handle. The sheet starts folded, chips select, the handle follows a drag and a scale, previous/next animation, change model, remove, Add, Browse, `Esc`, keyboard operation, variant chips, portrait and landscape fit. |
+| `specs/a11y.spec.mjs` | axe-core scan of the picker, chip bar, and handle. Fails on serious or critical WCAG 2.2 AA violations, color contrast included. Console errors. |
 
 Models are synthetic. `lib/models.mjs` writes flat colored squares with a one-bone skeleton, so no game data is involved.
 

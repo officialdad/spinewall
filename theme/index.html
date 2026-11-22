@@ -19,18 +19,22 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #picker.on{display:flex}
 #picker h2{margin:0;font-size:16px;font-weight:700}
 /* The dock sits on one edge, and the stage shrinks into the free area so the dock never covers a character.
-   A portrait phone has no room beside the stage, so it docks at the bottom. */
+   The chip bar keeps the bottom edge, so the dock ends above it. A portrait phone has no room beside the
+   stage, so it docks at the bottom too. */
 :root{--gap-t:max(16px,env(safe-area-inset-top));--gap-b:max(16px,env(safe-area-inset-bottom));
-  --gap-l:max(16px,env(safe-area-inset-left));--gap-r:max(16px,env(safe-area-inset-right));--dock-h:min(60vh,calc(100vh - 96px));
+  --gap-l:max(16px,env(safe-area-inset-left));--gap-r:max(16px,env(safe-area-inset-right));
+  --bar-h:0px;--bar-gap:max(8px,env(safe-area-inset-bottom));--dock-h:min(56vh,calc(100vh - 160px));
   /* The Edit button of a local host sits top left, so a left dock starts below it. */
   --left-top:calc(var(--gap-t) + 56px)}
-#picker[data-dock="right"],#picker[data-dock="left"]{bottom:var(--gap-b);width:clamp(280px,24vw,440px)}
+/* The bar takes its edge only while several characters show it; one character keeps the full dock height. */
+html.bar-on{--bar-h:64px}
+#picker[data-dock="right"],#picker[data-dock="left"]{bottom:calc(var(--gap-b) + var(--bar-h));width:clamp(280px,24vw,440px)}
 #picker[data-dock="right"]{top:var(--gap-t);right:var(--gap-r)}
 #picker[data-dock="left"]{top:var(--left-top);left:var(--gap-l)}
-#picker[data-dock="bottom"]{left:var(--gap-l);right:var(--gap-r);bottom:max(8px,env(safe-area-inset-bottom));height:var(--dock-h)}
+#picker[data-dock="bottom"]{left:var(--gap-l);right:var(--gap-r);bottom:calc(var(--bar-gap) + var(--bar-h));height:var(--dock-h)}
 #picker[data-folded][data-dock="right"]{transform:translateX(calc(100% + var(--gap-r)))}
 #picker[data-folded][data-dock="left"]{transform:translateX(calc(-100% - var(--gap-l)))}
-#picker[data-folded][data-dock="bottom"]{transform:translateY(calc(100% + 16px))}
+#picker[data-folded][data-dock="bottom"]{transform:translateY(calc(100% + var(--bar-h) + 16px))}
 @media (prefers-reduced-motion:reduce){#picker{transition:none}}
 /* One fold button, always on screen. Open, it sits in the dock header. Folded, it keeps to the dock edge. */
 #dockFold{position:fixed;z-index:4;display:flex;align-items:center;justify-content:center;gap:6px;min-width:44px;min-height:44px;padding:4px 12px;
@@ -43,8 +47,8 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #dockFold[data-dock="right"][aria-expanded="false"]{right:var(--gap-r);top:var(--gap-t)}
 #dockFold[data-dock="left"]{top:calc(var(--left-top) + 14px);left:calc(var(--gap-l) + 14px)}
 #dockFold[data-dock="left"][aria-expanded="false"]{left:var(--gap-l);top:var(--left-top)}
-#dockFold[data-dock="bottom"]{right:calc(var(--gap-r) + 14px);bottom:calc(max(8px,env(safe-area-inset-bottom)) + var(--dock-h) - 58px)}
-#dockFold[data-dock="bottom"][aria-expanded="false"]{right:var(--gap-r);bottom:max(8px,env(safe-area-inset-bottom))}
+#dockFold[data-dock="bottom"]{right:calc(var(--gap-r) + 14px);bottom:calc(var(--bar-gap) + var(--bar-h) + var(--dock-h) - 58px)}
+#dockFold[data-dock="bottom"][aria-expanded="false"]{right:var(--gap-r);bottom:calc(var(--bar-gap) + var(--bar-h))}
 .dockhead{display:flex;align-items:center;gap:8px;flex:none;min-height:44px}
 .dockhead h2{flex:1;min-width:0}
 .dockhead button{flex:none;padding:4px 12px}
@@ -63,6 +67,50 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #editToggle[aria-pressed="true"]{background:#fff;color:#000;border-color:#fff}
 #editToggle{margin-left:env(safe-area-inset-left);margin-top:env(safe-area-inset-top)}
 #editToggle[hidden]{display:none}
+/* Option C keeps the common actions beside the character: a chip bar on the bottom edge and a handle
+   above the selected character. The dock opens only on request, so neither one has to cover the stage. */
+#bar{position:fixed;z-index:3;left:50%;bottom:var(--bar-gap);transform:translateX(-50%);box-sizing:border-box;
+  width:min(760px,calc(100vw - var(--gap-l) - var(--gap-r)));height:56px;display:flex;gap:6px;align-items:center;padding:6px;
+  background:#000;color:#fff;border:2px solid #fff;border-radius:8px;font:16px/1.4 system-ui,sans-serif}
+#bar[hidden]{display:none}
+#chips{display:flex;gap:6px;flex:1;min-width:0;overflow-x:auto;overscroll-behavior:contain;scrollbar-width:thin;
+  scrollbar-color:rgba(255,255,255,.6) transparent;padding:2px;touch-action:pan-x}
+#bar .chip{flex:none;display:flex;align-items:center;gap:6px;max-width:220px;min-height:44px;min-width:44px;
+  padding:2px 10px 2px 2px;overflow:hidden;font:inherit;color:#fff;background:#000;border:2px solid #767676;
+  border-radius:6px;box-sizing:border-box;cursor:pointer}
+#bar .chip:hover{border-color:#fff}
+#bar .chip[aria-pressed="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
+#bar .chip .av{flex:none;width:36px;height:36px;border-radius:50%;background:#2b2b2b;overflow:hidden}
+#bar .chip .av img{width:100%;height:100%;object-fit:cover;object-position:50% 10%;visibility:hidden}
+#bar .chip .av[data-ready] img{visibility:visible}
+#bar .chip .t{display:flex;flex-direction:column;min-width:0;line-height:1.2;text-align:left}
+#bar .chip .t b,#bar .chip .t .d{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bar .chip .t .d{font-size:12px;font-weight:400}
+#bar .chip:not([aria-pressed="true"]) .t .d{color:#cfcfcf}
+#bar>button{flex:none;min-height:44px;min-width:44px;padding:4px 12px;font:inherit;color:#fff;background:#000;
+  border:2px solid #767676;border-radius:6px;box-sizing:border-box;cursor:pointer}
+#bar>button:hover{border-color:#fff}
+#bar>button[aria-expanded="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
+#bar button:focus-visible,#handle button:focus-visible{outline:3px solid #ffd54a;outline-offset:2px}
+#bar .chip[aria-pressed="true"]:focus-visible,#bar>button[aria-expanded="true"]:focus-visible{outline-color:#000;outline-offset:-5px}
+#handle{position:fixed;z-index:3;display:flex;gap:4px;align-items:center;padding:4px;box-sizing:border-box;white-space:nowrap;
+  background:#000;color:#fff;border:2px solid #fff;border-radius:8px;font:16px/1.4 system-ui,sans-serif}
+#handle[hidden]{display:none}
+#handle .nm{font-size:14px;max-width:190px;overflow:hidden;text-overflow:ellipsis;padding:0 6px}
+#handle button{flex:none;width:44px;height:44px;padding:0;display:flex;align-items:center;justify-content:center;
+  font:inherit;color:#fff;background:#000;border:2px solid #767676;border-radius:6px;box-sizing:border-box;cursor:pointer}
+#handle button:hover{border-color:#fff}
+/* A phone has no width for three wide chips and the two buttons on one line. Chips take a row of their own,
+   and the long model name gives way to the position that tells two variants apart. */
+@media (max-width:560px){
+  #handle .nm{display:none}
+  #bar{height:auto;flex-wrap:wrap;row-gap:6px}
+  #chips{flex:1 0 100%}
+  #bar>button{flex:1}
+  #bar .chip{max-width:118px;padding:2px 6px 2px 2px}
+  #bar .chip .t b{font-size:14px}
+  #bar .chip .t .nm2,#bar .chip .t .sep{display:none}
+}
 #picker button,#picker select,#picker input{font:inherit;color:#fff;background:#000;border:2px solid #767676;border-radius:6px;box-sizing:border-box}
 #picker button,#picker select{cursor:pointer;min-height:44px}
 #picker button:hover,#picker select:hover{border-color:#fff}
@@ -260,6 +308,18 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 <nav id="picker" aria-label="Editor dock" data-dock="right"></nav>
 <button id="dockFold" type="button" aria-controls="picker" aria-expanded="true" aria-keyshortcuts="P" hidden></button>
 <button id="editToggle" type="button" aria-pressed="false" hidden>Edit</button>
+<div id="handle" role="toolbar" aria-label="Selected character" hidden>
+  <span class="nm" id="handleName"></span>
+  <button id="hPrev" type="button" aria-label="Previous animation" title="Previous animation">&#8249;</button>
+  <button id="hNext" type="button" aria-label="Next animation" title="Next animation">&#8250;</button>
+  <button id="hModel" type="button" aria-label="Change model" title="Change model">&#9998;</button>
+  <button id="hDel" type="button" aria-label="Remove character" title="Remove character">&#10005;</button>
+</div>
+<div id="bar" role="toolbar" aria-label="Edit toolbar" hidden>
+  <div id="chips" role="group" aria-label="Characters on screen"></div>
+  <button id="barAdd" type="button" aria-label="Add a character" title="Add another character">+ Add</button>
+  <button id="barBrowse" type="button" aria-label="Browse models and presets" aria-controls="picker" aria-expanded="false" title="Browse models and presets">Browse</button>
+</div>
 <script>
 const API = "http://127.0.0.1:8777";
 // Local mode runs without the Spinewall server. A host page sets `window.SPINEWALL_LOCAL = {modelsUrl}`,
@@ -461,12 +521,55 @@ const dockFold = document.getElementById("dockFold");
 dockFold.addEventListener("pointerup", () => { dragging = false; click = null; });
 picker.addEventListener("pointerup", () => { dragging = false; click = null; });
 
+// ---- Option C chrome: a chip bar and an on-canvas handle beside the selected character ----
+const handle = document.getElementById("handle");
+const handleName = document.getElementById("handleName");
+const bar = document.getElementById("bar");
+const chipsEl = document.getElementById("chips");
+const barAdd = document.getElementById("barAdd");
+const barBrowse = document.getElementById("barBrowse");
+
+// These controls float over the stage, so a press on them never reaches the drag and click handlers.
+[handle, bar].forEach(node => ["pointerdown", "pointerup", "pointermove", "wheel"]
+  .forEach(type => node.addEventListener(type, e => e.stopPropagation())));
+handle.addEventListener("pointerup", () => { dragging = false; click = null; });
+bar.addEventListener("pointerup", () => { dragging = false; click = null; });
+
+function stepSelectedAnim(step) {
+  const e = selectedChar();
+  if (e) cmd(`${step > 0 ? "next" : "prev"}-char-anim/${e.uid}`);
+}
+
+function removeSelected() {
+  const e = selectedChar();
+  if (!e) return;
+  cmd(`remove-character/${e.uid}`);
+}
+
+// The bar adds another instance of the character in hand, so a common action never needs the dock.
+function addCharacterLikeSelected() {
+  const e = selectedChar() || targetChar();
+  const id = e ? e.model : shownModel();
+  if (id) cmd(`add-character/${encodeURIComponent(id)}`);
+}
+
+document.getElementById("hPrev").addEventListener("click", () => stepSelectedAnim(-1));
+document.getElementById("hNext").addEventListener("click", () => stepSelectedAnim(1));
+document.getElementById("hModel").addEventListener("click", () => openSheet("models"));
+document.getElementById("hDel").addEventListener("click", removeSelected);
+barAdd.addEventListener("click", addCharacterLikeSelected);
+barBrowse.addEventListener("click", () => {
+  if (dockFolded()) openSheet(); else { setDockFolded(true); barBrowse.focus(); }
+});
+
 // ---- Editor dock: one edge of the window, folds away, and the stage fits the free area ----
 
 // The server owns the other prefs. Its prefs reject unknown keys, so server mode keeps the dock in the page's own storage.
 const DOCK_STORE = "spinewall.dock";
 const MIN_FREE_PX = 120;
 const DOCK_GAP_PX = 32, DOCK_BOTTOM_GAP_PX = 16;
+// A strip at the top of the free area holds the on-canvas handle, so the handle never sits on a character.
+const HANDLE_STRIP_PX = 64;
 function loadDockPrefs() {
   if (LOCAL) return;
   try {
@@ -484,18 +587,30 @@ function saveDockPrefs(patch) {
 const dockEdge = () => (innerWidth <= 600 && innerHeight > innerWidth ? "bottom" : prefs.dockSide);
 const dockFolded = () => !!prefs.dockFolded;
 
+// The bar is one row on a wide screen and two on a phone, so its height is measured, not assumed.
+function syncBarSpace() {
+  const on = bar && !bar.hidden;
+  document.documentElement.classList.toggle("bar-on", on);
+  document.documentElement.style.setProperty("--bar-h", on ? `${bar.offsetHeight + 8}px` : "0px");
+}
+
 // Fractions of the window are what the server stores, so the stage keeps its whole window and only shrinks to the free area.
+// The chip bar keeps the bottom edge even when the dock is folded, so it always takes its share first.
 function updateFit() {
   let s = 1, ox = 0, oy = 0;
-  if (editMode && ui && !dockFolded()) {
-    const edge = dockEdge();
-    let freeW = innerWidth, freeH = innerHeight, freeX = 0;
-    if (edge === "bottom") freeH -= picker.offsetHeight + DOCK_BOTTOM_GAP_PX;
-    else { const reserve = picker.offsetWidth + DOCK_GAP_PX; freeW -= reserve; if (edge === "left") freeX = reserve; }
+  if (editMode && ui) {
+    let freeW = innerWidth, freeH = innerHeight, freeX = 0, freeY = 0;
+    if (!bar.hidden) freeH -= bar.offsetHeight + DOCK_BOTTOM_GAP_PX;
+    if (multi) { freeH -= HANDLE_STRIP_PX; freeY = HANDLE_STRIP_PX; }
+    if (!dockFolded()) {
+      const edge = dockEdge();
+      if (edge === "bottom") freeH -= picker.offsetHeight + DOCK_BOTTOM_GAP_PX;
+      else { const reserve = picker.offsetWidth + DOCK_GAP_PX; freeW -= reserve; if (edge === "left") freeX = reserve; }
+    }
     if (freeW >= MIN_FREE_PX && freeH >= MIN_FREE_PX) {
       s = Math.min(freeW / innerWidth, freeH / innerHeight);
       ox = freeX + (freeW - innerWidth * s) / 2;
-      oy = (freeH - innerHeight * s) / 2;
+      oy = freeY + (freeH - innerHeight * s) / 2;
     }
   }
   fit = {s, ox, oy};
@@ -508,11 +623,13 @@ function updateFit() {
 const ARROWS = {right: ["\u25b8", "\u25c2"], left: ["\u25c2", "\u25b8"], bottom: ["\u25be", "\u25b4"]};
 function applyDock() {
   if (!ui) return;
+  syncBarSpace();
   const edge = dockEdge(), folded = dockFolded();
   picker.dataset.dock = edge;
   if (LOCAL) picker.dataset.local = "";
   picker.toggleAttribute("data-folded", folded);
   picker.inert = folded;
+  barBrowse.setAttribute("aria-expanded", String(!folded));
   dockFold.dataset.dock = edge;
   dockFold.hidden = !editMode;
   dockFold.setAttribute("aria-expanded", String(!folded));
@@ -533,7 +650,16 @@ function setDockFolded(folded) {
   applyDock();
   // A folded dock is inert, so focus would fall to the page. The fold button is the way back.
   if (folded && hadFocus) dockFold.focus();
-  else if (!folded && document.activeElement === dockFold) requestAnimationFrame(() => ui.search.focus());
+  else if (!folded && (document.activeElement === dockFold || document.activeElement === barBrowse))
+    requestAnimationFrame(() => ui.search.focus());
+}
+
+// The dock is the fuller sheet, so it opens only on request: Browse, P, or a handle action that needs a list.
+function openSheet(tab) {
+  if (!ui) return;
+  if (tab && ui.setTab) ui.setTab(tab);
+  setDockFolded(false);
+  requestAnimationFrame(() => ui.search.focus());
 }
 
 dockFold.addEventListener("click", () => setDockFolded(!dockFolded()));
@@ -544,6 +670,13 @@ addEventListener("keydown", e => {
   if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== "checkbox")) return;
   e.preventDefault();
   setDockFolded(!dockFolded());
+});
+// Esc closes the sheet. A field that handled Escape already (search, presets) keeps its own meaning.
+addEventListener("keydown", e => {
+  if (e.key !== "Escape" || !editMode || !ui || e.defaultPrevented || dockFolded()) return;
+  e.preventDefault();
+  setDockFolded(true);
+  (bar.hidden ? dockFold : barBrowse).focus();
 });
 addEventListener("resize", applyDock);
 
@@ -814,6 +947,7 @@ function ensureChrome() {
     scheduleRender();
     renderAnims();
   };
+  ui.setTab = setTab;
   tabModels.addEventListener("click", () => setTab("models"));
   tabAnims.addEventListener("click", () => setTab("anims"));
   setTab("models");
@@ -1137,6 +1271,7 @@ function renderPicker() {
   ui.sourceBtn.textContent = `Source: ${sources}`;
   ui.sourceBtn.title = ui.sourceBtn.textContent;
   renderChars();
+  renderBar();
   renderPresets();
   ui.sortSel.value = prefs.sort;
   ui.sortSel.disabled = !!query.trim();
@@ -1603,6 +1738,8 @@ function renderAnims() {
   }
   if (!rows.length) ui.animList.append(el("p", {className: "empty", textContent: names.length ? "No animations match." : "No animation list yet."}));
   ui.animList.scrollTop = scroll;
+  // The handle names the playing animation, so an auto-cycle step or a new model updates it too.
+  placeHandle();
 }
 
 // Thumbnails render one at a time. The newest request runs first, so rows scrolled into view
@@ -1792,14 +1929,23 @@ async function setEditMode(on) {
   editMode = on;
   picker.classList.toggle("on", on);
   editToggle.setAttribute("aria-pressed", String(on));
-  if (!on) { endPreview(); dockFold.hidden = true; updateFit(); return; }
+  if (!on) { endPreview(); dockFold.hidden = true; bar.hidden = true; handle.hidden = true; updateFit(); return; }
   try { setModels(await (await api("/rescan")).json()); } catch (e) {}
   await refreshPrefs();
   loadDockPrefs();
+  // With several characters the handle and chip bar carry the common actions, so the sheet waits for a
+  // request. One character keeps the full dock, which is then the only editor.
+  if (multi) {
+    if (!selectedChar()) selectedUid = layout[layout.length - 1].uid;
+    prefs.dockFolded = true;
+  }
   renderPicker();
   applyDock();
-  // Typing searches at once, with no click first. Focus waits for the panel to become visible.
-  requestAnimationFrame(() => ui.search.focus());
+  // Typing searches at once when the dock is open. A folded sheet has no fields, so the way back takes focus.
+  requestAnimationFrame(() => {
+    if (dockFolded()) (bar.hidden ? dockFold : barBrowse).focus();
+    else ui.search.focus();
+  });
 }
 
 // Counting keys shows whether Plasma gives the wallpaper page keyboard focus. Search depends on it.
@@ -1966,7 +2112,7 @@ async function createStageChar(entry) {
   notice("");
   setCharAnimation(c, want.animation);
   post("/report", {model: model.id, animations: loaded.names});
-  if (editMode) { renderChars(); renderAnims(); }
+  if (editMode) { renderChars(); renderBar(); renderAnims(); placeSelbox(); }
 }
 
 function setCharAnimation(c, requested) {
@@ -2138,11 +2284,12 @@ function selectChar(uid) {
 function placeSelbox() {
   const e = selectedChar();
   const c = e && stageChars.get(e.uid);
-  if (!multi || !editMode || !c) { selbox.style.display = "none"; return; }
+  if (!multi || !editMode || !c) { selbox.style.display = "none"; placeHandle(); return; }
   const k = fitScale(c, e);
   const w = c.frame.w * k, h = c.frame.h * k;
   Object.assign(selbox.style, {display: "block", left: `${fit.ox + (screenX(e) - w / 2) * fit.s}px`, top: `${fit.oy + (screenY(e) - h / 2) * fit.s}px`,
     width: `${w * fit.s}px`, height: `${h * fit.s}px`});
+  placeHandle();
 }
 
 let layoutTimer = null;
@@ -2189,10 +2336,14 @@ function applyCharacters(list) {
     layersEl.style.display = "none";
     document.getElementById("stage").style.display = "";
     selectedUid = null;
+    // One character left means the dock is the only editor, so it takes over again.
+    if (editMode && ui && dockFolded()) setDockFolded(false);
   }
   const added = list.filter(e => !known.has(e.uid));
   if (multi && added.length) selectedUid = added[added.length - 1].uid;
-  if (!selectedChar()) selectedUid = null;
+  // Edit mode keeps a character in hand, so the handle always has something to act on.
+  if (!selectedChar() && multi && editMode) selectedUid = list[list.length - 1].uid;
+  else if (!selectedChar()) selectedUid = null;
   for (const [uid, c] of stageChars) {
     const e = desired.get(uid);
     if (!e || e.model !== c.modelId) stageChars.delete(uid);
@@ -2202,7 +2353,11 @@ function applyCharacters(list) {
   for (const e of list) if (!stageChars.has(e.uid)) createStageChar(e);
   if (multi && !stageRaf) stageRaf = requestAnimationFrame(stageFrame);
   placeSelbox();
-  if (ui) { renderChars(); if (editMode) { renderPicker(); renderAnims(); } }
+  if (ui) {
+    renderChars();
+    renderBar();
+    if (editMode) { renderPicker(); renderAnims(); updateFit(); }
+  }
 }
 
 addEventListener("resize", () => {
@@ -2238,6 +2393,96 @@ function setAuto(e, on) {
   const word = on ? "on" : "off";
   if (e) { e.auto = on; cmd(`auto-cycle/${e.uid}/${word}`); }
   else { state.auto = on; cmd(`auto-cycle/${word}`); }
+}
+
+// One chip per character, in z order. Rebuilding keeps a focused chip focused, so a poll or a select never
+// drops a keyboard user back to the top of the page. The bar scrolls a newly selected chip into view,
+// which matters on a phone where three chips cannot all fit.
+let barSelected = null;
+function renderBar() {
+  if (!ui) return;
+  const show = editMode && multi;
+  const selectedChanged = selectedUid !== barSelected;
+  barSelected = show ? selectedUid : null;
+  const hadFocus = bar.contains(document.activeElement) || handle.contains(document.activeElement);
+  bar.hidden = !show;
+  syncBarSpace();
+  if (!show) {
+    handle.hidden = true;
+    // Hiding the focused control would drop focus to the page, so it moves to what replaces the bar.
+    if (hadFocus && editMode) (dockFolded() ? dockFold : ui.search).focus();
+    return;
+  }
+  const focused = chipsEl.contains(document.activeElement) ? document.activeElement.dataset.uid : null;
+  const n = layout.length;
+  chipsEl.replaceChildren(...layout.map((e, i) => {
+    const m = models.find(x => x.id === e.model);
+    const name = m ? m.name : e.model;
+    // A model that never named its character carries its id in that field, so it is no character label.
+    const character = m && m.character !== m.id && m.character !== name ? m.character : "";
+    const img = el("img", {alt: ""});
+    const av = el("span", {className: "av"}, img);
+    if (m) wantThumb(m, url => {
+      if (!url) return;
+      img.onload = () => av.setAttribute("data-ready", "");
+      img.src = url;
+    });
+    const detail = el("span", {className: "d"});
+    if (character) detail.append(el("span", {className: "nm2", textContent: name}), el("span", {className: "sep", textContent: " \u00b7 "}));
+    if (n > 1) detail.append(el("span", {textContent: `${i + 1} of ${n}`}));
+    const chip = el("button", {type: "button", className: "chip", title: `${name}${character ? `, ${character}` : ""}${n > 1 ? `, ${i + 1} of ${n}` : ""}`},
+      av, el("span", {className: "t"}, el("b", {textContent: character || name}), " ", detail));
+    chip.dataset.uid = e.uid;
+    chip.setAttribute("aria-pressed", String(e.uid === selectedUid));
+    chip.setAttribute("aria-label", `Select ${name}${character ? `, ${character}` : ""}${n > 1 ? `, ${i + 1} of ${n}` : ""}`);
+    chip.addEventListener("click", () => selectChar(e.uid));
+    return chip;
+  }));
+  if (focused) {
+    const again = [...chipsEl.children].find(c => c.dataset.uid === focused);
+    if (again) again.focus();
+  }
+  if (selectedChanged) {
+    const current = chipsEl.querySelector('[aria-pressed="true"]');
+    if (current) current.scrollIntoView({block: "nearest", inline: "nearest"});
+  }
+}
+
+// The handle sits above the selected character, never inside it. When the top of the stage is too close,
+// it flips below the character instead. Either way it stays on screen.
+function placeHandle() {
+  const e = multi && selectedChar();
+  const c = e && stageChars.get(e.uid);
+  if (!editMode || !c || bar.hidden) { handle.hidden = true; return; }
+  const k = fitScale(c, e);
+  // `w0` is in window pixels before the stage fit, the same unit `placeSelbox` uses for its own width.
+  const w0 = c.frame.w * k, h0 = c.frame.h * k;
+  const w = w0 * fit.s, h = h0 * fit.s;
+  const left = fit.ox + (screenX(e) - w0 / 2) * fit.s;
+  const top = fit.oy + (screenY(e) - h0 / 2) * fit.s;
+  const name = c.model ? c.model.name : e.model;
+  const anim = c.animName || c.requested || "";
+  handleName.textContent = anim ? `${name} \u00b7 ${anim}` : name;
+  handle.hidden = false;
+  const hw = handle.offsetWidth, hh = handle.offsetHeight;
+  // The handle stays over the stage, never on the dock beside it.
+  const stageL = fit.ox, stageR = fit.ox + innerWidth * fit.s;
+  const minX = stageL + hw / 2 + 4, maxX = stageR - hw / 2 - 4;
+  const x = maxX >= minX
+    ? Math.min(Math.max(left + w / 2, minX), maxX)
+    : Math.min(Math.max(left + w / 2, 8 + hw / 2), Math.max(8 + hw / 2, innerWidth - 8 - hw / 2));
+  // The bar owns the bottom edge, so the handle stays above it. Below the character only when it fits there.
+  const limit = innerHeight - 8 - (bar.hidden ? 0 : bar.offsetHeight + DOCK_BOTTOM_GAP_PX);
+  let y = top - 6, below = false;
+  if (y - hh < 2) {
+    const belowTop = top + h + 6;
+    if (belowTop + hh <= limit) { y = belowTop; below = true; }
+    else y = Math.max(8 + hh, y);
+  }
+  if (below) y = Math.min(y, limit - hh); else y = Math.min(y, limit);
+  handle.style.left = `${x}px`;
+  handle.style.top = `${y}px`;
+  handle.style.transform = below ? "translate(-50%,0)" : "translate(-50%,-100%)";
 }
 
 function renderChars() {
@@ -2337,14 +2582,15 @@ function load(modelId, animation) {
 async function poll() {
   try {
     const s = await (await api("/state")).json();
-    setEditMode(!!s.edit);
-    const preset = s.preset || null;
-    if (preset !== lastPreset) { lastPreset = preset; if (editMode && ui) renderPresets(); }
-    // A drag in progress owns the layout, so a server copy waits until the push has landed.
+    // The layout lands first, so entering edit mode already knows whether several characters need the
+    // handle and chip bar or one character needs the full dock.
     if (s.crev !== crev && !dragging && !layoutPending) {
       crev = s.crev;
       applyCharacters(Array.isArray(s.characters) ? s.characters : []);
     }
+    setEditMode(!!s.edit);
+    const preset = s.preset || null;
+    if (preset !== lastPreset) { lastPreset = preset; if (editMode && ui) renderPresets(); }
     // The revision is kept apart from `state`, which is replaced whole. A change that lands mid-drag or
     // while a push waits stays unseen until it can apply.
     if (s.vrev !== viewRev && !dragging && !viewPending) {
