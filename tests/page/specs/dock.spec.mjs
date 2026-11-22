@@ -48,9 +48,11 @@ test("a dragged character follows the pointer one to one while the dock is open"
   await page.mouse.down();
   await page.mouse.move(px - 80, py, { steps: 8 });
   await page.mouse.up();
-  await expect.poll(async () => (await chars())[0].x).toBeLessThan(UNDER_OLD_PANEL);
-  const [after] = await where(page, (await chars())[0].x, 0);
-  expect(Math.abs(after - (px - 80))).toBeLessThan(3);
+  // A slow runner sends the layout in several debounced posts, so wait for the last one instead of the first.
+  await expect.poll(async () => {
+    const [after] = await where(page, (await chars())[0].x, 0);
+    return Math.abs(after - (px - 80));
+  }).toBeLessThan(3);
 });
 
 test("the wheel scales a character anywhere on the stage", async ({ open, page }) => {
