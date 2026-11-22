@@ -544,7 +544,6 @@ function removeSelected() {
   const e = selectedChar();
   if (!e) return;
   cmd(`remove-character/${e.uid}`);
-  barBrowse.focus();
 }
 
 // The bar adds another instance of the character in hand, so a common action never needs the dock.
@@ -2405,9 +2404,15 @@ function renderBar() {
   const show = editMode && multi;
   const selectedChanged = selectedUid !== barSelected;
   barSelected = show ? selectedUid : null;
+  const hadFocus = bar.contains(document.activeElement) || handle.contains(document.activeElement);
   bar.hidden = !show;
   syncBarSpace();
-  if (!show) { handle.hidden = true; return; }
+  if (!show) {
+    handle.hidden = true;
+    // Hiding the focused control would drop focus to the page, so it moves to what replaces the bar.
+    if (hadFocus && editMode) (dockFolded() ? dockFold : ui.search).focus();
+    return;
+  }
   const focused = chipsEl.contains(document.activeElement) ? document.activeElement.dataset.uid : null;
   const n = layout.length;
   chipsEl.replaceChildren(...layout.map((e, i) => {
