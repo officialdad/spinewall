@@ -260,7 +260,7 @@ def main():
         [options.python, "-I", "-B", options.python_server],
         py_state, options.models_dir, py_port, os.path.join(work, "python.log"),
     )
-    go_server = Server([options.go_bin, "serve"], go_state, options.models_dir, go_port, os.path.join(work, "go.log"))
+    go_server = Server([os.path.abspath(options.go_bin), "serve"], go_state, options.models_dir, go_port, os.path.join(work, "go.log"))
 
     failures = []
     try:
