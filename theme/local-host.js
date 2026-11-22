@@ -115,11 +115,13 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
     return presets;
   };
 
-  const prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true, presets: []};
+  const prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true, presets: [], dockFolded: false, dockSide: "right"};
   const sp = saved.prefs || {};
   for (const key of ["favorites", "recent"]) if (Array.isArray(sp[key])) prefs[key] = sp[key].filter(i => typeof i === "string");
   for (const [key, choices] of Object.entries(PREF_CHOICES)) if (choices.includes(sp[key])) prefs[key] = sp[key];
   if (typeof sp.variants === "boolean") prefs.variants = sp.variants;
+  if (typeof sp.dockFolded === "boolean") prefs.dockFolded = sp.dockFolded;
+  if (["left", "right"].includes(sp.dockSide)) prefs.dockSide = sp.dockSide;
   prefs.presets = cleanPresets(sp.presets);
 
   const setCharacters = chars => { state.characters = chars; state.crev++; persist(); };
@@ -370,6 +372,9 @@ window.createLocalHost = function createLocalHost({models: list, runtimeVersion,
       let changed = false;
       for (const [key, choices] of Object.entries(PREF_CHOICES)) if (choices.includes(body[key])) { prefs[key] = body[key]; changed = true; }
       if (typeof body.variants === "boolean") { prefs.variants = body.variants; changed = true; }
+      // The dock is page chrome, so only the local host stores it. The server rejects these keys and the page keeps them in its own storage.
+      if (typeof body.dockFolded === "boolean") { prefs.dockFolded = body.dockFolded; changed = true; }
+      if (["left", "right"].includes(body.dockSide)) { prefs.dockSide = body.dockSide; changed = true; }
       if (!changed) return json({error: "bad prefs"}, 400);
       persist();
       return json(prefs);

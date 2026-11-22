@@ -8,14 +8,50 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 .spine-player-controls{display:none!important}
 .spine-player,.spine-player-canvas{width:100%;height:100%;display:block}
 #layers{position:absolute;inset:0;pointer-events:none}
+/* The dock shrinks the whole stage uniformly, so positions stay fractions of the real window and the preview matches the wallpaper. */
+#stage,#layers{transform-origin:0 0}
 #layers canvas{position:absolute;inset:0;width:100%;height:100%}
 #selbox{position:fixed;display:none;box-sizing:border-box;border:3px dashed #ffd54a;pointer-events:none;z-index:2}
-#picker{position:fixed;z-index:3;top:16px;right:16px;bottom:16px;width:clamp(280px,24vw,440px);box-sizing:border-box;padding:12px;
-  display:none;flex-direction:column;gap:8px;
+#picker{position:fixed;z-index:3;box-sizing:border-box;padding:12px;display:none;
+  flex-direction:column;gap:8px;
   background:#000;color:#fff;border:2px solid #fff;border-radius:8px;
-  font:16px/1.4 system-ui,sans-serif}
+  font:16px/1.4 system-ui,sans-serif;transition:transform .18s ease}
 #picker.on{display:flex}
 #picker h2{margin:0;font-size:16px;font-weight:700}
+/* The dock sits on one edge, and the stage shrinks into the free area so the dock never covers a character.
+   A portrait phone has no room beside the stage, so it docks at the bottom. */
+:root{--gap-t:max(16px,env(safe-area-inset-top));--gap-b:max(16px,env(safe-area-inset-bottom));
+  --gap-l:max(16px,env(safe-area-inset-left));--gap-r:max(16px,env(safe-area-inset-right));--dock-h:min(60vh,calc(100vh - 96px));
+  /* The Edit button of a local host sits top left, so a left dock starts below it. */
+  --left-top:calc(var(--gap-t) + 56px)}
+#picker[data-dock="right"],#picker[data-dock="left"]{bottom:var(--gap-b);width:clamp(280px,24vw,440px)}
+#picker[data-dock="right"]{top:var(--gap-t);right:var(--gap-r)}
+#picker[data-dock="left"]{top:var(--left-top);left:var(--gap-l)}
+#picker[data-dock="bottom"]{left:var(--gap-l);right:var(--gap-r);bottom:max(8px,env(safe-area-inset-bottom));height:var(--dock-h)}
+#picker[data-folded][data-dock="right"]{transform:translateX(calc(100% + var(--gap-r)))}
+#picker[data-folded][data-dock="left"]{transform:translateX(calc(-100% - var(--gap-l)))}
+#picker[data-folded][data-dock="bottom"]{transform:translateY(calc(100% + 16px))}
+@media (prefers-reduced-motion:reduce){#picker{transition:none}}
+/* One fold button, always on screen. Open, it sits in the dock header. Folded, it keeps to the dock edge. */
+#dockFold{position:fixed;z-index:4;display:flex;align-items:center;justify-content:center;gap:6px;min-width:44px;min-height:44px;padding:4px 12px;
+  box-sizing:border-box;cursor:pointer;font:700 14px/1 system-ui,sans-serif;color:#fff;background:#000;border:2px solid #767676;border-radius:6px}
+#dockFold:hover{border-color:#fff}
+#dockFold[hidden]{display:none}
+#dockFold .arrow{font-size:18px;line-height:1}
+#dockFold[aria-expanded="true"] .label{display:none}
+#dockFold[data-dock="right"]{top:calc(var(--gap-t) + 14px);right:calc(var(--gap-r) + 14px)}
+#dockFold[data-dock="right"][aria-expanded="false"]{right:var(--gap-r);top:var(--gap-t)}
+#dockFold[data-dock="left"]{top:calc(var(--left-top) + 14px);left:calc(var(--gap-l) + 14px)}
+#dockFold[data-dock="left"][aria-expanded="false"]{left:var(--gap-l);top:var(--left-top)}
+#dockFold[data-dock="bottom"]{right:calc(var(--gap-r) + 14px);bottom:calc(max(8px,env(safe-area-inset-bottom)) + var(--dock-h) - 58px)}
+#dockFold[data-dock="bottom"][aria-expanded="false"]{right:var(--gap-r);bottom:max(8px,env(safe-area-inset-bottom))}
+.dockhead{display:flex;align-items:center;gap:8px;flex:none;min-height:44px}
+.dockhead h2{flex:1;min-width:0}
+.dockhead button{flex:none;padding:4px 12px}
+.dockhead button[hidden]{display:none}
+#picker[data-dock="right"] .dockhead{padding-right:56px}
+#picker[data-dock="bottom"] .dockhead{padding-right:56px}
+#picker[data-dock="left"] .dockhead{padding-left:56px}
 #picker .empty{margin:0;padding:8px 0}
 #notice{position:fixed;left:16px;bottom:16px;z-index:4;max-width:min(560px,calc(100vw - 32px));padding:8px 12px;box-sizing:border-box;
   background:#000;color:#fff;border:2px solid #ffd54a;border-radius:8px;font:16px/1.4 system-ui,sans-serif}
@@ -25,11 +61,15 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #editToggle:hover{border-color:#fff}
 #editToggle:focus-visible{outline:3px solid #ffd54a;outline-offset:2px}
 #editToggle[aria-pressed="true"]{background:#fff;color:#000;border-color:#fff}
+#editToggle{margin-left:env(safe-area-inset-left);margin-top:env(safe-area-inset-top)}
 #editToggle[hidden]{display:none}
 #picker button,#picker select,#picker input{font:inherit;color:#fff;background:#000;border:2px solid #767676;border-radius:6px;box-sizing:border-box}
 #picker button,#picker select{cursor:pointer;min-height:44px}
 #picker button:hover,#picker select:hover{border-color:#fff}
-#picker :focus-visible{outline:3px solid #ffd54a;outline-offset:2px}
+#picker :focus-visible,#dockFold:focus-visible{outline:3px solid #ffd54a;outline-offset:2px}
+/* Yellow on a white fill is about 1.4:1. A selected control is white, so its ring turns black and sits inside the fill. */
+#picker [aria-pressed="true"]:focus-visible,#picker [aria-current="true"]:focus-visible,#editToggle[aria-pressed="true"]:focus-visible,
+#picker [aria-expanded="true"]#presets-toggle:focus-visible{outline-color:#000;outline-offset:-5px}
 #picker input{min-height:44px;padding:4px 12px;width:100%}
 #picker input::placeholder{color:#cfcfcf}
 #picker button[aria-pressed="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
@@ -82,13 +122,22 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 .pmanage>*{flex:1;min-width:0;padding:4px 8px}
 #presetlist .pmanage button.armed{background:#ffd54a;color:#000;border-color:#ffd54a;font-weight:700}
 #chars-pane [hidden]{display:none}
-.charhead{display:flex;align-items:center;gap:8px}
-.charhead h2{flex:1;min-width:0}
+#picker .row[aria-label="Model kind"]>button{font-size:14px;padding:4px 2px}
+.charhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.charhead h2{flex:1 0 max-content}
 .charhead button{flex:none;padding:4px 12px}
-#chars{display:flex;flex-direction:column;gap:6px;max-height:144px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.6) transparent}
+#chars{display:flex;flex-direction:column;gap:6px;max-height:min(30vh,208px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.6) transparent}
 .charrow{display:flex;gap:6px;flex:none}
-.charrow .sel{flex:1;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 12px}
-.charrow .rm{flex:none;width:44px;padding:0;font-size:18px}
+.charrow .sel{flex:1;min-width:0;display:flex;align-items:center;gap:8px;text-align:left;padding:4px 8px;min-height:48px}
+.charrow .sel .cth{flex:none;position:relative;width:36px;height:36px;border-radius:50%;background:#2b2b2b;overflow:hidden}
+.charrow .sel .cth img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 12%;visibility:hidden}
+.charrow .sel .cth[data-ready] img{visibility:visible}
+.charrow .sel .ctxt{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.charrow .sel .cname,.charrow .sel .cmeta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.charrow .sel .cmeta{font-size:13px;font-weight:400}
+#picker .charrow .sel:not([aria-pressed="true"]) .cmeta{color:#cfcfcf}
+/* A selected row is white, so the character it moves is also marked on the stage by the dashed box. */
+.charrow .rm{flex:none;width:48px;padding:0;font-size:18px}
 .autolabel{display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;cursor:pointer}
 .charrow .autolabel{flex:none;padding:0 8px;border:2px solid #767676;border-radius:6px}
 .charrow .autolabel:hover{border-color:#fff}
@@ -129,6 +178,7 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 /* The dark ring keeps the yellow outline at 3:1 or better on the white playing row. */
 .sec{display:contents}
 .cell.holds.active{box-shadow:inset 0 0 0 3px #000,inset 6px 0 0 #fff}
+.cell[aria-current="true"].active{outline-color:#000;box-shadow:none}
 .cell.list.holds{padding-left:16px}
 .cell[aria-current="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700}
 .cell.list{display:flex;align-items:center;gap:12px;padding:6px 52px 6px 6px}
@@ -179,12 +229,25 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 #anims button{position:relative;min-height:44px;padding:4px 12px;text-align:left;flex:none}
 #anims button[aria-current="true"]{background:#fff;color:#000;border-color:#fff;font-weight:700;padding-right:32px}
 #anims button[aria-current="true"]::after{content:"\2713";position:absolute;right:12px}
-@media (max-height:719px){
+/* Short windows and the bottom dock have no room for models and animations together, so they take turns behind two tabs. */
+@media (max-height:779px){
   .tabs{display:flex}
   .pane>h2{display:none}
   #picker[data-tab="models"] #anims-pane,#picker[data-tab="anims"] #models-pane,#picker[data-tab="anims"] #chars-pane,#picker[data-tab="anims"] #presets-pane{display:none}
   #anims-pane{max-height:none;flex:1;border-top:0;padding-top:0}
+  #chars{max-height:min(24vh,162px)}
 }
+#picker[data-dock="bottom"] .tabs{display:flex}
+#picker[data-dock="bottom"] .pane>h2{display:none}
+#picker[data-dock="bottom"][data-tab="models"] #anims-pane,#picker[data-dock="bottom"][data-tab="anims"] #models-pane,
+#picker[data-dock="bottom"][data-tab="anims"] #chars-pane,#picker[data-dock="bottom"][data-tab="anims"] #presets-pane{display:none}
+#picker[data-dock="bottom"] #anims-pane{max-height:none;flex:1;border-top:0;padding-top:0}
+#picker[data-dock="bottom"] #chars{max-height:min(24vh,162px)}
+#chars-pane,#presets-pane{flex-shrink:0}
+/* When the panes cannot all fit, the dock scrolls as a whole instead of squeezing the model list to nothing. */
+#picker{overflow-y:auto;overscroll-behavior:contain}
+#models-pane{min-height:min(260px,60%);flex-shrink:0}
+#picker[data-presets="open"] #presets-pane{min-height:320px}
 </style>
 <script src="spine-player40.js"></script>
 <script src="spine-player41.js"></script>
@@ -194,7 +257,8 @@ html,body{touch-action:none;margin:0;width:100%;height:100%;background:#000;over
 <script src="local-host.js"></script>
 </head><body><div id="stage"><div id="p"></div></div><div id="layers"></div><div id="selbox"></div>
 <div id="notice" role="status" hidden></div>
-<nav id="picker" aria-label="Model picker"></nav>
+<nav id="picker" aria-label="Editor dock" data-dock="right"></nav>
+<button id="dockFold" type="button" aria-controls="picker" aria-expanded="true" aria-keyshortcuts="P" hidden></button>
 <button id="editToggle" type="button" aria-pressed="false" hidden>Edit</button>
 <script>
 const API = "http://127.0.0.1:8777";
@@ -246,6 +310,8 @@ let presetThumbCancels = [], presetObserver = null;
 const PRESET_AVATARS = 3;
 let editMode = false, dragging = false, click = null;
 let view = {scale: 1, x: 0, y: 0}, viewRev = -1;
+// The dock shrinks the stage into the free area. `fit` maps a window point back to stage coordinates, so every position stays a fraction of the real window.
+let fit = {s: 1, ox: 0, oy: 0};
 const emptyCounts = () => ({wheel: 0, pointerdown: 0, pointermove: 0, pointerup: 0, fired: 0, keydown: 0});
 let counts = emptyCounts();
 
@@ -368,11 +434,11 @@ addEventListener("pointermove", e => {
   if (!dragging || !editMode) return;
   if (multi) {
     const c = selectedChar();
-    if (c) { c.x += e.movementX / innerWidth; c.y += e.movementY / innerHeight; layoutMoved(); }
+    if (c) { c.x += e.movementX / (innerWidth * fit.s); c.y += e.movementY / (innerHeight * fit.s); layoutMoved(); }
     return;
   }
-  view.x += e.movementX / innerWidth;
-  view.y += e.movementY / innerHeight;
+  view.x += e.movementX / (innerWidth * fit.s);
+  view.y += e.movementY / (innerHeight * fit.s);
   applyView(); pushView();
 });
 
@@ -387,9 +453,99 @@ if (LOCAL) {
 }
 
 // Edit mode owns drag and wheel on the window, so the panel must keep its events to itself.
-["pointerdown", "pointerup", "pointermove", "wheel"].forEach(type =>
-  picker.addEventListener(type, e => e.stopPropagation()));
+const dockFold = document.getElementById("dockFold");
+["pointerdown", "pointerup", "pointermove", "wheel"].forEach(type => {
+  picker.addEventListener(type, e => e.stopPropagation());
+  dockFold.addEventListener(type, e => e.stopPropagation());
+});
+dockFold.addEventListener("pointerup", () => { dragging = false; click = null; });
 picker.addEventListener("pointerup", () => { dragging = false; click = null; });
+
+// ---- Editor dock: one edge of the window, folds away, and the stage fits the free area ----
+
+// The server owns the other prefs. Its prefs reject unknown keys, so server mode keeps the dock in the page's own storage.
+const DOCK_STORE = "spinewall.dock";
+const MIN_FREE_PX = 120;
+const DOCK_GAP_PX = 32, DOCK_BOTTOM_GAP_PX = 16;
+function loadDockPrefs() {
+  if (LOCAL) return;
+  try {
+    const saved = JSON.parse(localStorage.getItem(DOCK_STORE) || "{}");
+    if (typeof saved.dockFolded === "boolean") prefs.dockFolded = saved.dockFolded;
+    if (saved.dockSide === "left" || saved.dockSide === "right") prefs.dockSide = saved.dockSide;
+  } catch (e) {}
+}
+function saveDockPrefs(patch) {
+  Object.assign(prefs, patch);
+  if (LOCAL) { post("/prefs", patch); return; }
+  try { localStorage.setItem(DOCK_STORE, JSON.stringify({dockFolded: prefs.dockFolded, dockSide: prefs.dockSide})); } catch (e) {}
+}
+// A portrait phone has no room beside the stage, so the dock takes the bottom edge there.
+const dockEdge = () => (innerWidth <= 600 && innerHeight > innerWidth ? "bottom" : prefs.dockSide);
+const dockFolded = () => !!prefs.dockFolded;
+
+// Fractions of the window are what the server stores, so the stage keeps its whole window and only shrinks to the free area.
+function updateFit() {
+  let s = 1, ox = 0, oy = 0;
+  if (editMode && ui && !dockFolded()) {
+    const edge = dockEdge();
+    let freeW = innerWidth, freeH = innerHeight, freeX = 0;
+    if (edge === "bottom") freeH -= picker.offsetHeight + DOCK_BOTTOM_GAP_PX;
+    else { const reserve = picker.offsetWidth + DOCK_GAP_PX; freeW -= reserve; if (edge === "left") freeX = reserve; }
+    if (freeW >= MIN_FREE_PX && freeH >= MIN_FREE_PX) {
+      s = Math.min(freeW / innerWidth, freeH / innerHeight);
+      ox = freeX + (freeW - innerWidth * s) / 2;
+      oy = (freeH - innerHeight * s) / 2;
+    }
+  }
+  fit = {s, ox, oy};
+  const css = s === 1 && !ox && !oy ? "" : `translate(${ox}px, ${oy}px) scale(${s})`;
+  document.getElementById("stage").style.transform = css;
+  layersEl.style.transform = css;
+  placeSelbox();
+}
+
+const ARROWS = {right: ["\u25b8", "\u25c2"], left: ["\u25c2", "\u25b8"], bottom: ["\u25be", "\u25b4"]};
+function applyDock() {
+  if (!ui) return;
+  const edge = dockEdge(), folded = dockFolded();
+  picker.dataset.dock = edge;
+  if (LOCAL) picker.dataset.local = "";
+  picker.toggleAttribute("data-folded", folded);
+  picker.inert = folded;
+  dockFold.dataset.dock = edge;
+  dockFold.hidden = !editMode;
+  dockFold.setAttribute("aria-expanded", String(!folded));
+  dockFold.setAttribute("aria-label", folded ? "Show editor" : "Fold editor");
+  dockFold.title = `${folded ? "Show" : "Fold"} the editor (P)`;
+  dockFold.replaceChildren(el("span", {className: "label", textContent: "Editor"}), el("span", {className: "arrow", textContent: ARROWS[edge][folded ? 1 : 0]}));
+  dockFold.lastChild.setAttribute("aria-hidden", "true");
+  ui.sideBtn.hidden = edge === "bottom";
+  const other = prefs.dockSide === "right" ? "left" : "right";
+  ui.sideBtn.setAttribute("aria-label", `Dock on the ${other}`);
+  ui.sideBtn.title = `Move the editor to the ${other} edge`;
+  updateFit();
+}
+
+function setDockFolded(folded) {
+  const hadFocus = picker.contains(document.activeElement);
+  saveDockPrefs({dockFolded: folded});
+  applyDock();
+  // A folded dock is inert, so focus would fall to the page. The fold button is the way back.
+  if (folded && hadFocus) dockFold.focus();
+  else if (!folded && document.activeElement === dockFold) requestAnimationFrame(() => ui.search.focus());
+}
+
+dockFold.addEventListener("click", () => setDockFolded(!dockFolded()));
+// P folds the dock. Typing in a field keeps its letters.
+addEventListener("keydown", e => {
+  if (!editMode || !ui || e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== "p") return;
+  const t = document.activeElement;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== "checkbox")) return;
+  e.preventDefault();
+  setDockFolded(!dockFolded());
+});
+addEventListener("resize", applyDock);
 
 const NO_GROUP = "Other";
 const RECENT_SHOWN = 6;
@@ -397,7 +553,7 @@ const KINDS = [["character", "Characters"], ["scene", "Scenes"], ["all", "All"]]
 const groupOf = m => m.group || NO_GROUP;
 
 // Favorites, recents, layout, and sort live on the server so a plasmashell restart keeps them.
-let prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true, presets: []};
+let prefs = {favorites: [], recent: [], layout: "grid", sort: "name", kind: "character", variants: true, presets: [], dockFolded: false, dockSide: "right"};
 let query = "";
 let sourceSel = new Set();
 let expanded = new Set();
@@ -615,9 +771,12 @@ function ensureChrome() {
   const tabModels = el("button", {type: "button", textContent: "Models"});
   const tabAnims = el("button", {type: "button", textContent: "Animations"});
   const tabs = el("div", {className: "tabs"}, tabModels, tabAnims);
-  picker.replaceChildren(tabs, charsPane, presetsPane, modelsPane, animsPane);
+  const sideBtn = el("button", {type: "button", textContent: "\u21c4"});
+  const dockHead = el("div", {className: "dockhead"}, el("h2", {textContent: "Editor"}), sideBtn);
+  sideBtn.addEventListener("click", () => { saveDockPrefs({dockSide: prefs.dockSide === "right" ? "left" : "right"}); applyDock(); });
+  picker.replaceChildren(dockHead, tabs, charsPane, presetsPane, modelsPane, animsPane);
   picker.dataset.tab = "models";
-  ui = {kindBtns, search, sourceBtn, menu, sortSel, gridBtn, listBtn, varBtn, list, spacer, rail, bubble, listbox, empty,
+  ui = {sideBtn, kindBtns, search, sourceBtn, menu, sortSel, gridBtn, listBtn, varBtn, list, spacer, rail, bubble, listbox, empty,
         animGroupSel, animList, charsTitle, charsWarn, charsList, autoBox,
         presetList, presetNone, presetName, presetNote, presetSearch, presetCount, presetsPane, presetsBtn};
   addBtn.addEventListener("click", addHighlighted);
@@ -1633,11 +1792,12 @@ async function setEditMode(on) {
   editMode = on;
   picker.classList.toggle("on", on);
   editToggle.setAttribute("aria-pressed", String(on));
-  placeSelbox();
-  if (!on) { endPreview(); return; }
+  if (!on) { endPreview(); dockFold.hidden = true; updateFit(); return; }
   try { setModels(await (await api("/rescan")).json()); } catch (e) {}
   await refreshPrefs();
+  loadDockPrefs();
   renderPicker();
+  applyDock();
   // Typing searches at once, with no click first. Focus waits for the panel to become visible.
   requestAnimationFrame(() => ui.search.focus());
 }
@@ -1953,7 +2113,10 @@ function charContains(c, entry, px, py) {
 }
 
 // Returns the layout entry of the topmost character under the point, or null.
-function hitTest(px, py) {
+// The point arrives in window pixels. The stage may be shrunk by the dock, so it is mapped back first.
+function hitTest(clientX, clientY) {
+  const px = (clientX - fit.ox) / fit.s, py = (clientY - fit.oy) / fit.s;
+  if (px < 0 || py < 0 || px > innerWidth || py > innerHeight) return null;
   const sequence = drawSequence();
   for (let i = sequence.length - 1; i >= 0; i--) {
     const {c, e} = sequence[i];
@@ -1978,7 +2141,8 @@ function placeSelbox() {
   if (!multi || !editMode || !c) { selbox.style.display = "none"; return; }
   const k = fitScale(c, e);
   const w = c.frame.w * k, h = c.frame.h * k;
-  Object.assign(selbox.style, {display: "block", left: `${screenX(e) - w / 2}px`, top: `${screenY(e) - h / 2}px`, width: `${w}px`, height: `${h}px`});
+  Object.assign(selbox.style, {display: "block", left: `${fit.ox + (screenX(e) - w / 2) * fit.s}px`, top: `${fit.oy + (screenY(e) - h / 2) * fit.s}px`,
+    width: `${w * fit.s}px`, height: `${h * fit.s}px`});
 }
 
 let layoutTimer = null;
@@ -2089,13 +2253,18 @@ function renderChars() {
   ui.autoBox.setAttribute("aria-label", multi && target ? `Auto-cycle animations for ${targetModel ? targetModel.name : target.model}` : "Auto-cycle animations");
   // A rebuilt row loses focus, so a keyboard user who just toggled a box would be sent back to the top.
   const focused = document.activeElement && document.activeElement.dataset.focusKey;
-  ui.charsList.replaceChildren(...layout.map(e => {
+  ui.charsList.replaceChildren(...layout.map((e, i) => {
     const m = models.find(x => x.id === e.model);
     const name = m ? m.name : e.model;
-    const sel = el("button", {type: "button", className: "sel", textContent: name, title: name});
+    // Two rows may share a model name, such as "Variant 1, base" of two characters. The character and the place in the list tell them apart.
+    const meta = [m && m.character !== name ? m.character : "", n > 1 ? `${i + 1} of ${n}` : ""].filter(Boolean).join(" \u00b7 ");
+    const thumb = el("span", {className: "cth"}, el("img", {alt: ""}));
+    if (m) wantThumb(m, url => { if (!url) return; const img = thumb.firstChild; img.onload = () => thumb.setAttribute("data-ready", ""); img.src = url; });
+    const sel = el("button", {type: "button", className: "sel", title: `${name}${meta ? `, ${meta}` : ""}`}, thumb,
+      el("span", {className: "ctxt"}, el("span", {className: "cname", textContent: name}), " ", el("span", {className: "cmeta", textContent: meta})));
     sel.dataset.focusKey = `sel:${e.uid}`;
     sel.setAttribute("aria-pressed", String(!!target && target.uid === e.uid));
-    sel.setAttribute("aria-label", `Select ${name}`);
+    sel.setAttribute("aria-label", `Select ${name} ${meta}`.trim());
     sel.addEventListener("click", () => selectChar(e.uid));
     const box = el("input", {type: "checkbox", checked: !!e.auto});
     box.dataset.focusKey = `auto:${e.uid}`;

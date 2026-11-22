@@ -112,7 +112,7 @@ Characters of one Spine version draw in the order of the list. Characters of dif
 
 A preset saves the characters on screen with each model, animation, position, size, and auto-cycle flag. One character is a preset of one. Loading a preset replaces the layout, so it is a quick way to switch scenes.
 
-- Edit mode: press **Presets** in the Characters strip. The pane takes the whole panel, so the model list steps aside until you close it.
+- Edit mode: press **Presets** in the Characters strip. The pane takes the whole dock, so the model list steps aside until you close it.
 - Type a name and press **Save** to store the layout on screen. Saving under an existing name replaces that preset. A name takes up to 40 letters. The list takes up to 200 presets.
 - Each preset is a card with a picture of each character, its name, and its character count. A card past three characters ends in a "+N" chip. The card of the loaded preset is white. Press a card to load it.
 - Press the ⋯ button on a card to open its row. **Rename** changes the name and keeps the layout and the position in the list. **Update** replaces the saved layout with the characters on screen. **Delete** removes the preset. Update and Delete ask for a second press, labeled **Confirm**, and drop the question after 5 s.

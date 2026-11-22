@@ -22,7 +22,7 @@ Try it in the browser at [officialdad.github.io/spinewall](https://officialdad.g
 
 In normal mode the desktop shows only the character. Click it to change its animation.
 
-Edit mode opens a panel on the right. Use it to choose models and animations, and to move and scale characters. Right-click the desktop and choose "Enter Edit Mode" to open it.
+Edit mode opens a dock on the right. The dock folds away, and the stage fits the free area. Use it to choose models and animations, and to move and scale characters. Right-click the desktop and choose "Enter Edit Mode" to open it.
 
 <table>
 <tr>
@@ -108,8 +108,9 @@ A model with `.moc3` files will not load. Many viewers and games call their Spin
 | Edit | Mouse wheel | Zoom the selected character |
 | Edit | Short left click | Next animation, or select the character |
 | Edit | Keyboard in the picker | Search, arrow keys, Enter, Ctrl+Enter to add a character |
+| Edit | `P` or the Editor button | Fold the editor away or bring it back. The stage resizes to the free area, so the editor never covers a character |
 
-Edit mode opens a model picker with fuzzy search, a source filter, favorites, recents, character-variant grouping, a Characters / Scenes / All filter, an animation list with hover preview, and a strip for several characters at once. See [docs/assets.md](docs/assets.md).
+Edit mode opens an editor dock on the right edge, on the left edge if you move it, or at the bottom on a portrait phone. Fold it with the Editor button or `P`. Dock side and fold state stay between runs. The dock holds a model picker with fuzzy search, a source filter, favorites, recents, character-variant grouping, a Characters / Scenes / All filter, an animation list with hover preview, and a strip for several characters at once. See [docs/assets.md](docs/assets.md).
 
 Enter edit mode from the Plasma desktop menu: right-click the desktop, then choose "Enter Edit Mode". Hold-to-edit is disabled by the plasmoid patch.
 
@@ -190,6 +191,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | Thumbnails | `wantThumb`, `pumpThumbs`, `loadOrMakeThumb`, `renderThumb`, `headBox`, `unionBox` |
 | Stage (all characters) | `makeLayer`, `createStageChar`, `stageFrame`, `frameOf`, `applyCharacters`, `destroyLayers` |
 | Hit testing | `hitTest`, `charContains`, `inTriangle`, `selectChar` |
+| Editor dock | `applyDock`, `updateFit`, `setDockFolded`, `loadDockPrefs`, `saveDockPrefs` |
 | Scenes | `hideSlotsOf`, `kind` filter in `buildItems` |
 | Presets pane | `setPresetsOpen`, `renderPresets`, `makePresetCard`, `makePresetManage`, `savePreset`, `updatePreset`, `renamePreset`, `loadPreset`, `stepPreset`, `deletePreset`, `revealCurrentPreset` |
 
