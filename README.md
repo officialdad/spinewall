@@ -172,7 +172,12 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 |---|---|
 | `theme/index.html` | The wallpaper page. One file, no build step. |
 | `theme/local-host.js` | Local mode. Runs the server's state logic in the page, with `localStorage` for state and prefs. |
+| `theme/embed.go` | Embeds the page and local host into the Go binary. Never embeds the Spine players. |
 | `server/spinewall-server.py` | Local HTTP server. State, model scan, prefs, layout, thumbnails. |
+| `cmd/spinewall` | Go server. `spinewall serve` is a drop-in for the Python server. |
+| `internal/api` | Go HTTP handlers, guards, body caps, model file serving. |
+| `internal/state` | Go stage, characters, presets and prefs logic. |
+| `internal/scan` | Go model scan, version sniff, atlas regions, kind detection. |
 | `bin/spinewall` | CLI. Thin `curl` wrapper over the server. |
 | `scripts/build-demo.py` | Builds the Pages demo from `theme/index.html` in local mode. |
 | `scripts/package-windows.py` | Builds the Lively zip and Wallpaper Engine files for Windows. See [docs/windows.md](docs/windows.md). Unconfirmed on Windows. |

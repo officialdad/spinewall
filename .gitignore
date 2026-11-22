@@ -18,3 +18,5 @@ spine-player*.css
 tests/page/test-results/
 tests/page/.work/
 tests/page/playwright-report/
+# The built Go server, from `go build -o spinewall ./cmd/spinewall`.
+/spinewall

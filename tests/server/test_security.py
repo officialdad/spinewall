@@ -405,12 +405,11 @@ class StartupSafety(ServerCase):
 
     def test_bad_port_variable_exits_with_a_clear_message(self):
         import subprocess
-        import sys
 
-        from tests.server.support import SERVER
+        from tests.server.support import server_command
 
         done = subprocess.run(
-            [sys.executable, "-I", "-B", str(SERVER)],
+            server_command(),
             env={"PATH": "", "HOME": str(self.tmp), "SPINEWALL_PORT": "abc"},
             capture_output=True,
             text=True,
