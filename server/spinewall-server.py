@@ -30,8 +30,11 @@ CONFIG_FILE = os.environ.get(
 )
 LEGACY_STATE_FILE = os.path.expanduser("~/.local/state/spinewall.json")
 
+# Match the Go server's os.UserCacheDir root, so uninstall's cache purge finds the thumbnails.
+_XDG_CACHE = os.environ.get("XDG_CACHE_HOME", "")
+CACHE_ROOT = _XDG_CACHE if os.path.isabs(_XDG_CACHE) else os.path.expanduser("~/.cache")
 THUMB_DIR = os.environ.get(
-    "SPINEWALL_THUMBS", os.path.expanduser("~/.cache/spinewall/thumbs")
+    "SPINEWALL_THUMBS", os.path.join(CACHE_ROOT, "spinewall", "thumbs")
 )
 THUMB_MAX_BYTES = 512 * 1024
 PREFS_FILE = os.environ.get(
