@@ -140,7 +140,7 @@ One command downloads the release binary, verifies it, and starts a setup wizard
 curl -fsSL https://github.com/officialdad/spinewall/releases/latest/download/install.sh | sh
 ```
 
-The bootstrap downloads `spinewall-<version>-linux-<arch>` and `SHA256SUMS`, checks the hash, and verifies the release signature with `minisign` when it is installed. It then installs the binary to `~/.local/bin/spinewall` and runs `spinewall setup`.
+The bootstrap downloads `spinewall-<version>-linux-<arch>` and `SHA256SUMS`, checks the hash, and verifies the release signature with `minisign`. Once the release key ships, a missing `minisign`, a missing signature, or a bad signature stops the install. `SPINEWALL_SKIP_VERIFY=1` skips the signature check, with a warning. It then installs the binary to `~/.local/bin/spinewall` and runs `spinewall setup`.
 
 Prefer another way:
 
@@ -165,7 +165,15 @@ Then finish the Plasma side:
 3. Put models in `~/.local/share/spinewall/models/` (or the folder you chose), then run `spinewall rescan`. See [docs/assets.md](docs/assets.md).
 4. Right-click the desktop, open "Configure Desktop and Wallpaper", choose "WebWallpaper", and pick the `spinewall` theme.
 
-**Autostart.** The wizard writes `~/.config/autostart/spinewall.desktop`, which starts the server at login on any XDG desktop. If a systemd user session is detected it offers `~/.config/systemd/user/spinewall.service` as an opt-in. On sway, Hyprland, or river, add `exec-once = ~/.local/bin/spinewall serve` to your compositor config. Spinewall never edits a compositor config for you.
+**Autostart.** The wizard writes `~/.config/autostart/spinewall.desktop`, which starts the server at login on any XDG desktop. If a systemd user session is detected it offers `~/.config/systemd/user/spinewall.service` as an opt-in. sway, Hyprland, and river do not run XDG autostart entries, so the wizard prints the line for yours. Spinewall never edits a compositor config for you.
+
+| Compositor | File | Line |
+|---|---|---|
+| sway | `~/.config/sway/config` | `exec ~/.local/bin/spinewall serve` |
+| Hyprland | `~/.config/hypr/hyprland.conf` | `exec-once = ~/.local/bin/spinewall serve` |
+| river | `~/.config/river/init` | `riverctl spawn "~/.local/bin/spinewall serve"` |
+
+**Old Python install.** `spinewall setup` and `spinewall doctor` warn when `~/.local/bin/spinewall-server` or its systemd unit is still present. setup then writes no autostart entry or unit and starts no server, because both servers use one port. Run `spinewall uninstall --legacy`, then `spinewall setup` again. `--alongside-legacy` installs autostart anyway.
 
 ## CLI
 

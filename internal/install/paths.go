@@ -66,3 +66,14 @@ func (p Paths) AutostartFile() string {
 func (p Paths) UnitFile() string {
 	return filepath.Join(p.Home, ".config", "systemd", "user", "spinewall.service")
 }
+
+// LegacyServer is the old Python server the previous installer wrote.
+func (p Paths) LegacyServer() string {
+	return filepath.Join(p.BinDir, "spinewall-server")
+}
+
+// LegacyContainment is the patched desktop containment copy the old installer
+// placed over the system plasmoid.
+func (p Paths) LegacyContainment() string {
+	return filepath.Join(p.DataDir, "plasma", "plasmoids", "org.kde.desktopcontainment")
+}

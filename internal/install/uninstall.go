@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 )
 
@@ -143,22 +142,16 @@ func disableUnit(logf func(string)) {
 }
 
 // legacyPythonPaths are the files the old Python installer wrote. Uninstall
-// --legacy removes them so an existing user migrates cleanly.
-func legacyPythonPaths(paths Paths) ([]string, []string) {
-	files := []string{
-		filepath.Join(paths.BinDir, "spinewall-server"),
-		filepath.Join(paths.Home, ".config", "systemd", "user", "spinewall.service"),
-		filepath.Join(paths.DataDir, "webwallpaper", "themes", "spinewall"),
+// --legacy removes them so an existing user migrates cleanly. The patched
+// containment copy lives beside the system plasmoid; removing it lets the
+// desktop fall back to the system one, or to its restored .bak.
+func legacyPythonPaths(paths Paths) []string {
+	return []string{
+		paths.LegacyServer(),
+		paths.UnitFile(),
+		paths.ThemeDir(),
+		paths.LegacyContainment(),
 	}
-	dirs := []string{
-		filepath.Join(paths.DataDir, "webwallpaper", "themes", "spinewall"),
-	}
-	// The patched containment copy lives beside the system plasmoid. Its .bak is
-	// restored, which the desktop then picks up on the next plasmashell restart.
-	containment := filepath.Join(paths.Home, ".local", "share", "plasma", "plasmoids", "org.kde.desktopcontainment")
-	files = append(files, containment)
-	dirs = append(dirs, containment)
-	return files, dirs
 }
 
 // LegacyUninstall removes the old Python install and restores the patched
@@ -175,10 +168,9 @@ func LegacyUninstall(paths Paths, logf func(string)) error {
 	}
 
 	// Stop a python server a user may have started by hand.
-	killByName("spinewall-server", logf)
+	killMatching(isLegacyServer, logf)
 
-	files, dirs := legacyPythonPaths(paths)
-	for _, f := range files {
+	for _, f := range legacyPythonPaths(paths) {
 		info, err := os.Stat(f)
 		if err != nil {
 			continue
@@ -195,10 +187,9 @@ func LegacyUninstall(paths Paths, logf func(string)) error {
 		}
 		logf("removed legacy: " + f)
 	}
-	_ = dirs
 
 	// Restore the containment backup the patch script left behind.
-	containment := filepath.Join(paths.Home, ".local", "share", "plasma", "plasmoids", "org.kde.desktopcontainment")
+	containment := paths.LegacyContainment()
 	bak := containment + ".bak"
 	if info, err := os.Stat(bak); err == nil && info.IsDir() {
 		if err := os.RemoveAll(containment); err != nil {
@@ -208,15 +199,6 @@ func LegacyUninstall(paths Paths, logf func(string)) error {
 			return fmt.Errorf("restore containment .bak: %w", err)
 		}
 		logf("restored the patched containment backup")
-	}
-
-	// The legacy server unit points at the python file, so it goes too.
-	legacyUnit := filepath.Join(paths.Home, ".config", "systemd", "user", "spinewall.service")
-	if _, err := os.Stat(legacyUnit); err == nil {
-		if err := os.Remove(legacyUnit); err != nil {
-			return fmt.Errorf("remove %s: %w", legacyUnit, err)
-		}
-		logf("removed legacy unit: " + legacyUnit)
 	}
 	return nil
 }

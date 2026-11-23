@@ -192,21 +192,6 @@ func TestUninstallLeavesHomeIdenticalToPreInstall(t *testing.T) {
 	}
 }
 
-func TestUninstallKeepsAChangedFile(t *testing.T) {
-	paths := testPaths(t)
-	exe := fakeBinary(t)
-	if _, err := Install(Options{Paths: paths, Executable: exe}); err != nil {
-		t.Fatal(err)
-	}
-	// The user edited the autostart entry. Uninstall removes only what the
-	// installer wrote, but the manifest tracks the path, so a changed copy is
-	// still removed because the installer owns the path. The models dir is what
-	// is protected; this test asserts the manifest path list is what runs.
-	if _, err := Uninstall(UninstallOptions{Paths: paths}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestLegacyBackendIsTheOnlyInstallableOne(t *testing.T) {
 	paths := testPaths(t)
 	exe := fakeBinary(t)
@@ -214,10 +199,6 @@ func TestLegacyBackendIsTheOnlyInstallableOne(t *testing.T) {
 	if err == nil {
 		t.Fatal("a not-yet backend installed without error")
 	}
-}
-
-func contains(haystack, needle string) bool {
-	return strings.Contains(haystack, needle)
 }
 
 // snapshot maps every path under root to a hash, so two snapshots can prove a
@@ -257,4 +238,112 @@ func equalMap(a, b map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func TestModelDirIsResolvedToAnAbsolutePath(t *testing.T) {
+	paths := testPaths(t)
+	exe := fakeBinary(t)
+	work := t.TempDir()
+	t.Chdir(work)
+	cases := map[string]string{
+		"~/Spine":    filepath.Join(paths.Home, "Spine"),
+		"rel/models": filepath.Join(work, "rel", "models"),
+	}
+	for typed, want := range cases {
+		res, err := Install(Options{Paths: paths, Executable: exe, ModelDir: typed})
+		if err != nil {
+			t.Fatalf("%s: %v", typed, err)
+		}
+		if res.ModelDir != want {
+			t.Errorf("%s: model dir = %q, want %q", typed, res.ModelDir, want)
+		}
+		if got := ReadConfig(paths.Config).AdditionalModelDirs; len(got) == 0 || got[0] != want {
+			t.Errorf("%s: config dirs = %v, want %q first", typed, got, want)
+		}
+		if info, err := os.Stat(want); err != nil || !info.IsDir() {
+			t.Errorf("%s: %s not created: %v", typed, want, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(work, "~")); err == nil {
+		t.Error("a literal ~ directory was created")
+	}
+}
+
+// writeLegacy lays out the old Python install in the throwaway home.
+func writeLegacy(t *testing.T, paths Paths, withUnit bool) {
+	t.Helper()
+	if err := os.MkdirAll(paths.BinDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.LegacyServer(), []byte("#!/usr/bin/env python3\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if withUnit {
+		if err := os.MkdirAll(filepath.Dir(paths.UnitFile()), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		unit := "[Service]\nExecStart=%h/.local/bin/spinewall-server\n"
+		if err := os.WriteFile(paths.UnitFile(), []byte(unit), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestLegacyInstallHoldsBackAutostart(t *testing.T) {
+	paths := testPaths(t)
+	writeLegacy(t, paths, true)
+	res, err := Install(Options{Paths: paths, Executable: fakeBinary(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Legacy) != 2 {
+		t.Errorf("legacy = %v, want the server and the unit", res.Legacy)
+	}
+	if res.Autostart != "" {
+		t.Errorf("autostart reported as %q", res.Autostart)
+	}
+	if _, err := os.Stat(paths.AutostartFile()); err == nil {
+		t.Error("autostart written next to the old Python install")
+	}
+
+	res, err = Install(Options{Paths: paths, Executable: fakeBinary(t), AllowLegacy: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(paths.AutostartFile()); err != nil || res.Autostart == "" {
+		t.Errorf("confirmed install wrote no autostart: %v", err)
+	}
+}
+
+func TestLegacyUnitIsNeverOverwritten(t *testing.T) {
+	paths := testPaths(t)
+	writeLegacy(t, paths, true)
+	before, _ := os.ReadFile(paths.UnitFile())
+	for _, allow := range []bool{false, true} {
+		_, err := Install(Options{Paths: paths, Executable: fakeBinary(t), SystemdUnit: true, AllowLegacy: allow})
+		if allow && (err == nil || !strings.Contains(err.Error(), "uninstall --legacy")) {
+			t.Errorf("err = %v, want a pointer to uninstall --legacy", err)
+		}
+		if !allow && err != nil {
+			t.Errorf("held-back install failed: %v", err)
+		}
+		after, _ := os.ReadFile(paths.UnitFile())
+		if string(after) != string(before) {
+			t.Fatalf("allow=%v: legacy unit overwritten:\n%s", allow, after)
+		}
+	}
+}
+
+func TestNoLegacyInAFreshHome(t *testing.T) {
+	paths := testPaths(t)
+	if found := DetectLegacy(paths); len(found) != 0 {
+		t.Errorf("legacy found in an empty home: %v", found)
+	}
+	// The new unit runs `spinewall serve`, so it is not the legacy one.
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t), SystemdUnit: true}); err != nil {
+		t.Fatal(err)
+	}
+	if found := DetectLegacy(paths); len(found) != 0 {
+		t.Errorf("the new unit was taken for the legacy one: %v", found)
+	}
 }

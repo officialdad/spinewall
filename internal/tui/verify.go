@@ -29,6 +29,9 @@ type infoReply struct {
 	Models  int            `json:"models"`
 	Skipped map[string]any `json:"skipped"`
 	Input   map[string]int `json:"input"`
+	// Legacy is true when the old Python server answered. Python's http.server
+	// names itself in the Server header; the Go server sends none.
+	Legacy bool `json:"-"`
 }
 
 // startAndVerify starts the server, waits for /info, and returns the model and
@@ -44,7 +47,11 @@ func startAndVerify(opts Options, logf func(string)) (models, skipped int, verif
 	port := envOr("SPINEWALL_PORT", "8777")
 
 	// If a server already answers, verify it instead of starting a second one.
+	// The old Python server answers the same /info, so it is named, not passed.
 	if reply, ok := queryInfo(port, 500*time.Millisecond); ok {
+		if reply.Legacy {
+			return 0, 0, false, fmt.Errorf("the old Python server answers on port %s. Run 'spinewall uninstall --legacy', then 'spinewall setup' again", port)
+		}
 		return reply.Models, len(reply.Skipped), true, nil
 	}
 
@@ -134,6 +141,7 @@ func queryInfo(port string, timeout time.Duration) (infoReply, bool) {
 	if err := json.NewDecoder(resp.Body).Decode(&reply); err != nil {
 		return infoReply{}, false
 	}
+	reply.Legacy = strings.Contains(resp.Header.Get("Server"), "Python")
 	return reply, true
 }
 

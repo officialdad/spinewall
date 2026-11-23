@@ -5,9 +5,8 @@
 # One command:
 #   curl -fsSL https://github.com/officialdad/spinewall/releases/latest/download/install.sh | sh
 #
-# It needs only sh, curl or wget, and sha256sum or shasum. minisign is used when
-# it is installed for a real signature check; otherwise the SHA256SUMS check
-# still catches a corrupt download.
+# It needs sh, curl or wget, sha256sum or shasum, and minisign. Set
+# SPINEWALL_SKIP_VERIFY=1 to install without the signature check.
 #
 # The Spine runtimes are never in the release: their licence forbids
 # redistribution. `spinewall setup` fetches them on this machine.
@@ -17,7 +16,7 @@ REPO="officialdad/spinewall"
 # Public minisign key for the release signature. PLACEHOLDER: the captain must
 # replace this with the real key and add the secret key to the release workflow
 # before the first signed release. While it is the placeholder, the signature
-# step prints a clear message instead of failing.
+# step prints a clear message and skips the check.
 MINISIGN_PUBLIC_KEY="RWSPINEWALLPLACEHOLDERKEYREPLACETHISWITHTHEREALKEY00000000000000000="
 
 say() { printf '%s\n' "$*" >&2; }
@@ -79,25 +78,28 @@ got="$(sha256 "$work/$binary")"
 [ "$want" = "$got" ] || die "checksum mismatch for $binary: expected $want, got $got"
 say "checksum ok"
 
-# --- signature (minisign when present) ---
+# --- signature ---
+# SHA256SUMS comes from the same place as the binary, so only the minisign
+# signature proves the release is authentic. With a real key, a missing tool,
+# a missing signature, or a bad signature stops the install.
 sig_url="$base/SHA256SUMS.minisig"
-if fetch_to "$sig_url" "$work/SHA256SUMS.minisig" 2>/dev/null; then
-  if command -v minisign >/dev/null 2>&1; then
-    if [ "${MINISIGN_PUBLIC_KEY#RWSPINEWALLPLACEHOLDER}" != "$MINISIGN_PUBLIC_KEY" ]; then
-      say "note: this build has a placeholder signature key, so the signature is not verified."
-      say "      the SHA256SUMS check above was still run. Check the release page for the key."
-    else
-      printf '%s\n' "$MINISIGN_PUBLIC_KEY" > "$work/minisign.pub"
-      minisign -Vm "$work/SHA256SUMS" -p "$work/minisign.pub" \
-        || die "signature check failed for SHA256SUMS"
-      say "signature ok"
-    fi
-  else
-    say "note: minisign is not installed, so only the SHA256SUMS check was run."
-    say "      install minisign to verify the release signature."
-  fi
+if [ "${MINISIGN_PUBLIC_KEY#RWSPINEWALLPLACEHOLDER}" != "$MINISIGN_PUBLIC_KEY" ]; then
+  say "note: this build has a placeholder signature key, so the signature is not verified."
+  say "      the SHA256SUMS check above was still run. Check the release page for the key."
+elif [ "${SPINEWALL_SKIP_VERIFY:-}" = "1" ]; then
+  say "WARNING: SPINEWALL_SKIP_VERIFY=1 is set. The release signature was NOT verified."
+  say "WARNING: nothing proves this binary came from the spinewall release."
 else
-  say "note: no signature file in this release; only the SHA256SUMS check was run."
+  command -v minisign >/dev/null 2>&1 \
+    || die "minisign is required to verify the release signature. Install the minisign package, then run this again.
+       To verify by hand, download SHA256SUMS and SHA256SUMS.minisig from $base and run:
+         minisign -Vm SHA256SUMS -P $MINISIGN_PUBLIC_KEY
+       To skip the check at your own risk, set SPINEWALL_SKIP_VERIFY=1."
+  fetch_to "$sig_url" "$work/SHA256SUMS.minisig" \
+    || die "download failed: $sig_url. The release has no signature, so it is not installed."
+  minisign -Vm "$work/SHA256SUMS" -P "$MINISIGN_PUBLIC_KEY" >/dev/null \
+    || die "signature check failed for SHA256SUMS. The download is not installed."
+  say "signature ok"
 fi
 
 # --- install ---
@@ -113,9 +115,18 @@ export PATH
 
 # --- run the wizard ---
 # Not exec: the exit trap must still clear the download directory. The setup
-# exit code is the bootstrap's exit code.
-spinewall setup "$@"
-status=$?
+# exit code is the bootstrap's exit code. Under `curl | sh` stdin is the
+# download pipe, so the wizard reads the terminal instead when one exists.
+# With no terminal at all, it reads nothing, so it never eats the rest of a
+# piped script.
+status=0
+if [ -t 0 ]; then
+  spinewall setup "$@" || status=$?
+elif (: </dev/tty) 2>/dev/null; then
+  spinewall setup "$@" </dev/tty || status=$?
+else
+  spinewall setup "$@" </dev/null || status=$?
+fi
 trap - EXIT INT TERM
 rm -rf "$work"
 exit "$status"

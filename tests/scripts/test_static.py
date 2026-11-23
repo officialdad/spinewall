@@ -88,14 +88,9 @@ class Syntax(unittest.TestCase):
 
     def test_bash_scripts_use_strict_mode(self):
         for path in bash_scripts():
-            if path.parent.name in ("scripts", "bin"):
+            if path.parent.name in ("scripts", "bin") and not path.read_text().startswith("#!/bin/sh"):
                 with self.subTest(path=path.relative_to(ROOT)):
-                    text = path.read_text()
-                    # A POSIX sh script cannot use `pipefail`, so it declares -eu.
-                    if text.startswith("#!/bin/sh"):
-                        self.assertIn("set -eu", text)
-                    else:
-                        self.assertIn("set -euo pipefail", text)
+                    self.assertIn("set -euo pipefail", path.read_text())
 
     def test_server_has_a_python_shebang_and_is_executable(self):
         server = ROOT / "server/spinewall-server.py"

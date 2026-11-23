@@ -52,15 +52,6 @@ func (w *writer) write(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
-// copyFile records a file copied from source, preserving its bytes.
-func (w *writer) copyFile(source, dest string) error {
-	data, err := os.ReadFile(source)
-	if err != nil {
-		return err
-	}
-	return w.write(dest, data, 0o644)
-}
-
 // ensureDir creates dir and every missing parent, recording only the
 // directories this run created, deepest last.
 func (w *writer) ensureDir(dir string) error {
@@ -110,12 +101,4 @@ func (w *writer) manifest() Manifest {
 		}
 	}
 	return m
-}
-
-// remove is the helper used by the builder in tests and by uninstall.
-func (w *writer) remove(path string) error {
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
 }

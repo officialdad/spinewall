@@ -21,6 +21,9 @@ func runDoctor(args []string) error {
 	}
 	report := doctor.Detect(doctor.Options{})
 	doctor.Print(os.Stdout, report)
+	if legacy := install.DetectLegacy(install.DefaultPaths()); len(legacy) > 0 {
+		tui.PrintLegacyWarning(os.Stdout, legacy)
+	}
 	return nil
 }
 
@@ -37,6 +40,8 @@ func runSetup(args []string) error {
 			opts.Offline = true
 		case "--systemd-unit":
 			opts.SystemdUnit = true
+		case "--alongside-legacy":
+			opts.AllowLegacy = true
 		case "--backend":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--backend needs a value")
@@ -65,6 +70,8 @@ func runInstall(args []string) error {
 		switch args[i] {
 		case "--systemd-unit":
 			opts.SystemdUnit = true
+		case "--alongside-legacy":
+			opts.AllowLegacy = true
 		case "--model-dir":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--model-dir needs a directory")

@@ -3,7 +3,6 @@ package install
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 )
 
 // Config is the user config file at ~/.config/spinewall/config.json. The server
@@ -55,12 +54,4 @@ func WriteModelDir(w *writer, configPath, chosen, defaultModels string) error {
 	}
 	data = append(data, '\n')
 	return w.write(configPath, data, 0o644)
-}
-
-// ConfigPath is a convenience for callers that have only a Paths value.
-func ConfigPath(paths Paths) string {
-	if paths.Config != "" {
-		return paths.Config
-	}
-	return filepath.Join(paths.Home, ".config", "spinewall", "config.json")
 }

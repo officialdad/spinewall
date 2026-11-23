@@ -106,7 +106,7 @@ jobs:
           # from the build matrix; the source tarball is added here.
           cd dist
           cat spinewall-*-linux-*.sha256 | sort -k2 > SHA256SUMS
-          sha256sum "spinewall-${TAG#v}.tar.gz" >> SHA256SUMS
+          (cd .. && sha256sum "spinewall-${TAG#v}.tar.gz") >> SHA256SUMS
           cat SHA256SUMS
       - name: Check install script runs from the tarball
         run: |
@@ -140,4 +140,5 @@ jobs:
             dist/SHA256SUMS \
             dist/SHA256SUMS.minisig \
             "$name.tar.gz" \
+            scripts/install.sh \
             --clobber

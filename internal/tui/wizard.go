@@ -8,7 +8,9 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"charm.land/huh/v2"
@@ -30,6 +32,9 @@ type Options struct {
 	ModelDir string
 	// SystemdUnit writes the opt-in systemd unit without asking.
 	SystemdUnit bool
+	// AllowLegacy installs autostart next to the old Python install without
+	// asking. Both then start a server on one port.
+	AllowLegacy bool
 	// Offline refuses network fetches.
 	Offline bool
 	// Executable is the binary to install. Empty uses the running binary.
@@ -80,6 +85,10 @@ func Run(opts Options) (Result, error) {
 	// report can quote it.
 	doctor.Print(stdout, report)
 	logf("checked this machine: " + report.Summary())
+	legacy := install.DetectLegacy(opts.Paths)
+	if len(legacy) > 0 {
+		PrintLegacyWarning(stdout, legacy)
+	}
 
 	// 2. Spine licence notice and consent.
 	if err := consent(opts, report, stdout); err != nil {
@@ -101,6 +110,7 @@ func Run(opts Options) (Result, error) {
 
 	// The systemd unit is an opt-in. The XDG autostart entry is the default.
 	systemdUnit := chooseSystemdUnit(opts, report, stdout)
+	allowLegacy := len(legacy) > 0 && chooseAllowLegacy(opts, stdout)
 
 	// 6. Install.
 	inst, err := install.Install(install.Options{
@@ -108,6 +118,7 @@ func Run(opts Options) (Result, error) {
 		Backend:     install.Backend(backend),
 		SystemdUnit: systemdUnit,
 		ModelDir:    modelDir,
+		AllowLegacy: allowLegacy,
 		Executable:  opts.Executable,
 		Logf:        logf,
 	})
@@ -115,8 +126,16 @@ func Run(opts Options) (Result, error) {
 		return res, err
 	}
 	res.Install = inst
+	if inst.Autostart != "" {
+		printCompositorLine(stdout, report.Desktop, inst.BinPath)
+	}
 
-	// 7. Start and verify via /info.
+	// 7. Start and verify via /info. Next to the old Python install a second
+	// server would race it for the port, so setup stops before starting one.
+	if len(legacy) > 0 && !allowLegacy {
+		logf("setup did not start or verify the server. Run 'spinewall uninstall --legacy', then 'spinewall setup' again.")
+		return res, nil
+	}
 	models, skipped, verified, err := startAndVerify(opts, logf)
 	if err != nil {
 		logf("start and verify: " + err.Error())
@@ -127,9 +146,9 @@ func Run(opts Options) (Result, error) {
 	if verified && models == 0 {
 		res.AddModelFolder = true
 		if opts.Yes {
-			fmt.Fprintln(stdout, "No models were found. Put a model folder in "+opts.Paths.ModelsDir()+" (see docs/assets.md).")
+			fmt.Fprintln(stdout, "No models were found. Put a model folder in "+inst.ModelDir+" (see docs/assets.md).")
 		} else {
-			offerAddFolder(stdout, modelDir)
+			offerAddFolder(stdout, inst.ModelDir)
 		}
 	}
 
@@ -277,6 +296,79 @@ func chooseSystemdUnit(opts Options, report doctor.Report, stdout *os.File) bool
 		return false
 	}
 	return value
+}
+
+// chooseAllowLegacy asks whether to start the new server at login while the
+// old Python install is still present. The default is no, and --yes never
+// says yes on the user's behalf.
+func chooseAllowLegacy(opts Options, stdout *os.File) bool {
+	if opts.AllowLegacy {
+		return true
+	}
+	if opts.Yes || !interactive(opts) {
+		return false
+	}
+	value := false
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Start the new server at login anyway?").
+				Description("The old Python server may also start at login. Both use one port, so only one of them runs.").
+				Value(&value),
+		),
+	)
+	form.WithInput(stdin(opts))
+	form.WithOutput(stdout)
+	if err := form.Run(); err != nil {
+		return false
+	}
+	return value
+}
+
+// PrintLegacyWarning names the old Python install files and the command that
+// removes them. setup and doctor both print it.
+func PrintLegacyWarning(w io.Writer, legacy []string) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Warning: the old Python install is still here:")
+	for _, path := range legacy {
+		fmt.Fprintln(w, "  "+path)
+	}
+	fmt.Fprintln(w, "It starts its own server on the same port. Remove it with 'spinewall uninstall --legacy',")
+	fmt.Fprintln(w, "then run 'spinewall setup' again.")
+	fmt.Fprintln(w)
+}
+
+// compositorStartLine is the line a compositor that skips XDG autostart needs
+// in its own config, and that config's usual path. Spinewall prints it and
+// never edits the file.
+func compositorStartLine(desktop, binPath string) (config, line string, ok bool) {
+	command := binPath + " serve"
+	if strings.ContainsAny(binPath, " \t'\"") {
+		command = "'" + strings.ReplaceAll(binPath, "'", `'\''`) + "' serve"
+	}
+	for _, name := range strings.Split(strings.ToLower(desktop), ":") {
+		switch name {
+		case "sway":
+			return "~/.config/sway/config", "exec " + command, true
+		case "hyprland":
+			return "~/.config/hypr/hyprland.conf", "exec-once = " + command, true
+		case "river":
+			return "~/.config/river/init", "riverctl spawn " + strconv.Quote(command), true
+		}
+	}
+	return "", "", false
+}
+
+// printCompositorLine prints the startup line for sway, Hyprland, or river.
+func printCompositorLine(w io.Writer, desktop, binPath string) {
+	config, line, ok := compositorStartLine(desktop, binPath)
+	if !ok {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "This compositor does not run XDG autostart entries. Add this line to %s:\n", config)
+	fmt.Fprintln(w, "  "+line)
+	fmt.Fprintln(w, "Spinewall never edits your compositor config.")
 }
 
 // offerAddFolder prints the exact next step when the server found no models.

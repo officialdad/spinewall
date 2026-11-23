@@ -28,6 +28,9 @@ type Options struct {
 	// ModelDir is the models folder a user picked. When it differs from the
 	// default, it is written to config.json as an additional model dir.
 	ModelDir string
+	// AllowLegacy writes the autostart entry even when the old Python install is
+	// still present, which the user confirmed. Both start a server on one port.
+	AllowLegacy bool
 	// Executable is the binary to install as ~/.local/bin/spinewall. Empty uses
 	// the running executable.
 	Executable string
@@ -42,6 +45,10 @@ type Result struct {
 	ThemeDir  string
 	Autostart string
 	UnitFile  string
+	// ModelDir is the chosen models folder as an absolute path.
+	ModelDir string
+	// Legacy lists the old Python install files found, which held back autostart.
+	Legacy []string
 }
 
 // Install writes the backend files, the binary, the autostart entry, and the
@@ -61,6 +68,15 @@ func Install(opts Options) (Result, error) {
 	}
 	if opts.Backend != BackendKDEBackend {
 		return Result{}, fmt.Errorf("backend %q is not installable yet", opts.Backend)
+	}
+	modelDir, err := absModelDir(paths, opts.ModelDir)
+	if err != nil {
+		return Result{}, err
+	}
+	legacy := DetectLegacy(paths)
+	startAtLogin := len(legacy) == 0 || opts.AllowLegacy
+	if startAtLogin && opts.SystemdUnit && isLegacyUnit(paths.UnitFile()) {
+		return Result{}, fmt.Errorf("%s is the old Python unit. Run 'spinewall uninstall --legacy' first", paths.UnitFile())
 	}
 
 	w := newWriter(paths)
@@ -116,13 +132,18 @@ func Install(opts Options) (Result, error) {
 	logf("installed theme: " + themeDir)
 
 	// XDG autostart is the portable default, so the server runs at login without
-	// assuming systemd.
-	if err := w.write(paths.AutostartFile(), []byte(autostartEntry(binPath)), 0o644); err != nil {
-		return Result{}, err
+	// assuming systemd. Next to the old Python install it would start a second
+	// server on the same port, so it waits until the user confirms.
+	if startAtLogin {
+		if err := w.write(paths.AutostartFile(), []byte(autostartEntry(binPath)), 0o644); err != nil {
+			return Result{}, err
+		}
+		logf("installed autostart: " + paths.AutostartFile())
+	} else {
+		logf("skipped autostart: the old Python install is still present. Run 'spinewall uninstall --legacy', then install again.")
 	}
-	logf("installed autostart: " + paths.AutostartFile())
 
-	if opts.SystemdUnit {
+	if opts.SystemdUnit && startAtLogin {
 		if err := w.write(paths.UnitFile(), []byte(unitFile(binPath)), 0o644); err != nil {
 			return Result{}, err
 		}
@@ -131,21 +152,19 @@ func Install(opts Options) (Result, error) {
 
 	// A chosen models folder becomes an extra scan root, which the server reads
 	// from config.json. Config is installed state, so it is recorded too.
-	if opts.ModelDir != "" && opts.ModelDir != paths.ModelsDir() {
-		if err := WriteModelDir(w, paths.Config, opts.ModelDir, paths.ModelsDir()); err != nil {
+	if modelDir != paths.ModelsDir() {
+		if err := WriteModelDir(w, paths.Config, modelDir, paths.ModelsDir()); err != nil {
 			return Result{}, err
 		}
-		logf("models folder: " + opts.ModelDir)
+		logf("models folder: " + modelDir)
 	}
 	// The models directory always exists so a first run has somewhere to put a
 	// model and the server scan has a folder to read.
 	if err := w.ensureDir(paths.ModelsDir()); err != nil {
 		return Result{}, err
 	}
-	if opts.ModelDir != "" && opts.ModelDir != paths.ModelsDir() {
-		if err := w.ensureDir(opts.ModelDir); err != nil {
-			return Result{}, err
-		}
+	if err := w.ensureDir(modelDir); err != nil {
+		return Result{}, err
 	}
 
 	m := w.manifest()
@@ -160,15 +179,61 @@ func Install(opts Options) (Result, error) {
 		return Result{}, err
 	}
 	res := Result{
-		Manifest:  m,
-		BinPath:   binPath,
-		ThemeDir:  themeDir,
-		Autostart: paths.AutostartFile(),
+		Manifest: m,
+		BinPath:  binPath,
+		ThemeDir: themeDir,
+		ModelDir: modelDir,
+		Legacy:   legacy,
 	}
-	if opts.SystemdUnit {
-		res.UnitFile = paths.UnitFile()
+	if startAtLogin {
+		res.Autostart = paths.AutostartFile()
+		if opts.SystemdUnit {
+			res.UnitFile = paths.UnitFile()
+		}
 	}
 	return res, nil
+}
+
+// absModelDir resolves a models folder the way a user types it: empty is the
+// default, a leading ~ is the home, and a relative path is from the working
+// directory. The server only scans absolute dirs, and uninstall runs from
+// anywhere, so only an absolute path is recorded.
+func absModelDir(paths Paths, dir string) (string, error) {
+	dir = strings.TrimSpace(dir)
+	switch {
+	case dir == "":
+		return paths.ModelsDir(), nil
+	case dir == "~":
+		dir = paths.Home
+	case strings.HasPrefix(dir, "~/"):
+		dir = filepath.Join(paths.Home, dir[2:])
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("models folder %q: %w", dir, err)
+	}
+	return abs, nil
+}
+
+// DetectLegacy lists the old Python install files still on disk: its server
+// script and its systemd unit. Either one means a login could start the old
+// server on the port the new one uses.
+func DetectLegacy(paths Paths) []string {
+	var found []string
+	if _, err := os.Stat(paths.LegacyServer()); err == nil {
+		found = append(found, paths.LegacyServer())
+	}
+	if isLegacyUnit(paths.UnitFile()) {
+		found = append(found, paths.UnitFile())
+	}
+	return found
+}
+
+// isLegacyUnit reports whether the unit file runs the old Python server rather
+// than `spinewall serve`.
+func isLegacyUnit(path string) bool {
+	data, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(data), "spinewall-server")
 }
 
 // sameFile reports whether two paths name the same file on disk.

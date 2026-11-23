@@ -41,10 +41,10 @@ type Report struct {
 	Distro        string
 	Checks        []Check
 	Backend       string // the recommended backend
-	PackageCmd    string // the distro's package manager prefix, e.g. "pacman -S"
+	PackageCmd    string // the full package command for this distro, empty when unknown
 	SystemdUser   bool
 	Network       bool
-	LayerShell    bool
+	LayerShell    Status
 	WebEngineName string
 }
 
@@ -55,8 +55,8 @@ type Options struct {
 	Exists        func(string) bool
 	ReadOSRelease func(string) (map[string]string, error)
 	Network       func() bool
-	// FullscreenCompositor is the file listing Wayland globals, default
-	// /proc/self/environ cannot be read for another process, so tests set it.
+	// WaylandGlobals is a file listing the compositor's Wayland globals, as
+	// wayland-info prints them. Empty falls back to the known desktops.
 	WaylandGlobals string
 }
 
@@ -83,8 +83,8 @@ func Detect(opts Options) Report {
 
 	release := readOSRelease(opts.ReadOSRelease)
 	r.Distro = firstNonEmpty(release["ID"], "unknown")
-	// ID_LIKE names the family, so an Arch derivative such as CachyOS resolves to
-	// the pacman command without naming every derivative.
+	// ID_LIKE names the family, so an Arch derivative resolves to the pacman
+	// command without naming every derivative.
 	r.PackageCmd = packageCmd(r.Distro, release["ID_LIKE"])
 
 	// Session and desktop.
@@ -95,12 +95,11 @@ func Detect(opts Options) Report {
 
 	// Layer-shell is offered by the compositor. On Wayland read the globals a
 	// probe would see; off Wayland it is simply not available.
-	r.LayerShell = detectLayerShell(getenv, opts.WaylandGlobals)
+	r.LayerShell = detectLayerShell(getenv, opts.WaylandGlobals, r.Desktop)
 	r.Checks = append(r.Checks, Check{
-		Name:    "layer-shell",
-		Status:  foundOrMissing(r.LayerShell),
-		Detail:  layerShellDetail(r.LayerShell, r.SessionType),
-		Package: "",
+		Name:   "layer-shell",
+		Status: r.LayerShell,
+		Detail: layerShellDetail(r.LayerShell, r.SessionType),
 	})
 
 	// GPU from /sys/class/drm.
@@ -108,7 +107,7 @@ func Detect(opts Options) Report {
 	r.Checks = append(r.Checks, Check{Name: "GPU", Status: gpu, Detail: gpuDetail})
 
 	// Web engine candidates the KDE backend and the future layer-shell view need.
-	webEngine, webName, webPkg := detectWebEngine(lookPath, r.PackageCmd)
+	webEngine, webName, webPkg := detectWebEngine(lookPath, exists, r.PackageCmd)
 	r.WebEngineName = webName
 	r.Checks = append(r.Checks, Check{
 		Name:    "web engine",
@@ -145,7 +144,8 @@ func Detect(opts Options) Report {
 		Package: "",
 	})
 
-	r.Backend = recommendBackend(r)
+	// Only the KDE legacy backend is installable in this phase.
+	r.Backend = "kde-legacy"
 	return r
 }
 
@@ -175,40 +175,46 @@ func (r Report) PackageHints() []string {
 	return out
 }
 
-// recommendBackend picks the installable backend for this machine. Only the KDE
-// legacy backend is installable in this phase.
-func recommendBackend(r Report) string {
-	if strings.Contains(strings.ToLower(r.Desktop), "kde") || strings.Contains(strings.ToLower(r.Desktop), "plasma") {
-		return "kde-legacy"
-	}
-	return "kde-legacy"
-}
-
 // ---- detection helpers ----
 
-func detectLayerShell(getenv func(string) string, globalsFile string) bool {
+// layerShellDesktops offer zwlr_layer_shell_v1. GNOME is the common Wayland
+// desktop that does not.
+var layerShellDesktops = []string{"kde", "sway", "hyprland", "river", "wayfire", "labwc", "niri"}
+
+func detectLayerShell(getenv func(string) string, globalsFile, desktop string) Status {
 	if getenv("XDG_SESSION_TYPE") != "wayland" {
-		return false
+		return Missing
 	}
-	// A real compositor probe needs a socket client. The environment tells us a
-	// Wayland session exists; the globals file, when present, names the protocol.
 	if globalsFile != "" {
 		if data, err := os.ReadFile(globalsFile); err == nil {
-			return strings.Contains(string(data), "zwlr_layer_shell_v1")
+			return foundOrMissing(strings.Contains(string(data), "zwlr_layer_shell_v1"))
 		}
 	}
-	// No probe available: Wayland itself is the honest partial signal.
-	return true
+	// No probe ran, so only a desktop known either way gives an answer.
+	for _, name := range strings.Split(strings.ToLower(desktop), ":") {
+		if name == "gnome" {
+			return Missing
+		}
+		for _, known := range layerShellDesktops {
+			if name == known {
+				return Found
+			}
+		}
+	}
+	return Unknown
 }
 
-func layerShellDetail(on bool, session string) string {
+func layerShellDetail(status Status, session string) string {
 	if session != "wayland" {
 		return "needs a Wayland session"
 	}
-	if on {
+	switch status {
+	case Found:
 		return "Wayland layer-shell compositor"
+	case Missing:
+		return "compositor does not offer zwlr_layer_shell_v1"
 	}
-	return "compositor does not offer zwlr_layer_shell_v1"
+	return "not known for this compositor"
 }
 
 func detectGPU(exists func(string) bool) (Status, string) {
@@ -245,20 +251,27 @@ func gpuVendor(id string) string {
 	}
 }
 
-func detectWebEngine(lookPath func(string) (string, error), pkgCmd string) (Status, string, string) {
-	// Qt WebEngine is what the KDE backend and the planned layer-shell view use.
-	if _, err := lookPath("qml"); err == nil {
-		if _, err := lookPath("plasmashell"); err == nil {
-			return Found, "Qt WebEngine (qml)", ""
+// qtWebEngineModules are where distros put the QtWebEngine QML module, which
+// the KDE backend and the planned layer-shell view load.
+var qtWebEngineModules = []string{
+	"/usr/lib/qt6/qml/QtWebEngine",
+	"/usr/lib64/qt6/qml/QtWebEngine",
+	"/usr/lib/x86_64-linux-gnu/qt6/qml/QtWebEngine",
+	"/usr/lib/aarch64-linux-gnu/qt6/qml/QtWebEngine",
+}
+
+func detectWebEngine(lookPath func(string) (string, error), exists func(string) bool, pkgCmd string) (Status, string, string) {
+	for _, dir := range qtWebEngineModules {
+		if exists(dir) {
+			return Found, "Qt WebEngine (" + dir + ")", ""
 		}
-		return Found, "qml present", ""
 	}
 	for _, browser := range []string{"chromium", "google-chrome-stable", "firefox"} {
 		if _, err := lookPath(browser); err == nil {
 			return Found, browser + " (fallback)", ""
 		}
 	}
-	return Missing, "no qml or browser", pkgCmd + " qt6-webengine layer-shell-qt"
+	return Missing, "no Qt WebEngine or browser", pkgCmd
 }
 
 func detectSystemdUser(lookPath func(string) (string, error), exists func(string) bool) bool {
@@ -366,42 +379,34 @@ func readOSRelease(reader func(string) (map[string]string, error)) map[string]st
 	return out
 }
 
-// packageCmd maps a distro id and its ID_LIKE family to an install command
-// prefix. The family catches derivatives, so an Arch-like id resolves to
-// pacman even when its own id is unknown.
+// distroPackages is the install command for Qt WebEngine and layer-shell-qt
+// per distro family, with each family's own package names.
+var distroPackages = map[string]string{
+	"arch":     "sudo pacman -S qt6-webengine layer-shell-qt",
+	"debian":   "sudo apt install qml6-module-qtwebengine layer-shell-qt",
+	"fedora":   "sudo dnf install qt6-qtwebengine layer-shell-qt",
+	"opensuse": "sudo zypper install qt6-webengine layer-shell-qt6",
+	"alpine":   "sudo apk add qt6-qtwebengine layer-shell-qt",
+	"void":     "sudo xbps-install -S qt6-webengine layer-shell-qt",
+}
+
+// distroFamilies maps a distro id or ID_LIKE entry to its family.
+var distroFamilies = map[string]string{
+	"arch": "arch", "manjaro": "arch", "endeavouros": "arch",
+	"debian": "debian", "ubuntu": "debian", "linuxmint": "debian", "pop": "debian",
+	"fedora": "fedora", "rhel": "fedora", "centos": "fedora",
+	"opensuse": "opensuse", "opensuse-tumbleweed": "opensuse", "opensuse-leap": "opensuse", "suse": "opensuse",
+	"alpine": "alpine",
+	"void":   "void",
+}
+
+// packageCmd maps a distro id, then its ID_LIKE family, to the full install
+// command. An unknown distro gets no command rather than a wrong one.
 func packageCmd(id, idLike string) string {
-	family := strings.ToLower(id)
-	if family == "" || family == "unknown" {
-		if fields := strings.Fields(idLike); len(fields) > 0 {
-			family = strings.ToLower(fields[0])
+	for _, name := range append([]string{strings.ToLower(id)}, strings.Fields(strings.ToLower(idLike))...) {
+		if family, ok := distroFamilies[name]; ok {
+			return distroPackages[family]
 		}
 	}
-	switch family {
-	case "arch", "manjaro", "endeavouros":
-		return "pacman -S"
-	case "debian", "ubuntu", "linuxmint", "pop":
-		return "apt install"
-	case "fedora", "rhel", "centos":
-		return "dnf install"
-	case "opensuse", "opensuse-tumbleweed", "opensuse-leap", "suse":
-		return "zypper install"
-	case "alpine":
-		return "apk add"
-	case "void":
-		return "xbps-install -S"
-	}
-	// A derivative whose own id differs uses its family when one is named.
-	for _, field := range strings.Fields(strings.ToLower(idLike)) {
-		switch field {
-		case "arch":
-			return "pacman -S"
-		case "debian", "ubuntu":
-			return "apt install"
-		case "fedora", "rhel":
-			return "dnf install"
-		case "suse":
-			return "zypper install"
-		}
-	}
-	return "install"
+	return ""
 }

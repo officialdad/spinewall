@@ -40,7 +40,7 @@ func TestDetectNamesAgnosticSessionAndDesktop(t *testing.T) {
 		"XDG_SESSION_TYPE":    "wayland",
 		"XDG_CURRENT_DESKTOP": "KDE",
 		"DISTRO_ID":           "arch",
-	}, map[string]bool{"qml": true, "plasmashell": true, "systemctl": true, fmt.Sprintf("/run/user/%d/systemd", os.Getuid()): true}, true)
+	}, map[string]bool{"/usr/lib/qt6/qml/QtWebEngine": true, "plasmashell": true, "systemctl": true, fmt.Sprintf("/run/user/%d/systemd", os.Getuid()): true}, true)
 	r := Detect(opts)
 	if r.SessionType != "wayland" {
 		t.Errorf("session = %q", r.SessionType)
@@ -57,12 +57,11 @@ func TestDetectNamesAgnosticSessionAndDesktop(t *testing.T) {
 	if !r.Network {
 		t.Error("network not detected")
 	}
-	if r.PackageCmd != "pacman -S" {
+	if r.PackageCmd != "sudo pacman -S qt6-webengine layer-shell-qt" {
 		t.Errorf("package cmd = %q", r.PackageCmd)
 	}
-	// qml + plasmashell is the Qt WebEngine route.
-	if r.WebEngineName == "" || !strings.Contains(r.WebEngineName, "WebEngine") {
-		t.Errorf("web engine = %q", r.WebEngineName)
+	if web := checkNamed(t, r, "web engine"); web.Status != Found || !strings.Contains(web.Detail, "QtWebEngine") {
+		t.Errorf("web engine = %+v", web)
 	}
 }
 
@@ -85,11 +84,8 @@ func TestMissingWebEngineNamesThePackage(t *testing.T) {
 	if webCheck.Status != Missing {
 		t.Errorf("web engine status = %q, want missing", webCheck.Status)
 	}
-	if !strings.Contains(webCheck.Package, "apt install") {
-		t.Errorf("package hint %q lacks the distro command", webCheck.Package)
-	}
-	if r.PackageCmd != "apt install" {
-		t.Errorf("package cmd = %q", r.PackageCmd)
+	if webCheck.Package != "sudo apt install qml6-module-qtwebengine layer-shell-qt" {
+		t.Errorf("package hint %q is not the Debian command", webCheck.Package)
 	}
 }
 
@@ -130,8 +126,8 @@ func TestArchFamilyResolvesToPacman(t *testing.T) {
 		"DISTRO_ID_LIKE": "arch",
 	}, map[string]bool{}, true)
 	r := Detect(opts)
-	if r.PackageCmd != "pacman -S" {
-		t.Errorf("package cmd = %q, want pacman -S", r.PackageCmd)
+	if !strings.HasPrefix(r.PackageCmd, "sudo pacman -S ") {
+		t.Errorf("package cmd = %q, want the pacman command", r.PackageCmd)
 	}
 }
 
@@ -140,5 +136,84 @@ func TestRecommendBackendIsKdeLegacy(t *testing.T) {
 	r := Detect(opts)
 	if r.Backend != "kde-legacy" {
 		t.Errorf("backend = %q", r.Backend)
+	}
+}
+
+func checkNamed(t *testing.T, r Report, name string) Check {
+	t.Helper()
+	for _, c := range r.Checks {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("no %s check", name)
+	return Check{}
+}
+
+func TestPackageCommandUsesEachFamilysNames(t *testing.T) {
+	cases := map[string]string{
+		"arch":                "sudo pacman -S qt6-webengine layer-shell-qt",
+		"ubuntu":              "sudo apt install qml6-module-qtwebengine layer-shell-qt",
+		"fedora":              "sudo dnf install qt6-qtwebengine layer-shell-qt",
+		"opensuse-tumbleweed": "sudo zypper install qt6-webengine layer-shell-qt6",
+	}
+	for id, want := range cases {
+		r := Detect(fakeEnv(map[string]string{"DISTRO_ID": id}, map[string]bool{}, true))
+		if got := checkNamed(t, r, "web engine").Package; got != want {
+			t.Errorf("%s: package = %q, want %q", id, got, want)
+		}
+	}
+}
+
+func TestUnknownDistroPrintsNoPackageCommand(t *testing.T) {
+	r := Detect(fakeEnv(map[string]string{"DISTRO_ID": "somethingelse"}, map[string]bool{}, true))
+	if r.PackageCmd != "" {
+		t.Errorf("package cmd = %q, want none", r.PackageCmd)
+	}
+	var sb strings.Builder
+	Print(&sb, r)
+	if strings.Contains(sb.String(), "To install what is missing") {
+		t.Errorf("printed a package command for an unknown distro:\n%s", sb.String())
+	}
+}
+
+func TestAQmlBinaryIsNotQtWebEngine(t *testing.T) {
+	r := Detect(fakeEnv(map[string]string{"DISTRO_ID": "arch"}, map[string]bool{"qml": true}, true))
+	if web := checkNamed(t, r, "web engine"); web.Status != Missing {
+		t.Errorf("qml alone reported web engine %+v", web)
+	}
+}
+
+func TestLayerShellWithoutAProbe(t *testing.T) {
+	cases := []struct {
+		session, desktop string
+		want             Status
+	}{
+		{"wayland", "GNOME", Missing},
+		{"wayland", "ubuntu:GNOME", Missing},
+		{"wayland", "KDE", Found},
+		{"wayland", "sway", Found},
+		{"wayland", "Hyprland", Found},
+		{"wayland", "river", Found},
+		{"wayland", "SomeNewCompositor", Unknown},
+		{"x11", "KDE", Missing},
+	}
+	for _, c := range cases {
+		r := Detect(fakeEnv(map[string]string{"XDG_SESSION_TYPE": c.session, "XDG_CURRENT_DESKTOP": c.desktop}, map[string]bool{}, true))
+		if got := checkNamed(t, r, "layer-shell").Status; got != c.want {
+			t.Errorf("%s on %s: layer-shell = %q, want %q", c.desktop, c.session, got, c.want)
+		}
+	}
+}
+
+func TestLayerShellReadsTheGlobalsProbe(t *testing.T) {
+	globals := t.TempDir() + "/globals"
+	if err := os.WriteFile(globals, []byte("interface: 'wl_compositor'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := fakeEnv(map[string]string{"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE"}, map[string]bool{}, true)
+	opts.WaylandGlobals = globals
+	if got := checkNamed(t, Detect(opts), "layer-shell").Status; got != Missing {
+		t.Errorf("layer-shell = %q, want missing without zwlr_layer_shell_v1", got)
 	}
 }

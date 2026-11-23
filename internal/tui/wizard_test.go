@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/officialdad/spinewall/internal/doctor"
 	"github.com/officialdad/spinewall/internal/install"
@@ -316,4 +317,132 @@ func sameTree(a, b map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func TestCompositorStartLineForEachCompositor(t *testing.T) {
+	bin := "/opt/u/bin/spinewall"
+	cases := []struct {
+		desktop, config, line string
+	}{
+		{"sway", "~/.config/sway/config", "exec /opt/u/bin/spinewall serve"},
+		{"Hyprland", "~/.config/hypr/hyprland.conf", "exec-once = /opt/u/bin/spinewall serve"},
+		{"river", "~/.config/river/init", `riverctl spawn "/opt/u/bin/spinewall serve"`},
+	}
+	for _, c := range cases {
+		var out strings.Builder
+		printCompositorLine(&out, c.desktop, bin)
+		text := out.String()
+		if !strings.Contains(text, "Add this line to "+c.config) || !strings.Contains(text, "\n  "+c.line+"\n") {
+			t.Errorf("%s: printed\n%s\nwant %q in %s", c.desktop, text, c.line, c.config)
+		}
+	}
+	for _, desktop := range []string{"KDE", "GNOME", "unknown"} {
+		var out strings.Builder
+		printCompositorLine(&out, desktop, bin)
+		if out.Len() != 0 {
+			t.Errorf("%s: printed a compositor line:\n%s", desktop, out.String())
+		}
+	}
+}
+
+func TestSetupPrintsTheSwayLine(t *testing.T) {
+	paths := homePaths(t)
+	t.Setenv("SPINEWALL_PORT", freePort(t))
+	_, out := runCapture(t, Options{
+		Paths:      paths,
+		Yes:        true,
+		Offline:    true,
+		Executable: buildTestBinary(t),
+		Doctor: doctor.Options{
+			Getenv:  func(k string) string { return map[string]string{"XDG_CURRENT_DESKTOP": "sway"}[k] },
+			Network: func() bool { return false },
+		},
+		Runtime: spanruntime.New(spanruntime.Options{Dir: paths.Runtime, Offline: true}),
+	})
+	defer install.StopServer(paths, func(string) {})
+	want := "exec " + filepath.Join(paths.BinDir, "spinewall") + " serve"
+	if !strings.Contains(out, "\n  "+want+"\n") {
+		t.Errorf("setup did not print %q:\n%s", want, out)
+	}
+}
+
+// runCapture runs setup with its output in a file, since the form needs an
+// *os.File, and returns what it printed.
+func runCapture(t *testing.T, opts Options) (Result, string) {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	opts.Stdout = f
+	res, err := Run(opts)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	data, err := os.ReadFile(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res, string(data)
+}
+
+func TestSetupNextToTheLegacyInstallStartsNothing(t *testing.T) {
+	paths := homePaths(t)
+	t.Setenv("SPINEWALL_PORT", freePort(t))
+	if err := os.MkdirAll(paths.BinDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(paths.LegacyServer(), []byte("#!/usr/bin/env python3\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	res, out := runCapture(t, Options{
+		Paths:      paths,
+		Yes:        true,
+		Offline:    true,
+		Executable: buildTestBinary(t),
+		Doctor:     offlineDetect(),
+		Runtime:    spanruntime.New(spanruntime.Options{Dir: paths.Runtime, Offline: true}),
+	})
+	if !strings.Contains(out, "old Python install") || !strings.Contains(out, "spinewall uninstall --legacy") {
+		t.Errorf("no legacy warning:\n%s", out)
+	}
+	if _, err := os.Stat(paths.AutostartFile()); err == nil {
+		t.Error("autostart written next to the old Python install")
+	}
+	if res.Verified {
+		t.Error("setup verified a server next to the old Python install")
+	}
+	if _, err := os.Stat(paths.PidFile()); err == nil {
+		t.Error("setup started a server next to the old Python install")
+	}
+}
+
+func TestVerifyRefusesTheOldPythonServer(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is not installed")
+	}
+	paths := homePaths(t)
+	port := freePort(t)
+	t.Setenv("SPINEWALL_PORT", port)
+	server := exec.Command(python, "-I", filepath.Join(repoRoot(t), "server", "spinewall-server.py"))
+	server.Env = serverEnv(Options{Paths: paths})
+	if err := server.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = server.Process.Kill()
+		_ = server.Wait()
+	})
+	for i := 0; i < 100; i++ {
+		if _, ok := queryInfo(port, 200*time.Millisecond); ok {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	_, _, verified, err := startAndVerify(Options{Paths: paths, Executable: buildTestBinary(t)}, func(string) {})
+	if verified || err == nil || !strings.Contains(err.Error(), "uninstall --legacy") {
+		t.Errorf("verified = %v, err = %v, want a refusal naming uninstall --legacy", verified, err)
+	}
 }
