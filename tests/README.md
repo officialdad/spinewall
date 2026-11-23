@@ -54,7 +54,7 @@ How it works:
 
 Known gaps:
 
-- The `install.sh` bootstrap test cannot verify a real minisign signature: the release is unsigned until the captain adds the secret key, so the test covers the placeholder and checksum paths only. The runtime pin check is the Go test, gated by `SPINEWALL_TEST_NETWORK=1` (`go test ./internal/runtime`).
+- The `install.sh` bootstrap test stubs `minisign`, so it checks that the call uses the shipped `MINISIGN_PUBLIC_KEY`, not a real signature. A manual throwaway-key sign and verify covers the real tools. The runtime pin check is the Go test, gated by `SPINEWALL_TEST_NETWORK=1` (`go test ./internal/runtime`).
 - The patch is tested against files rebuilt from its own old side. It is not tested against a real `plasma-desktop` 6.8.1 tree.
 - shellcheck tests skip when `shellcheck` is not on PATH.
 

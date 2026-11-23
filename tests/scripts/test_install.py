@@ -65,6 +65,9 @@ class BootstrapCase(ScriptCase):
         sums.write_text(f"{digest}  spinewall-1.2.3-linux-amd64\n")
         self.sums = sums
         write_stub(self.stubs, "curl", CURL_STUB)
+        # The bootstrap verifies the signature on every install, so a passing
+        # minisign stub keeps the checksum and handoff tests off the real tool.
+        write_stub(self.stubs, "minisign", "exit 0")
 
     def run_bootstrap(self, **env):
         env.setdefault("STUB_SUMS", str(self.sums))
@@ -96,12 +99,6 @@ class Bootstrap(BootstrapCase):
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("not listed in SHA256SUMS", done.stderr)
 
-    def test_a_placeholder_key_skips_the_signature_and_says_so(self):
-        done = self.run_bootstrap()
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("placeholder signature key", done.stderr)
-        self.assertTrue((self.home / ".local/bin/spinewall").is_file())
-
     def test_an_unsupported_architecture_is_named(self):
         # Shadow uname so it reports an arch the bootstrap rejects.
         uname = write_stub(self.stubs, "uname", 'echo sparc\n')
@@ -111,7 +108,7 @@ class Bootstrap(BootstrapCase):
         self.assertIn("unsupported architecture", done.stderr)
 
 
-REAL_KEY = "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3"
+REAL_KEY = "RWQfxnTcpZHCTkn3a2pNTCqT56AOGC7/hE9ZevJc+h8Jvn3T4AozgPaT"
 
 # minisign verifies with the key on the command line. The stub records its
 # arguments and passes or fails as the test asks.
@@ -130,27 +127,24 @@ BOOTSTRAP_TOOLS = (
 
 
 class SignedBootstrap(BootstrapCase):
-    """The bootstrap once the captain has put the real key in place."""
+    """The bootstrap verifies with the release key that ships in install.sh."""
 
     def setUp(self):
         super().setUp()
-        text = (SCRIPTS / "install.sh").read_text()
-        start = text.index('MINISIGN_PUBLIC_KEY="') + len('MINISIGN_PUBLIC_KEY="')
-        end = text.index('"', start)
-        self.script = self.tmp / "install.sh"
-        self.script.write_text(text[:start] + REAL_KEY + text[end:])
         self.minisign_log = self.tmp / "minisign.log"
 
     def run_signed(self, with_minisign=True, **env):
         if with_minisign:
             write_stub(self.stubs, "minisign", MINISIGN_STUB)
+        else:
+            (self.stubs / "minisign").unlink(missing_ok=True)
         env.setdefault("STUB_SUMS", str(self.sums))
         env.setdefault("STUB_BINARY", str(self.binary))
         env.setdefault("STUB_LOG", str(self.log))
         env.setdefault("STUB_MINISIGN_LOG", str(self.minisign_log))
         limited = self.path_without("minisign", tools=BOOTSTRAP_TOOLS)
         env["PATH"] = f"{self.stubs}:{limited}"
-        return self.run_script(self.script, env_extra=env)
+        return self.run_script(SCRIPTS / "install.sh", env_extra=env)
 
     def assert_not_installed(self, done, message):
         self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
