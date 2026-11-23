@@ -348,7 +348,22 @@ func TestNoLegacyInAFreshHome(t *testing.T) {
 	}
 }
 
-func TestLegacyUninstallKeepsTheNewUnitAndTheme(t *testing.T) {
+func TestLegacyUninstallWithoutAMarkerKeepsTheNewInstall(t *testing.T) {
+	paths := testPaths(t)
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t), SystemdUnit: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := LegacyUninstall(paths, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, kept := range []string{paths.UnitFile(), filepath.Join(paths.ThemeDir(), "index.html")} {
+		if _, err := os.Stat(kept); err != nil {
+			t.Errorf("legacy uninstall removed the new install's %s: %v", kept, err)
+		}
+	}
+}
+
+func TestLegacyUninstallNeverRemovesANewGoUnit(t *testing.T) {
 	paths := testPaths(t)
 	writeLegacy(t, paths, false)
 	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t), SystemdUnit: true, AllowLegacy: true}); err != nil {
@@ -360,32 +375,14 @@ func TestLegacyUninstallKeepsTheNewUnitAndTheme(t *testing.T) {
 	if _, err := os.Stat(paths.LegacyServer()); err == nil {
 		t.Error("legacy server kept")
 	}
-	for _, kept := range []string{paths.UnitFile(), filepath.Join(paths.ThemeDir(), "index.html")} {
-		if _, err := os.Stat(kept); err != nil {
-			t.Errorf("legacy uninstall removed the new install's %s: %v", kept, err)
-		}
+	if _, err := os.Stat(paths.UnitFile()); err != nil {
+		t.Errorf("legacy uninstall removed the new Go unit: %v", err)
 	}
 }
 
-func TestLegacyUninstallRemovesTheOldUnitAndTheme(t *testing.T) {
+func TestUninstallLegacyRemovesTheWholeLegacyInstall(t *testing.T) {
 	paths := testPaths(t)
 	writeLegacy(t, paths, true)
-	if err := os.MkdirAll(paths.ThemeDir(), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := LegacyUninstall(paths, nil); err != nil {
-		t.Fatal(err)
-	}
-	for _, gone := range []string{paths.LegacyServer(), paths.UnitFile(), paths.ThemeDir()} {
-		if _, err := os.Stat(gone); err == nil {
-			t.Errorf("legacy %s kept", gone)
-		}
-	}
-}
-
-func TestLegacyUninstallRemovesALegacyThemeTheNewInstallFound(t *testing.T) {
-	paths := testPaths(t)
-	writeLegacy(t, paths, false)
 	if err := os.MkdirAll(paths.ThemeDir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -394,16 +391,38 @@ func TestLegacyUninstallRemovesALegacyThemeTheNewInstallFound(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t)}); err != nil {
+	inst, err := Install(Options{Paths: paths, Executable: fakeBinary(t)})
+	if err != nil {
 		t.Fatal(err)
 	}
+	preexisting := 0
+	for _, e := range inst.Manifest.Files {
+		if !e.Created {
+			preexisting++
+		}
+	}
+	if preexisting != 3 {
+		t.Fatalf("install recorded %d pre-existing files, want the 3 legacy theme files", preexisting)
+	}
+
 	if err := LegacyUninstall(paths, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Uninstall(UninstallOptions{Paths: paths}); err != nil {
+	res, err := Uninstall(UninstallOptions{Paths: paths})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(paths.ThemeDir()); err == nil {
-		t.Error("the legacy theme, with its Spine player, was left behind")
+	for _, gone := range []string{paths.ThemeDir(), paths.LegacyServer(), paths.UnitFile()} {
+		if _, err := os.Stat(gone); err == nil {
+			t.Errorf("%s left behind", gone)
+		}
+	}
+	for _, kept := range res.KeptFiles {
+		if _, err := os.Stat(kept); err != nil {
+			t.Errorf("reported %s as kept, but it was deleted", kept)
+		}
+	}
+	if len(res.KeptFiles) != 0 {
+		t.Errorf("kept = %v, want none", res.KeptFiles)
 	}
 }

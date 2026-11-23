@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 )
 
 // UninstallOptions configure one uninstall run.
@@ -65,7 +63,9 @@ func Uninstall(opts UninstallOptions) (UninstallResult, error) {
 
 	for _, e := range manifest.Files {
 		if !e.Created {
-			res.KeptFiles = append(res.KeptFiles, e.Path)
+			if exists(e.Path) {
+				res.KeptFiles = append(res.KeptFiles, e.Path)
+			}
 			continue
 		}
 		if err := os.Remove(e.Path); err != nil {
@@ -138,29 +138,25 @@ func removeIfEmpty(dir string) (bool, error) {
 // legacyPythonPaths are the files the old Python installer wrote. Uninstall
 // --legacy removes them so an existing user migrates cleanly. The patched
 // containment copy lives beside the system plasmoid; removing it lets the
-// desktop fall back to the system one, or to its restored .bak. The unit and
-// the theme share their paths with the new install, so each is only listed
-// while it still belongs to the old one.
+// desktop fall back to the system one, or to its restored .bak. The unit is
+// listed only while it is the old one, so a new Go unit is never removed here.
+// The theme directory goes whole while any old install marker remains, since
+// it also holds the old installer's Spine players, which no manifest records.
 func legacyPythonPaths(paths Paths) []string {
 	found := []string{paths.LegacyServer(), paths.LegacyContainment()}
-	if isLegacyUnit(paths.UnitFile()) {
+	legacyUnit := isLegacyUnit(paths.UnitFile())
+	if legacyUnit {
 		found = append(found, paths.UnitFile())
 	}
-	if !manifestHasUnder(loadManifest(paths.ManifestPath()), paths.ThemeDir()) {
+	if legacyUnit || exists(paths.LegacyServer()) || exists(paths.LegacyContainment()) {
 		found = append(found, paths.ThemeDir())
 	}
 	return found
 }
 
-// manifestHasUnder reports whether this install created a file inside dir. A
-// file it found already there predates it, so it does not count.
-func manifestHasUnder(m Manifest, dir string) bool {
-	for _, e := range m.Files {
-		if e.Created && strings.HasPrefix(e.Path, dir+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // LegacyUninstall removes the old Python install and restores the patched
