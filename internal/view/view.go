@@ -34,6 +34,9 @@ type Options struct {
 type DetectResult struct {
 	// LayerShell is true when the compositor offers zwlr_layer_shell_v1.
 	LayerShell bool
+	// LayerShellKnown is false when no probe ran and the desktop is not known
+	// either way, so LayerShell false only means "not proven".
+	LayerShellKnown bool
 	// WebEngine is true when the Qt WebEngine QML module is present.
 	WebEngine bool
 	// LayerShellQML is true when the org.kde.layershell QML module that view.qml
@@ -93,8 +96,8 @@ func Detect(opts Options) DetectResult {
 		return r
 	}
 
-	r.LayerShell = detectLayerShell(getenv, opts.WaylandGlobals)
-	r.WebEngine = anyExists(exists, qtWebEngineModules)
+	r.LayerShell, r.LayerShellKnown = detectLayerShell(getenv, opts.WaylandGlobals)
+	r.WebEngine = QtWebEngineDir(exists) != ""
 	r.LayerShellQML = anyExists(exists, layerShellQMLModules)
 	compiler, moc, pkgOK := detectToolchain(lookPath)
 	pkgModules := hasPkg(launcherPkgs)
@@ -121,24 +124,44 @@ func (r DetectResult) Ready() bool {
 	return r.LayerShell && r.WebEngine && r.LayerShellQML && r.Buildable
 }
 
-func detectLayerShell(getenv func(string) string, globalsFile string) bool {
+// detectLayerShell reports whether the compositor offers layer-shell, and
+// whether that answer is known. A globals probe decides first; without one, only
+// a desktop known either way gives an answer.
+func detectLayerShell(getenv func(string) string, globalsFile string) (offered, known bool) {
 	if getenv("XDG_SESSION_TYPE") != "wayland" {
-		return false
+		return false, true
 	}
 	if globalsFile != "" {
 		if data, err := os.ReadFile(globalsFile); err == nil {
-			return strings.Contains(string(data), "zwlr_layer_shell_v1")
+			return strings.Contains(string(data), "zwlr_layer_shell_v1"), true
 		}
 	}
-	desktop := strings.ToLower(getenv("XDG_CURRENT_DESKTOP"))
-	for _, name := range strings.Split(desktop, ":") {
+	desktop := getenv("XDG_CURRENT_DESKTOP")
+	if strings.TrimSpace(desktop) == "" {
+		desktop = getenv("DESKTOP_SESSION")
+	}
+	for _, name := range strings.Split(strings.ToLower(desktop), ":") {
+		if name == "gnome" {
+			return false, true
+		}
 		for _, known := range layerShellDesktops {
 			if name == known {
-				return true
+				return true, true
 			}
 		}
 	}
-	return false
+	return false, false
+}
+
+// QtWebEngineDir returns the Qt WebEngine QML module directory, or "" when
+// none is installed.
+func QtWebEngineDir(exists func(string) bool) string {
+	for _, dir := range qtWebEngineModules {
+		if exists(dir) {
+			return dir
+		}
+	}
+	return ""
 }
 
 func anyExists(exists func(string) bool, dirs []string) bool {

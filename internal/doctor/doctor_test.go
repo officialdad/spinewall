@@ -158,6 +158,19 @@ func TestRecommendLayerShellWhenTheViewCanBuildAndLoad(t *testing.T) {
 	}
 }
 
+func TestDesktopSessionAloneAgreesWithTheRecommendation(t *testing.T) {
+	env, present := readyNative()
+	delete(env, "XDG_CURRENT_DESKTOP")
+	env["DESKTOP_SESSION"] = "sway"
+	r := Detect(fakeEnv(env, present, true))
+	if got := checkNamed(t, r, "layer-shell").Status; got != Found {
+		t.Errorf("layer-shell row = %q, want found", got)
+	}
+	if r.Backend != "layer-shell" {
+		t.Errorf("backend = %q, want layer-shell to match the row", r.Backend)
+	}
+}
+
 func TestNoLayerShellWithoutTheQtDevelopmentModules(t *testing.T) {
 	// The tools are on PATH but pkg-config cannot resolve Qt6WebEngineQuick, so
 	// setup's build would fail.

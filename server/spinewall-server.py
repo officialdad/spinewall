@@ -1322,6 +1322,9 @@ class Handler(SimpleHTTPRequestHandler):
                 INPUT[key] = min(INPUT_TOTAL_MAX, INPUT[key] + step)
             return self.send_json({"ok": True})
         if path == "/mask":
+            stage = self.stage_param(create=True)
+            if stage is None:
+                return
             mask, error = post_mask(self.screen or "", body)
             if error is not None:
                 return self.send_json({"error": error}, 400)

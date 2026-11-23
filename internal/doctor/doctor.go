@@ -98,9 +98,19 @@ func Detect(opts Options) Report {
 		Check{Name: "desktop", Status: foundOrMissing(r.Desktop != "unknown" && r.Desktop != ""), Detail: r.Desktop, Needed: true},
 	)
 
+	// internal/view owns the native view checks, so the rows below and the
+	// recommendation always read the same answers.
+	native := view.Detect(view.Options{
+		Getenv:         getenv,
+		LookPath:       lookPath,
+		Exists:         exists,
+		WaylandGlobals: opts.WaylandGlobals,
+		HasPkg:         opts.HasPkg,
+	})
+
 	// Layer-shell is offered by the compositor. On Wayland read the globals a
 	// probe would see; off Wayland it is simply not available.
-	r.LayerShell = detectLayerShell(getenv, opts.WaylandGlobals, r.Desktop)
+	r.LayerShell = layerShellStatus(native)
 	r.Checks = append(r.Checks, Check{
 		Name:   "layer-shell",
 		Status: r.LayerShell,
@@ -129,15 +139,7 @@ func Detect(opts Options) Report {
 
 	// The C++ toolchain and Qt development files the native view launcher needs,
 	// and the layer-shell QML module it loads. It builds on the user's machine
-	// because QtWebEngine cannot link into a static Go binary. internal/view runs
-	// the same check setup's build relies on, so a recommendation can build.
-	native := view.Detect(view.Options{
-		Getenv:         getenv,
-		LookPath:       lookPath,
-		Exists:         exists,
-		WaylandGlobals: opts.WaylandGlobals,
-		HasPkg:         opts.HasPkg,
-	})
+	// because QtWebEngine cannot link into a static Go binary.
 	r.Checks = append(r.Checks, Check{
 		Name:    "view build toolchain",
 		Status:  foundOrMissing(native.Buildable),
@@ -231,29 +233,12 @@ func (r Report) PackageHints() []string {
 
 // ---- detection helpers ----
 
-// layerShellDesktops offer zwlr_layer_shell_v1. GNOME is the common Wayland
-// desktop that does not.
-var layerShellDesktops = []string{"kde", "sway", "hyprland", "river", "wayfire", "labwc", "niri"}
-
-func detectLayerShell(getenv func(string) string, globalsFile, desktop string) Status {
-	if getenv("XDG_SESSION_TYPE") != "wayland" {
+func layerShellStatus(native view.DetectResult) Status {
+	switch {
+	case native.LayerShell:
+		return Found
+	case native.LayerShellKnown:
 		return Missing
-	}
-	if globalsFile != "" {
-		if data, err := os.ReadFile(globalsFile); err == nil {
-			return foundOrMissing(strings.Contains(string(data), "zwlr_layer_shell_v1"))
-		}
-	}
-	// No probe ran, so only a desktop known either way gives an answer.
-	for _, name := range strings.Split(strings.ToLower(desktop), ":") {
-		if name == "gnome" {
-			return Missing
-		}
-		for _, known := range layerShellDesktops {
-			if name == known {
-				return Found
-			}
-		}
 	}
 	return Unknown
 }
@@ -305,20 +290,9 @@ func gpuVendor(id string) string {
 	}
 }
 
-// qtWebEngineModules are where distros put the QtWebEngine QML module, which
-// the KDE backend and the planned layer-shell view load.
-var qtWebEngineModules = []string{
-	"/usr/lib/qt6/qml/QtWebEngine",
-	"/usr/lib64/qt6/qml/QtWebEngine",
-	"/usr/lib/x86_64-linux-gnu/qt6/qml/QtWebEngine",
-	"/usr/lib/aarch64-linux-gnu/qt6/qml/QtWebEngine",
-}
-
 func detectWebEngine(lookPath func(string) (string, error), exists func(string) bool, pkgCmd string) (Status, string, string) {
-	for _, dir := range qtWebEngineModules {
-		if exists(dir) {
-			return Found, "Qt WebEngine (" + dir + ")", ""
-		}
+	if dir := view.QtWebEngineDir(exists); dir != "" {
+		return Found, "Qt WebEngine (" + dir + ")", ""
 	}
 	for _, browser := range []string{"chromium", "google-chrome-stable", "firefox"} {
 		if _, err := lookPath(browser); err == nil {
