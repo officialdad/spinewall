@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -28,6 +29,37 @@ type run struct {
 	client   *http.Client
 	trap     bool
 	resolver func(*run) (string, error)
+	// getenv and execCmd are injectable so a provider test never reads the real
+	// session or runs a compositor command.
+	getenv  func(string) string
+	execCmd func(name string, args ...string) ([]byte, error)
+	// kdeScreen is the KDE provider, injectable so a non-KDE test does not need
+	// a session bus.
+	kdeScreen func(*run) (string, error)
+}
+
+// env reads one environment variable, defaulting to the process environment.
+func (r *run) env(key string) string {
+	if r.getenv != nil {
+		return r.getenv(key)
+	}
+	return os.Getenv(key)
+}
+
+// output runs a command and returns its stdout, defaulting to the real box.
+func (r *run) output(name string, args ...string) ([]byte, error) {
+	if r.execCmd != nil {
+		return r.execCmd(name, args...)
+	}
+	return exec.Command(name, args...).Output()
+}
+
+// kde reads the active monitor from KWin, defaulting to the real D-Bus call.
+func (r *run) kde() (string, error) {
+	if r.kdeScreen != nil {
+		return r.kdeScreen(r)
+	}
+	return r.kwinScreen()
 }
 
 // Run executes one invocation and returns the process exit code. A shortcut
@@ -51,12 +83,13 @@ func Run(args []string) int {
 		trap = true
 	}
 	r := &run{
-		base:     "http://127.0.0.1:" + envOr("SPINEWALL_PORT", "8777"),
-		stdout:   os.Stdout,
-		stderr:   stderr,
-		client:   &http.Client{Timeout: 30 * time.Second},
-		trap:     trap,
-		resolver: (*run).resolveCurrentScreen,
+		base:      "http://127.0.0.1:" + envOr("SPINEWALL_PORT", "8777"),
+		stdout:    os.Stdout,
+		stderr:    stderr,
+		client:    &http.Client{Timeout: 30 * time.Second},
+		trap:      trap,
+		resolver:  (*run).resolveCurrentScreen,
+		kdeScreen: (*run).kwinScreen,
 	}
 	return r.exec(args)
 }

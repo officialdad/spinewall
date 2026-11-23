@@ -3,6 +3,7 @@ package view
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -91,6 +92,92 @@ func TestDetectX11HasNoLayerShell(t *testing.T) {
 	}
 }
 
+func TestSessionBackendPicksX11OnARealX11Session(t *testing.T) {
+	cases := map[string]string{
+		"x11":     BackendX11,
+		"wayland": BackendLayerShell,
+		"tty":     BackendLayerShell,
+	}
+	for session, want := range cases {
+		got := SessionBackend(func(key string) string {
+			if key == "XDG_SESSION_TYPE" {
+				return session
+			}
+			return ""
+		})
+		if got != want {
+			t.Errorf("%s session: backend = %q, want %q", session, got, want)
+		}
+	}
+}
+
+func TestReadyX11NeedsNoLayerShellQML(t *testing.T) {
+	// A real X11 session cannot offer layer-shell, so the X11 backend must be
+	// ready with the same launcher and web engine but no layer-shell module.
+	opts := fakeOpts("x11", "XFCE", map[string]bool{
+		"c++": true, "moc": true, "pkg-config": true,
+		"/usr/lib/qt6/qml/QtWebEngine": true, "pkg:Qt6Quick": true,
+	})
+	r := Detect(opts)
+	if !r.X11 {
+		t.Error("X11 session not detected")
+	}
+	if r.Ready() {
+		t.Error("layer-shell reported ready on X11")
+	}
+	if !r.ReadyX11() {
+		t.Errorf("X11 backend not ready: %+v", r)
+	}
+}
+
+func TestBrowserCommandRunsOnItsOwnProfile(t *testing.T) {
+	cases := map[string][]string{
+		"firefox":  {"--new-instance", "--profile", "/p/kiosk", "--kiosk", "http://x/index.html"},
+		"chromium": {"--user-data-dir=/p/kiosk", "--no-first-run", "--no-default-browser-check", "--kiosk", "http://x/index.html"},
+	}
+	for browser, want := range cases {
+		got, err := BrowserCommand("http://x/index.html", "/p/kiosk", func(name string) (string, error) {
+			if name == browser {
+				return "/usr/bin/" + name, nil
+			}
+			return "", os.ErrNotExist
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != browser {
+			t.Errorf("browser = %q, want %s", got.Name, browser)
+		}
+		if strings.Join(got.Args, " ") != strings.Join(want, " ") {
+			t.Errorf("%s args = %v, want %v", browser, got.Args, want)
+		}
+	}
+}
+
+func TestBrowserCommandPicksTheFirstInstalled(t *testing.T) {
+	have := map[string]bool{"firefox": true, "google-chrome": true}
+	lookPath := func(name string) (string, error) {
+		if have[name] {
+			return "/usr/bin/" + name, nil
+		}
+		return "", os.ErrNotExist
+	}
+	got, err := BrowserCommand("http://x", "/p", lookPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "google-chrome" || FindBrowser(lookPath) != got.Name {
+		t.Errorf("browser = %q, FindBrowser = %q, want google-chrome", got.Name, FindBrowser(lookPath))
+	}
+}
+
+func TestBrowserCommandWithoutABrowserIsAnError(t *testing.T) {
+	_, err := BrowserCommand("http://x", "/p", func(string) (string, error) { return "", os.ErrNotExist })
+	if err == nil {
+		t.Fatal("no browser reported as success")
+	}
+}
+
 func TestDetectReadsTheGlobalsProbe(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "globals")
 	if err := os.WriteFile(file, []byte("interface: 'zwlr_layer_shell_v1'\n"), 0o644); err != nil {
@@ -135,13 +222,14 @@ func TestPageURLNamesTheMonitorAndTheNativeView(t *testing.T) {
 }
 
 func TestLaunchArgsCarryTheMonitor(t *testing.T) {
-	args := LaunchArgs("/bin/spinewall-view", "http://x/index.html?view=native&screen=k", "http://x", Monitor{Name: "DP-2", Geometry: "3440x1440+0+0"}, "bottom")
+	args := LaunchArgs("/bin/spinewall-view", "http://x/index.html?view=native&screen=k", "http://x", Monitor{Name: "DP-2", Geometry: "3440x1440+0+0"}, "bottom", BackendLayerShell)
 	joined := joinArgs(args)
 	for _, want := range []string{
 		"http://x/index.html?view=native&screen=k",
 		"--api http://x",
 		"--screen 3440x1440+0+0",
 		"--layer bottom",
+		"--backend layer-shell",
 		"--output DP-2",
 		"--geometry 3440x1440+0+0",
 	} {

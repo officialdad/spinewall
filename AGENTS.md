@@ -44,7 +44,7 @@ Live 2D wallpaper for the Linux desktop, played with the Spine runtimes. KDE Pla
 3. The page polls `/state` every 700 ms and applies the change when a revision differs.
 4. The page reports the animation list to `POST /report` after each model load.
 5. Edit mode has three entry points to the same server API: the patched containment calls `GET /edit/0|1`, the native view's page shows an Edit button, and `spinewall edit [on|off]` toggles it (`GET /edit/toggle`). The page reads `edit` from `/state`.
-6. In the native view the page reports its click region to `POST /mask` (one rectangle per character and one for the Edit button in normal mode, `{full:true}` in edit mode). The launcher polls `GET /mask` and calls `QWindow::setMask`, so a click on a character reaches the page and a click elsewhere reaches the desktop. The mask is per screen, in memory only, and starts full.
+6. In the native view the page reports its click region to `POST /mask` (one rectangle per character and one for the Edit button in normal mode, `{full:true}` in edit mode). The layer-shell launcher polls `GET /mask` and calls `QWindow::setMask`, so a click on a character reaches the page and a click elsewhere reaches the desktop. The X11 launcher sets no mask, because Qt applies it there as a bounding shape that clips drawing, so the whole surface takes clicks. The mask is per screen, in memory only, and starts full.
 
 ## Rules
 

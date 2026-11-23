@@ -20,10 +20,16 @@ func installView(w *writer, paths Paths, opts Options, logf func(string)) (strin
 	}
 	src := filepath.Join(dir, "launcher.cpp")
 	qml := filepath.Join(dir, "view.qml")
+	qmlX11 := filepath.Join(dir, "view-x11.qml")
 	if err := w.write(src, view.LauncherSource, 0o644); err != nil {
 		return "", err
 	}
+	// Both surfaces ship in the one launcher. A host that boots into either
+	// session type finds the QML it needs without a reinstall.
 	if err := w.write(qml, view.SurfaceQML, 0o644); err != nil {
+		return "", err
+	}
+	if err := w.write(qmlX11, view.SurfaceX11QML, 0o644); err != nil {
 		return "", err
 	}
 

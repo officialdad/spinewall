@@ -12,7 +12,7 @@
 // one per monitor.
 //
 // argv: <page-url> [--output NAME] [--geometry WxH+X+Y] [--layer bottom|background]
-//      [--poll-ms N]
+//      [--backend layer-shell|x11] [--poll-ms N]
 #include <QDBusConnection>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -40,6 +40,7 @@ struct Options {
     QString output;
     QString geometry;
     QString screenKey;
+    QString backend = QStringLiteral("layer-shell");
     int layer = 1; // 1 = LayerBottom, 0 = LayerBackground
     int pollMs = 400;
     QString apiBase;
@@ -49,7 +50,7 @@ struct Options {
 int usage(const char *argv0) {
     std::fprintf(stderr,
                  "usage: %s <page-url> [--output NAME] [--geometry WxH+X+Y] [--screen KEY] "
-                 "[--layer bottom|background] [--poll-ms N] [--api URL]\n"
+                 "[--layer bottom|background] [--backend layer-shell|x11] [--poll-ms N] [--api URL]\n"
                  "       %s --list-screens\n",
                  argv0, argv0);
     return 64;
@@ -121,6 +122,8 @@ int main(int argc, char **argv) {
         } else if (arg == "--layer" && i + 1 < argc) {
             const QString value = QString::fromLocal8Bit(argv[++i]);
             opt.layer = value == "background" ? 0 : 1;
+        } else if (arg == "--backend" && i + 1 < argc) {
+            opt.backend = QString::fromLocal8Bit(argv[++i]);
         } else if (arg == "--poll-ms" && i + 1 < argc) {
             opt.pollMs = QString::fromLocal8Bit(argv[++i]).toInt();
         } else if (arg == "--api" && i + 1 < argc) {
@@ -191,13 +194,24 @@ int main(int argc, char **argv) {
     }
     std::fprintf(stderr, "SPVIEW screen %s %dx%d\n", screen->name().toLocal8Bit().constData(),
                  screen->geometry().width(), screen->geometry().height());
+    std::fprintf(stderr, "SPVIEW backend %s\n", opt.backend.toLocal8Bit().constData());
+
+    // X11 has no layer-shell, so it loads a desktop-type window placed on the
+    // output's geometry. The layer-shell surface ignores the geometry properties.
+    const QString qmlName =
+        opt.backend == "x11" ? QStringLiteral("view-x11.qml") : QStringLiteral("view.qml");
+    const QRect target = screen->geometry();
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("pageUrl"), opt.pageUrl);
     engine.rootContext()->setContextProperty(QStringLiteral("targetScreen"),
                                              QVariant::fromValue<QObject *>(screen));
     engine.rootContext()->setContextProperty(QStringLiteral("shellLayer"), opt.layer);
-    engine.load(QUrl::fromLocalFile(QCoreApplication::applicationDirPath() + "/view.qml"));
+    engine.rootContext()->setContextProperty(QStringLiteral("targetX"), target.x());
+    engine.rootContext()->setContextProperty(QStringLiteral("targetY"), target.y());
+    engine.rootContext()->setContextProperty(QStringLiteral("targetWidth"), target.width());
+    engine.rootContext()->setContextProperty(QStringLiteral("targetHeight"), target.height());
+    engine.load(QUrl::fromLocalFile(QCoreApplication::applicationDirPath() + "/" + qmlName));
     if (engine.rootObjects().isEmpty()) {
         std::fprintf(stderr, "SPVIEW error no root objects\n");
         return 2;
@@ -206,6 +220,16 @@ int main(int argc, char **argv) {
     if (!window) {
         std::fprintf(stderr, "SPVIEW error root is not a QQuickWindow\n");
         return 3;
+    }
+
+    // The xcb platform plugin reads this property when it creates the native
+    // window and writes the matching _NET_WM_WINDOW_TYPE, so the window manager
+    // treats each monitor's window as the desktop. 0x2 is its Desktop type. The
+    // X11 surface starts hidden so the property is set before the window exists.
+    if (opt.backend == "x11") {
+        window->setProperty("_q_xcb_wm_window_type", 0x000002);
+        window->show();
+        std::fprintf(stderr, "SPVIEW x11 window type desktop\n");
     }
 
     // The mask belongs to this window's stage, so the poll names the same screen
@@ -259,7 +283,12 @@ int main(int argc, char **argv) {
             std::fprintf(stderr, "SPVIEW mask %d rect(s) rev %d\n", int(rects.size()), rev);
         });
     });
-    timer->start(opt.pollMs > 0 ? opt.pollMs : 400);
+    // On xcb, QWindow::setMask sets the XShape bounding region, which clips what
+    // the window draws as well as its input. A desktop-type window has no desktop
+    // below it to pass clicks to, so X11 keeps the whole surface and takes no mask.
+    if (opt.backend != "x11") {
+        timer->start(opt.pollMs > 0 ? opt.pollMs : 400);
+    }
 
     // A lock, a suspend or a fullscreen client can leave the page's draw loop
     // dead while the surface stays mapped, so the window never sees a visibility

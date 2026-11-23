@@ -465,6 +465,19 @@ func TestSetupPrintsTheSwayLine(t *testing.T) {
 	if !strings.Contains(out, "\n  "+want+"\n") {
 		t.Errorf("setup did not print %q:\n%s", want, out)
 	}
+	entry, err := os.ReadFile(paths.AutostartFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	execLine := ""
+	for _, line := range strings.Split(string(entry), "\n") {
+		if cmd, ok := strings.CutPrefix(line, "Exec="); ok {
+			execLine = cmd
+		}
+	}
+	if execLine == "" || !strings.Contains(out, "\n  exec "+execLine+"\n") {
+		t.Errorf("printed line does not run the autostart command %q:\n%s", execLine, out)
+	}
 }
 
 // runCapture runs setup with its output in a file, since the form needs an

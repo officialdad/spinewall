@@ -119,12 +119,16 @@ Enter edit mode from the Edit button in the corner (native view), or from the Pl
 
 ## Requirements
 
-Spinewall has two backends. `spinewall doctor` reports which one this machine can run and names the exact package command.
+Spinewall has one native view with two surfaces, plus a legacy backend and a browser fallback. `spinewall doctor` reports which this machine can run and names the exact package command.
 
-- **Native layer-shell view** (recommended where it works). One layer-shell window per monitor draws the page in Qt WebEngine. No plugin and no containment patch. It needs a Wayland compositor with `zwlr_layer_shell_v1` (KDE Plasma, sway, Hyprland, river, labwc, Wayfire), Qt WebEngine, layer-shell-qt, and a C++ toolchain with `moc` and `pkg-config` to build the small launcher. The click mask that used to need the Plasma patch is handled by the launcher.
+- **Native layer-shell view** (recommended where it works). One layer-shell window per monitor draws the page in Qt WebEngine. No plugin and no containment patch. It needs a Wayland compositor with `zwlr_layer_shell_v1` (KDE Plasma, sway, Hyprland, river, labwc, Wayfire), Qt WebEngine, layer-shell-qt, and a C++ toolchain with `moc` and `pkg-config` to build the small launcher. The click mask that used to need the Plasma patch is handled by the launcher. Proven on KDE Plasma 6 Wayland; unverified on the other compositors.
+- **Native X11 view** (best effort, unverified). The same launcher and page draw a desktop-type window per monitor on a real X11 session, where layer-shell does not exist. Run `spinewall view --backend x11`. See [docs/desktops.md](docs/desktops.md).
 - **KDE Plasma legacy** (fallback). The `webwallpaper-kde` plugin plus the patched desktop containment. Needs KDE Plasma 6 and the plugin. It stays installable until the native view replaces it everywhere.
+- **Kiosk browser fallback** (unverified). `spinewall view --browser` opens the page fullscreen in Chromium or Firefox where no wallpaper layer is available.
 
-Both need `curl` or `wget` for the one-line install. The server, the CLI, and the runtime fetch need no Python or npm: they are in one static Go binary.
+GNOME is unsupported: it has no layer-shell and needs a shell extension this project does not ship. The kiosk fallback is the only option there. See [docs/desktops.md](docs/desktops.md).
+
+All of them need `curl` or `wget` for the one-line install. The server, the CLI, and the runtime fetch need no Python or npm: they are in one static Go binary.
 
 - Spine models. See [docs/assets.md](docs/assets.md).
 
@@ -133,7 +137,9 @@ Both need `curl` or `wget` for the one-line install. The server, the CLI, and th
 | Component | Version |
 |---|---|
 | KDE Plasma | 6.x. The native view is tested on 6.8 Wayland. The containment patch targets 6.8.1. |
-| Wayland compositors | Any with `zwlr_layer_shell_v1`. KDE Plasma and wlroots-style compositors. |
+| Wayland compositors | Any with `zwlr_layer_shell_v1`. KDE Plasma and wlroots-style compositors. The view is unverified off Plasma. |
+| X11 sessions | Any real X11 session. The X11 view is unverified. |
+| GNOME | Unsupported. Use `spinewall view --browser`. |
 | Spine models | 3.7 (JSON only), 3.8, 4.0, 4.1, 4.2 |
 | Spinewall | The latest release. See [SECURITY.md](SECURITY.md). |
 
@@ -158,14 +164,18 @@ Prefer another way:
 2. The Spine licence notice, with a consent prompt.
 3. Fetches the Spine runtimes into `~/.cache/spinewall/runtime` (under `$XDG_CACHE_HOME` when set), checking each download against a pinned sha256.
 4. Asks for the models folder, kept in `~/.config/spinewall/config.json`.
-5. Chooses a backend. The native layer-shell view installs when this machine can build it; the KDE Plasma legacy backend is always offered as the fallback.
+5. Chooses a backend. The native view (layer-shell, or X11 on a real X11 session) installs when this machine can build it; the KDE Plasma legacy backend is always offered as the fallback. An unverified backend is never the `--yes` default while a verified one can run, so KDE Plasma keeps the legacy backend on X11.
 6. Installs the files, an XDG autostart entry, and optionally a systemd user unit, then starts the server and verifies it with `/info`. For the KDE Plasma legacy backend the install links the fetched players into the theme folder (`~/.local/share/webwallpaper/themes/spinewall`), because the KDE backend opens the page from `file://` and the page loads each player by relative URL. A refetch or `spinewall runtime fetch` relinks them. The opt-in systemd unit mounts the theme folder read-only, so a server under it cannot relink the players and logs that once. Run `spinewall runtime fetch` or `spinewall setup` to relink them. A `--runtime-dir` or `SPINEWALL_RUNTIME_DIR` that is not the default cache, and not the one the theme links to, never touches the installed theme or its manifest.
 
 Run `spinewall doctor` on its own at any time, and paste its table into a bug report.
 
 Then finish the desktop side for your backend:
 
-**Native layer-shell view.** setup writes the launcher source to `~/.cache/spinewall/view` and builds it. The autostart entry runs `spinewall serve --with-view`, which serves the page and draws one layer-shell window per monitor. Nothing else is needed: no plugin, no patch. Click a character to change its animation. Enter edit mode from the Edit button in the corner, or bind `spinewall edit` to a shortcut. A click on the character reaches the page and a click elsewhere reaches the desktop, because the launcher keeps the window's input mask around the characters. See [docs/native-view.md](docs/native-view.md).
+**Native layer-shell view.** setup writes the launcher source to `~/.cache/spinewall/view` and builds it. The autostart entry runs `spinewall serve --with-view --view-backend layer-shell`, which serves the page and draws one layer-shell window per monitor. Nothing else is needed: no plugin, no patch. Click a character to change its animation. Enter edit mode from the Edit button in the corner, or bind `spinewall edit` to a shortcut. A click on the character reaches the page and a click elsewhere reaches the desktop, because the launcher keeps the window's input mask around the characters. See [docs/native-view.md](docs/native-view.md).
+
+**Native X11 view** (best effort, unverified). On a real X11 session setup writes the same launcher and an autostart entry that runs `spinewall serve --with-view --view-backend x11`, which draws one desktop-type window per monitor. Run it once by hand to try it: `spinewall view --backend x11`. See [docs/desktops.md](docs/desktops.md) for the window-manager caveats.
+
+**Kiosk browser fallback** (unverified). `spinewall view --browser` opens the page fullscreen in Chromium or Firefox. It is a normal window, not a wallpaper. The compositor config below can pin it if yours supports window rules.
 
 **KDE Plasma legacy.** Run these once after setup:
 
@@ -174,13 +184,13 @@ Then finish the desktop side for your backend:
 3. Put models in `~/.local/share/spinewall/models/` (or the folder you chose), then run `spinewall rescan`. See [docs/assets.md](docs/assets.md).
 4. Right-click the desktop, open "Configure Desktop and Wallpaper", choose "WebWallpaper", and pick the `spinewall` theme.
 
-**Autostart.** The wizard writes `~/.config/autostart/spinewall.desktop`. The native backend runs `spinewall serve --with-view`; the KDE legacy backend runs `spinewall serve`. If a systemd user session is detected it offers `~/.config/systemd/user/spinewall.service` as an opt-in. sway, Hyprland, and river do not run XDG autostart entries, so the wizard prints the line for yours. Spinewall never edits a compositor config for you.
+**Autostart.** The wizard writes `~/.config/autostart/spinewall.desktop`. The native layer-shell backend runs `spinewall serve --with-view --view-backend layer-shell`; the X11 backend pins its surface with `--view-backend x11`; the KDE legacy backend runs `spinewall serve`. If a systemd user session is detected it offers `~/.config/systemd/user/spinewall.service` as an opt-in. sway, Hyprland, and river do not run XDG autostart entries, so the wizard prints the line for yours. Spinewall never edits a compositor config for you.
 
 | Compositor | File | Line |
 |---|---|---|
-| sway | `~/.config/sway/config` | `exec ~/.local/bin/spinewall serve --with-view` |
-| Hyprland | `~/.config/hypr/hyprland.conf` | `exec-once = ~/.local/bin/spinewall serve --with-view` |
-| river | `~/.config/river/init` | `riverctl spawn "~/.local/bin/spinewall serve --with-view"` |
+| sway | `~/.config/sway/config` | `exec ~/.local/bin/spinewall serve --with-view --view-backend layer-shell` |
+| Hyprland | `~/.config/hypr/hyprland.conf` | `exec-once = ~/.local/bin/spinewall serve --with-view --view-backend layer-shell` |
+| river | `~/.config/river/init` | `riverctl spawn "~/.local/bin/spinewall serve --with-view --view-backend layer-shell"` |
 
 **Old Python install.** `spinewall setup` and `spinewall doctor` warn when `~/.local/bin/spinewall-server` or its systemd unit is still present. setup then writes no autostart entry or unit and starts no server, because both servers use one port. Run `spinewall uninstall --legacy`, then `spinewall setup` again. `--alongside-legacy` installs autostart anyway.
 
@@ -199,10 +209,13 @@ spinewall load-preset NAME | delete-preset NAME
 spinewall next-preset | prev-preset
 spinewall screens
 spinewall edit [on|off]
-spinewall view [--layer bottom|background] [--list-monitors]
+spinewall view [--backend layer-shell|x11] [--layer bottom|background] [--browser] [--list-monitors]
+spinewall serve --with-view [--view-backend layer-shell|x11]
 spinewall --screen KEY next-preset
 spinewall --screen current next-preset
 ```
+
+`--screen current` reads the monitor in use from KWin on KDE, from `hyprctl` on Hyprland, and from `swaymsg` on sway. The sway and Hyprland providers are unverified; pass `--screen KEY` elsewhere.
 
 On a multi-monitor desktop each monitor has its own layout and preset. A command reaches every monitor unless it carries `--screen KEY`. `spinewall screens` lists the keys. `spinewall mask --screen KEY` prints the click region of that monitor's native view window.
 
@@ -217,15 +230,15 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | `theme/embed.go` | Embeds the page and local host into the Go binary. Never embeds the Spine players. |
 | `server/spinewall-server.py` | Local HTTP server. State, model scan, prefs, layout, thumbnails. |
 | `cmd/spinewall` | The one binary. `spinewall serve` is a drop-in for the Python server. `spinewall setup`, `doctor`, `install`, `uninstall`, and `build-theme` manage an install; `spinewall runtime fetch\|verify` manages the players. Any other argument is a client command against a running server. |
-| `internal/cli` | The client commands. Percent-encoding, the 3-argument limit, the shortcut log, and `--screen current` over D-Bus on KDE. |
+| `internal/cli` | The client commands. Percent-encoding, the 3-argument limit, the shortcut log, and `--screen current` over D-Bus on KDE, `hyprctl` on Hyprland, and `swaymsg` on sway. |
 | `internal/api` | Go HTTP handlers, guards, body caps, model file serving. |
 | `internal/state` | Go stage, characters, presets and prefs logic. |
 | `internal/runtime` | Pins the Spine players by sha256, fetches and verifies them into `SPINEWALL_RUNTIME_DIR` (default under the user cache), and serves them. Never embeds them. |
 | `internal/scan` | Go model scan, version sniff, atlas regions, kind detection. |
 | `internal/jx` | Go JSON decoder that matches Python `json.loads`, so both servers read a body the same way. |
-| `internal/doctor` | Detects session, desktop, layer-shell, GPU, web engine, systemd, and network, and names the distro package command. Never runs a package manager. |
+| `internal/doctor` | Detects session, desktop, layer-shell, an X11 session, the kiosk browser, GPU, web engine, systemd, and network, and names the distro package command. Marks the unverified backends. Never runs a package manager. |
 | `internal/install` | The install manifest, install and uninstall, the XDG autostart entry, the opt-in systemd unit, and the legacy uninstall. For the KDE legacy backend it links the cached Spine players into the theme folder, as symlinks into the cache or copies, so the `file://` page finds them, and records them so uninstall removes the links but not the cache. |
-| `internal/view` | The native layer-shell backend. Detects the compositor and toolchain, embeds the launcher source and `view.qml`, builds the launcher on the user's machine, and runs one window per monitor. |
+| `internal/view` | The native view backend. Detects the compositor and toolchain, embeds the launcher source and both surfaces (`view.qml` for layer-shell, `view-x11.qml` for a desktop-type window), builds the launcher on the user's machine, runs one window per monitor, and selects the kiosk browser fallback. |
 | `internal/tui` | The `setup` wizard: huh and bubbletea forms that run the doctor, the licence consent, the runtime fetch, the install, and the start-and-verify. |
 | `bin/spinewall` | Deprecated shim. Runs a built `spinewall` binary when one is next to it, so the legacy installer keeps working until the installer phase. It holds no CLI logic. |
 | `scripts/build-demo.py` | Builds the Pages demo from `theme/index.html` in local mode. |
@@ -233,7 +246,8 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | `scripts/install.sh` | The POSIX bootstrap: downloads the release binary, verifies it, and runs `spinewall setup`. |
 | `scripts/patch-plasmoid.sh` | Applies `plasma/desktopcontainment.patch`. |
 | `systemd/spinewall.service` | The hardened user unit the wizard can generate as an opt-in. |
-| `docs/native-view.md` | How the layer-shell backend works: the launcher, the input mask, per-monitor windows, and the reload on resume. |
+| `docs/native-view.md` | How the native view works: the launcher, the input mask, per-monitor windows, and the reload on resume. |
+| `docs/desktops.md` | The other desktops, best effort and marked unverified: the X11 view, the kiosk fallback, GNOME unsupported, and the `--screen current` providers. |
 | `docs/assets.md` | Model layout and `model.json` keys. |
 | `docs/credits.md` | Sources, tools, and test models. |
 

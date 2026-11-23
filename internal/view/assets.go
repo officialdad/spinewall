@@ -15,3 +15,9 @@ var LauncherSource []byte
 //
 //go:embed assets/view.qml
 var SurfaceQML []byte
+
+// SurfaceX11QML is the desktop-type window the launcher loads on a real X11
+// session, where layer-shell does not exist.
+//
+//go:embed assets/view-x11.qml
+var SurfaceX11QML []byte

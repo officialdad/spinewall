@@ -27,12 +27,16 @@ func Build(dir string, logf func(string)) (string, error) {
 	}
 	src := filepath.Join(dir, "launcher.cpp")
 	qml := filepath.Join(dir, "view.qml")
+	qmlX11 := filepath.Join(dir, "view-x11.qml")
 	bin := filepath.Join(dir, "spinewall-view")
 
 	if err := writeIfChanged(src, LauncherSource); err != nil {
 		return "", err
 	}
 	if err := writeIfChanged(qml, SurfaceQML); err != nil {
+		return "", err
+	}
+	if err := writeIfChanged(qmlX11, SurfaceX11QML); err != nil {
 		return "", err
 	}
 	if upToDate(bin, src) {
@@ -146,9 +150,13 @@ func ScreenKey(m Monitor) string {
 	return m.Geometry
 }
 
-// LaunchArgs builds the argv for one monitor's window.
-func LaunchArgs(bin, pageURL, apiBase string, m Monitor, layer string) []string {
-	args := []string{pageURL, "--api", apiBase, "--screen", ScreenKey(m), "--layer", layer}
+// LaunchArgs builds the argv for one monitor's window. Backend is layer-shell
+// or x11 and selects the QML surface the launcher loads.
+func LaunchArgs(bin, pageURL, apiBase string, m Monitor, layer, backend string) []string {
+	if backend == "" {
+		backend = BackendLayerShell
+	}
+	args := []string{pageURL, "--api", apiBase, "--screen", ScreenKey(m), "--layer", layer, "--backend", backend}
 	if m.Name != "" {
 		args = append(args, "--output", m.Name)
 	}

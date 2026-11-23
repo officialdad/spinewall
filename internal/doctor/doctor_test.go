@@ -265,6 +265,90 @@ func TestLayerShellWithoutAProbe(t *testing.T) {
 	}
 }
 
+func TestX11SessionRowReportsTheSession(t *testing.T) {
+	cases := map[string]Status{"x11": Found, "wayland": Missing}
+	for session, want := range cases {
+		r := Detect(fakeEnv(map[string]string{"XDG_SESSION_TYPE": session, "DISTRO_ID": "arch"}, map[string]bool{}, true))
+		if got := checkNamed(t, r, "X11 session").Status; got != want {
+			t.Errorf("%s session: X11 row = %q, want %q", session, got, want)
+		}
+	}
+}
+
+func TestKioskBrowserIsDetected(t *testing.T) {
+	r := Detect(fakeEnv(map[string]string{"DISTRO_ID": "arch"}, map[string]bool{"firefox": true}, true))
+	if c := checkNamed(t, r, "kiosk browser"); c.Status != Found || !strings.Contains(c.Detail, "firefox") {
+		t.Errorf("kiosk browser = %+v", c)
+	}
+}
+
+func TestRecommendX11OnARealX11Session(t *testing.T) {
+	env := map[string]string{"XDG_SESSION_TYPE": "x11", "XDG_CURRENT_DESKTOP": "XFCE", "DISTRO_ID": "arch"}
+	present := map[string]bool{
+		"c++": true, "moc": true, "pkg-config": true, "pkg:qt-dev": true,
+		"/usr/lib/qt6/qml/QtWebEngine": true,
+	}
+	r := Detect(fakeEnv(env, present, true))
+	if r.Backend != "x11" {
+		t.Errorf("backend = %q, want x11", r.Backend)
+	}
+	if !containsString(r.Backends(), "x11") {
+		t.Errorf("backends %v do not offer x11", r.Backends())
+	}
+}
+
+func TestPlasmaX11KeepsTheVerifiedBackend(t *testing.T) {
+	env := map[string]string{"XDG_SESSION_TYPE": "x11", "XDG_CURRENT_DESKTOP": "KDE", "DISTRO_ID": "arch"}
+	present := map[string]bool{
+		"c++": true, "moc": true, "pkg-config": true, "pkg:qt-dev": true,
+		"/usr/lib/qt6/qml/QtWebEngine": true, "plasmashell": true,
+	}
+	r := Detect(fakeEnv(env, present, true))
+	if r.Backend != "kde-legacy" {
+		t.Errorf("backend = %q, want kde-legacy on Plasma X11", r.Backend)
+	}
+	if got := r.Backends(); len(got) != 2 || got[0] != "kde-legacy" || got[1] != "x11" {
+		t.Errorf("backends = %v, want kde-legacy then the unverified x11", got)
+	}
+}
+
+func TestPrintMarksTheScreenProvidersOnHyprlandAndSway(t *testing.T) {
+	const line = "Unverified --screen current providers: hyprland, sway\n"
+	cases := map[string]bool{"HYPRLAND_INSTANCE_SIGNATURE": true, "SWAYSOCK": true, "": false}
+	for key, want := range cases {
+		env := map[string]string{"XDG_SESSION_TYPE": "wayland", "DISTRO_ID": "arch"}
+		if key != "" {
+			env[key] = "set"
+		}
+		var sb strings.Builder
+		Print(&sb, Detect(fakeEnv(env, map[string]bool{}, true)))
+		if got := strings.Contains(sb.String(), line); got != want {
+			t.Errorf("%q set: providers line printed = %v, want %v:\n%s", key, got, want, sb.String())
+		}
+	}
+}
+
+func TestPrintMarksTheUnverifiedBackends(t *testing.T) {
+	r := Detect(fakeEnv(map[string]string{"XDG_CURRENT_DESKTOP": "GNOME", "DISTRO_ID": "arch"}, map[string]bool{}, true))
+	var sb strings.Builder
+	Print(&sb, r)
+	out := sb.String()
+	for _, want := range []string{"Unverified backends: x11, kiosk", "GNOME: unsupported"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("doctor output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func containsString(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestLayerShellReadsTheGlobalsProbe(t *testing.T) {
 	globals := t.TempDir() + "/globals"
 	if err := os.WriteFile(globals, []byte("interface: 'wl_compositor'\n"), 0o644); err != nil {

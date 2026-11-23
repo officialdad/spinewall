@@ -48,6 +48,20 @@ type Report struct {
 	Network       bool
 	LayerShell    Status
 	WebEngineName string
+	// X11 is whether this is a real X11 session, where the desktop-type view
+	// can run. It is false under XWayland, which is not a desktop.
+	X11 Status
+	// BrowserName is the kiosk browser the fallback would use, empty when none.
+	BrowserName string
+	// LayerShellReady and X11Ready are whether each native view surface can
+	// build and load here, so a backend is offered even when not recommended.
+	LayerShellReady bool
+	X11Ready        bool
+	// Plasma is a KDE Plasma session, where kde-legacy is the verified backend.
+	Plasma bool
+	// ScreenProviderSession is a Hyprland or sway session, where --screen
+	// current uses a provider no one has confirmed on real hardware.
+	ScreenProviderSession bool
 }
 
 // Options let tests replace the detection sources.
@@ -117,6 +131,25 @@ func Detect(opts Options) Report {
 		Detail: layerShellDetail(r.LayerShell, r.SessionType),
 	})
 
+	// The X11 backend needs a real X11 session. Under Wayland, XWayland is not a
+	// desktop and its windows are not wallpaper.
+	r.X11 = foundOrMissing(native.X11)
+	r.Checks = append(r.Checks, Check{
+		Name:   "X11 session",
+		Status: r.X11,
+		Detail: x11Detail(native.X11),
+	})
+
+	// The kiosk fallback runs the page in a fullscreen browser anywhere there is
+	// one. It is a normal window, not a wallpaper.
+	r.BrowserName = view.FindBrowser(lookPath)
+	kiosk := foundOrMissing(r.BrowserName != "")
+	r.Checks = append(r.Checks, Check{
+		Name:   "kiosk browser",
+		Status: kiosk,
+		Detail: kioskDetail(kiosk, r.BrowserName),
+	})
+
 	// GPU from /sys/class/drm.
 	gpu, gpuDetail := detectGPU(exists)
 	r.Checks = append(r.Checks, Check{Name: "GPU", Status: gpu, Detail: gpuDetail})
@@ -133,6 +166,7 @@ func Detect(opts Options) Report {
 	})
 
 	// The Plasma wallpaper plugin. Only needed by the KDE legacy backend.
+	r.Plasma = hasDesktop(r.Desktop, "kde") || strings.Contains(strings.ToLower(r.Desktop), "plasma")
 	if _, err := lookPath("plasmashell"); err == nil {
 		r.Checks = append(r.Checks, Check{Name: "plasmashell", Status: Found, Detail: "KDE Plasma session"})
 	}
@@ -178,31 +212,74 @@ func Detect(opts Options) Report {
 	// Both backends are reported. internal/view alone decides whether the native
 	// layer-shell view can build and load here; kde-legacy needs Plasma and the
 	// webwallpaper plugin. setup preselects the recommended one.
-	r.Backend = nativeRecommendation(native)
+	r.LayerShellReady = native.Ready()
+	r.X11Ready = native.ReadyX11()
+	r.ScreenProviderSession = getenv("HYPRLAND_INSTANCE_SIGNATURE") != "" || getenv("SWAYSOCK") != ""
+	r.Backend = r.recommend()
 	return r
 }
 
-// nativeRecommendation picks the backend this machine should run. The native
-// layer-shell view is preferred when the whole chain is present. The KDE legacy
-// backend is the fallback for Plasma users until the cutover, and the default
-// elsewhere, because it is the only backend this release ships for them.
-func nativeRecommendation(native view.DetectResult) string {
-	if native.Ready() {
+// recommend picks the backend this machine should run, and the one setup --yes
+// installs without asking. An unverified backend never replaces a verified one:
+// the layer-shell view comes first, then kde-legacy on Plasma even on X11, and
+// the unverified X11 view only where neither verified backend can run. The KDE
+// legacy backend stays the default otherwise, as the only one this release
+// ships for those desktops.
+func (r Report) recommend() string {
+	switch {
+	case r.LayerShellReady:
 		return "layer-shell"
+	case r.Plasma:
+		return "kde-legacy"
+	case r.X11Ready:
+		return "x11"
 	}
 	return "kde-legacy"
 }
 
-// Backends lists the backends a user may pick, recommended first. The native
-// view is offered only when this machine can run it; the legacy backend is
-// always offered as the Plasma fallback.
+// Backends lists the backends a user may pick, recommended first. A native
+// view surface is offered only when this machine can run it; the legacy
+// backend is always offered as the Plasma fallback.
 func (r Report) Backends() []string {
-	out := []string{}
-	if r.Backend == "layer-shell" {
-		out = append(out, "layer-shell")
+	out := []string{r.Backend}
+	for _, c := range []struct {
+		name string
+		ok   bool
+	}{{"layer-shell", r.LayerShellReady}, {"x11", r.X11Ready}, {"kde-legacy", true}} {
+		if c.ok && c.name != r.Backend {
+			out = append(out, c.name)
+		}
 	}
-	out = append(out, "kde-legacy")
 	return out
+}
+
+// Unverified names the backends that are best effort and have not been confirmed
+// on real hardware. X11 and the kiosk fallback are the phase 6 additions; no one
+// has run them yet, so the doctor says so rather than implying they work.
+func (r Report) Unverified() []string {
+	return []string{"x11", "kiosk"}
+}
+
+// UnverifiedScreenProviders names the --screen current providers no one has
+// confirmed on real hardware.
+func (r Report) UnverifiedScreenProviders() []string {
+	return []string{"hyprland", "sway"}
+}
+
+// GNOME reports whether this is a GNOME session, which has no layer-shell and
+// needs a shell extension the project does not ship.
+func (r Report) GNOME() bool {
+	return hasDesktop(r.Desktop, "gnome")
+}
+
+// hasDesktop reports whether a colon-separated XDG_CURRENT_DESKTOP names want.
+func hasDesktop(desktops, want string) bool {
+	for _, name := range strings.Split(strings.ToLower(desktops), ":") {
+		if strings.TrimSpace(name) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // Missing lists the checks that are missing and needed.
@@ -254,6 +331,20 @@ func layerShellDetail(status Status, session string) string {
 		return "compositor does not offer zwlr_layer_shell_v1"
 	}
 	return "not known for this compositor"
+}
+
+func x11Detail(on bool) string {
+	if on {
+		return "X11 session; the desktop-type view can run (unverified)"
+	}
+	return "needs a real X11 session"
+}
+
+func kioskDetail(status Status, name string) string {
+	if status == Found {
+		return "fullscreen browser fallback (" + name + ", unverified)"
+	}
+	return "no chromium or firefox for the kiosk fallback"
 }
 
 func detectGPU(exists func(string) bool) (Status, string) {

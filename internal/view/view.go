@@ -17,6 +17,30 @@ import (
 // Scope is the layer-shell scope name the surface registers under.
 const Scope = "spinewall"
 
+// Backend names the native view surface the launcher draws.
+const (
+	// BackendLayerShell is one layer-shell window per monitor, on a Wayland
+	// compositor that offers zwlr_layer_shell_v1.
+	BackendLayerShell = "layer-shell"
+	// BackendX11 is one desktop-type window per monitor, on a real X11 session.
+	// X11 has no layer-shell, so the window asks the WM to keep it at the
+	// bottom. It is best effort and unverified; see docs/desktops.md.
+	BackendX11 = "x11"
+)
+
+// SessionBackend picks the native view surface for a session. A real X11
+// session gets the desktop-type window; everything else gets layer-shell, which
+// is the proven backend where the compositor offers it.
+func SessionBackend(getenv func(string) string) string {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	if getenv("XDG_SESSION_TYPE") == "x11" {
+		return BackendX11
+	}
+	return BackendLayerShell
+}
+
 // Options inject every detection source so a test never touches the real box.
 type Options struct {
 	Getenv   func(string) string
@@ -34,6 +58,9 @@ type Options struct {
 type DetectResult struct {
 	// LayerShell is true when the compositor offers zwlr_layer_shell_v1.
 	LayerShell bool
+	// X11 is true on a real X11 session, where the desktop-type window backend
+	// can run instead of layer-shell.
+	X11 bool
 	// LayerShellKnown is false when no probe ran and the desktop is not known
 	// either way, so LayerShell false only means "not proven".
 	LayerShellKnown bool
@@ -96,6 +123,7 @@ func Detect(opts Options) DetectResult {
 		return r
 	}
 
+	r.X11 = getenv("XDG_SESSION_TYPE") == "x11"
 	r.LayerShell, r.LayerShellKnown = detectLayerShell(getenv, opts.WaylandGlobals)
 	r.WebEngine = QtWebEngineDir(exists) != ""
 	r.LayerShellQML = anyExists(exists, layerShellQMLModules)
@@ -119,9 +147,16 @@ func Detect(opts Options) DetectResult {
 	return r
 }
 
-// Ready reports whether the native view can build and load on this machine.
+// Ready reports whether the layer-shell view can build and load on this machine.
 func (r DetectResult) Ready() bool {
 	return r.LayerShell && r.WebEngine && r.LayerShellQML && r.Buildable
+}
+
+// ReadyX11 reports whether the X11 view can build and load on this machine. It
+// needs the same launcher and web engine as layer-shell but the layer-shell QML
+// module, which X11 does not have.
+func (r DetectResult) ReadyX11() bool {
+	return r.X11 && r.WebEngine && r.Buildable
 }
 
 // detectLayerShell reports whether the compositor offers layer-shell, and

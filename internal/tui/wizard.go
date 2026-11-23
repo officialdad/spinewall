@@ -105,7 +105,8 @@ func Run(opts Options) (Result, error) {
 	// 4. Models folder choice.
 	modelDir := chooseModelDir(opts, report, stdout)
 
-	// 5. Backend choice. Only the KDE legacy backend is installable now.
+	// 5. Backend choice. The native view installs when this machine can build
+	// it; the KDE legacy backend stays as the Plasma fallback.
 	backend := chooseBackend(opts, report, stdout)
 
 	// The systemd unit is an opt-in. The XDG autostart entry is the default.
@@ -120,7 +121,7 @@ func Run(opts Options) (Result, error) {
 		ModelDir:    modelDir,
 		AllowLegacy: allowLegacy,
 		Executable:  opts.Executable,
-		BuildView:   backend == string(install.BackendLayerShell),
+		BuildView:   nativeBackend(backend),
 		Logf:        logf,
 	})
 	if err != nil {
@@ -130,17 +131,13 @@ func Run(opts Options) (Result, error) {
 	if inst.Autostart != "" {
 		// The line must start the same backend install wrote, or the compositor
 		// session runs a bare server with no window.
-		args := "serve"
-		if backend == string(install.BackendLayerShell) {
-			args = "serve --with-view"
-		}
-		printCompositorLine(stdout, report.Desktop, inst.BinPath, args)
+		printCompositorLine(stdout, report.Desktop, inst.BinPath, strings.Join(inst.AutostartCommand, " "))
 	}
 
 	// The install linked the fetched players into the theme folder. Check that
 	// before starting: a page that cannot load them shows "runtime not installed".
 	// The native view has no theme folder: the server serves its page and players.
-	if backend != string(install.BackendLayerShell) {
+	if !nativeBackend(backend) {
 		if err := verifyThemeRuntime(opts.Paths); err != nil {
 			logf("theme check: " + err.Error())
 		}
@@ -290,11 +287,19 @@ func chooseBackend(opts Options, report doctor.Report, stdout *os.File) string {
 	return choice
 }
 
+// nativeBackend reports whether a backend is the native view, which serves the
+// page itself and needs no theme folder.
+func nativeBackend(name string) bool {
+	return name == string(install.BackendLayerShell) || name == string(install.BackendX11)
+}
+
 // backendLabel is the human name of a backend in the select.
 func backendLabel(name string, report doctor.Report) string {
 	switch name {
 	case "layer-shell":
 		return "Native layer-shell view (no plugin, no patch)"
+	case "x11":
+		return "Native X11 view (desktop-type windows, unverified)"
 	case "kde-legacy":
 		if report.LayerShell != doctor.Found {
 			return "KDE Plasma legacy (webwallpaper + containment patch)"
@@ -307,13 +312,18 @@ func backendLabel(name string, report doctor.Report) string {
 
 // backendNote explains what each backend needs on this machine.
 func backendNote(report doctor.Report) string {
-	if report.Backend == "layer-shell" {
+	switch report.Backend {
+	case "layer-shell":
 		return "The native view draws one layer-shell window per monitor and needs no plugin.\n" +
 			"Edit mode comes from an Edit button and the `spinewall edit` shortcut.\n" +
 			"The KDE legacy backend stays available as a fallback."
+	case "x11":
+		return "The native X11 view draws one desktop-type window per monitor. It is best effort\n" +
+			"and unverified; see docs/desktops.md. The KDE legacy backend stays available as a fallback."
 	}
 	return "The native layer-shell view is not ready on this machine.\n" +
 		"Missing: " + report.Summary() + "\n" +
+		"On GNOME the native view is unsupported; see docs/desktops.md.\n" +
 		"The KDE legacy backend installs today and needs the webwallpaper plugin and the containment patch."
 }
 

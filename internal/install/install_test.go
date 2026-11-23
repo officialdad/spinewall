@@ -224,8 +224,11 @@ func TestLayerShellBackendWritesTheViewAndStartsWithIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "serve --with-view") {
-		t.Errorf("autostart does not start the view:\n%s", data)
+	if !strings.Contains(string(data), "serve --with-view --view-backend layer-shell") {
+		t.Errorf("autostart does not pin the layer-shell surface:\n%s", data)
+	}
+	if got := strings.Join(res.AutostartCommand, " "); !strings.Contains(string(data), "Exec="+res.BinPath+" "+got+"\n") {
+		t.Errorf("result command %q is not the autostart Exec line:\n%s", got, data)
 	}
 	// The view files are in the manifest, so uninstall removes them.
 	recorded := false
@@ -236,6 +239,29 @@ func TestLayerShellBackendWritesTheViewAndStartsWithIt(t *testing.T) {
 	}
 	if !recorded {
 		t.Error("the launcher source is not in the manifest")
+	}
+}
+
+func TestX11BackendWritesBothSurfacesAndPinsIt(t *testing.T) {
+	paths := testPaths(t)
+	res, err := Install(Options{Paths: paths, Executable: fakeBinary(t), Backend: BackendX11})
+	if err != nil {
+		t.Fatalf("install x11: %v", err)
+	}
+	for _, name := range []string{"launcher.cpp", "view.qml", "view-x11.qml"} {
+		if _, err := os.Stat(filepath.Join(paths.ViewDir(), name)); err != nil {
+			t.Errorf("view file %s not written: %v", name, err)
+		}
+	}
+	if res.ThemeDir != paths.ViewDir() {
+		t.Errorf("theme dir = %q, want the view dir", res.ThemeDir)
+	}
+	data, err := os.ReadFile(paths.AutostartFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "serve --with-view --view-backend x11") {
+		t.Errorf("autostart does not pin the X11 surface:\n%s", data)
 	}
 }
 

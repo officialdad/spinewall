@@ -51,6 +51,17 @@ func Print(w io.Writer, r Report) {
 	}
 	// Name every backend the user may pick, so a bug report shows the choice.
 	fmt.Fprintf(w, "Backends available: %s\n", strings.Join(r.Backends(), ", "))
+	// The phase 6 backends are best effort and unconfirmed, so say so the way
+	// docs/windows.md does for Windows.
+	fmt.Fprintf(w, "Unverified backends: %s (best effort, not confirmed on real hardware; see docs/desktops.md)\n", strings.Join(r.Unverified(), ", "))
+	if r.ScreenProviderSession {
+		fmt.Fprintf(w, "Unverified --screen current providers: %s\n", strings.Join(r.UnverifiedScreenProviders(), ", "))
+	}
+	if r.GNOME() {
+		fmt.Fprintln(w, "GNOME: unsupported, and no layer-shell backend is offered (see docs/desktops.md)")
+	} else {
+		fmt.Fprintln(w, "GNOME: unsupported (no layer-shell; see docs/desktops.md)")
+	}
 }
 
 // Summary is a one-line form for logs.

@@ -114,6 +114,7 @@ func serve(args []string) error {
 	runtimeDirFlag := ""
 	withView := false
 	viewLayer := "bottom"
+	viewBackend := view.SessionBackend(os.Getenv)
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--offline":
@@ -132,9 +133,18 @@ func serve(args []string) error {
 			}
 			i++
 			viewLayer = args[i]
+		case "--view-backend":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--view-backend needs layer-shell or x11")
+			}
+			i++
+			viewBackend = args[i]
 		default:
 			return fmt.Errorf("unknown flag %q", args[i])
 		}
+	}
+	if !validBackend(viewBackend) {
+		return fmt.Errorf("unknown view backend %q. Use layer-shell or x11.", viewBackend)
 	}
 
 	portStr := envOrDefault("SPINEWALL_PORT", "8777")
@@ -216,7 +226,7 @@ func serve(args []string) error {
 			logf("spinewall: native view unavailable: " + err.Error())
 			return
 		}
-		if err := launchView(bin, apiBase(), viewLayer, logf, ctx.Done()); err != nil {
+		if err := launchView(bin, apiBase(), viewLayer, viewBackend, logf, ctx.Done()); err != nil {
 			logf("spinewall: native view stopped: " + err.Error())
 		}
 	}()

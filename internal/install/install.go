@@ -17,6 +17,9 @@ const (
 	BackendKDEBackend Backend = "kde-legacy"
 	// BackendLayerShell is the native view: one layer-shell window per monitor.
 	BackendLayerShell Backend = "layer-shell"
+	// BackendX11 is the native view on a real X11 session: one desktop-type
+	// window per monitor. It is best effort and unverified; see docs/desktops.md.
+	BackendX11 Backend = "x11"
 )
 
 // Options configure one install run.
@@ -49,7 +52,11 @@ type Result struct {
 	BinPath   string
 	ThemeDir  string
 	Autostart string
-	UnitFile  string
+	// AutostartCommand is the subcommand and flags the autostart entry runs,
+	// including the view backend pin. A compositor that skips XDG autostart
+	// needs the same command in its own config.
+	AutostartCommand []string
+	UnitFile         string
 	// ModelDir is the chosen models folder as an absolute path.
 	ModelDir string
 	// Legacy lists the old Python install files found, which held back autostart.
@@ -71,7 +78,9 @@ func Install(opts Options) (Result, error) {
 	if opts.Backend == "" {
 		opts.Backend = BackendKDEBackend
 	}
-	if opts.Backend != BackendKDEBackend && opts.Backend != BackendLayerShell {
+	switch opts.Backend {
+	case BackendKDEBackend, BackendLayerShell, BackendX11:
+	default:
 		return Result{}, fmt.Errorf("backend %q is not installable yet", opts.Backend)
 	}
 	modelDir, err := absModelDir(paths, opts.ModelDir)
@@ -125,14 +134,17 @@ func Install(opts Options) (Result, error) {
 	var themeDir string
 	var autostartCommand []string
 	switch opts.Backend {
-	case BackendLayerShell:
+	case BackendLayerShell, BackendX11:
 		viewDir, err := installView(w, paths, opts, logf)
 		if err != nil {
 			return Result{}, err
 		}
 		themeDir = viewDir
-		autostartCommand = []string{"serve", "--with-view"}
-		logf("backend: layer-shell view (" + viewDir + ")")
+		// Pin the surface: a login of the other session type on the same machine
+		// must not switch the autostart entry to a surface the user did not pick,
+		// and an unverified surface must never replace a verified one.
+		autostartCommand = []string{"serve", "--with-view", "--view-backend", string(opts.Backend)}
+		logf("backend: " + string(opts.Backend) + " view (" + viewDir + ")")
 	default:
 		// The KDE legacy backend is the webwallpaper theme directory the plugin reads.
 		themeDir = paths.ThemeDir()
@@ -222,6 +234,7 @@ func Install(opts Options) (Result, error) {
 	}
 	if startAtLogin {
 		res.Autostart = paths.AutostartFile()
+		res.AutostartCommand = autostartCommand
 		if opts.SystemdUnit {
 			res.UnitFile = paths.UnitFile()
 		}
