@@ -395,3 +395,13 @@ func TestThumbRejections(t *testing.T) {
 		t.Fatalf("unknown status %d", rec.Code)
 	}
 }
+
+func TestRescanRunsAfterRescanHook(t *testing.T) {
+	s, _ := newTestServer(t)
+	calls := 0
+	s.theme.AfterRescan = func() { calls++ }
+	rec := do(t, s, "GET", "/rescan", nil, map[string]string{"Host": "127.0.0.1:18777"})
+	if rec.Code != 200 || calls != 1 {
+		t.Fatalf("status %d, hook calls %d", rec.Code, calls)
+	}
+}

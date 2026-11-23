@@ -55,6 +55,9 @@ type Theme struct {
 	Page      []byte
 	LocalHost []byte
 	Runtime   RuntimeProvider
+	// AfterRescan runs once a rescan finishes, so a new model's player is
+	// fetched before the page asks for it.
+	AfterRescan func()
 }
 
 // New builds a Server.
@@ -178,7 +181,11 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	case path == "/models":
 		writeJSON(w, http.StatusOK, s.store.ModelsCopy())
 	case path == "/rescan":
-		writeJSON(w, http.StatusOK, s.store.Rescan())
+		models := s.store.Rescan()
+		if s.theme.AfterRescan != nil {
+			s.theme.AfterRescan()
+		}
+		writeJSON(w, http.StatusOK, models)
 	case path == "/info":
 		writeJSON(w, http.StatusOK, s.store.InfoReply())
 	case strings.HasPrefix(path, "/thumb/") && strings.HasSuffix(path, ".png"):

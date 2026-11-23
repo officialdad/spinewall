@@ -110,14 +110,17 @@ func serve(args []string) error {
 		runtimeDir = runtimeDirFlag
 	}
 	manager := runtime.New(runtime.Options{Dir: runtimeDir, Offline: offline, Logf: logf})
-	if err := manager.Ensure(neededRuntimes(store)); err != nil {
-		logf("spinewall: " + err.Error())
+	ensureRuntimes := func() {
+		if err := manager.Ensure(neededRuntimes(store)); err != nil {
+			logf("spinewall: " + err.Error())
+		}
 	}
+	ensureRuntimes()
 	if offline {
 		logf("spinewall: runtime offline, using the cache at " + runtimeDir)
 	}
 
-	srv := api.New(store, port, api.Theme{Page: theme.IndexHTML, LocalHost: theme.LocalHostJS, Runtime: manager})
+	srv := api.New(store, port, api.Theme{Page: theme.IndexHTML, LocalHost: theme.LocalHostJS, Runtime: manager, AfterRescan: ensureRuntimes})
 
 	fmt.Fprintf(os.Stderr, "spinewall: %d model(s) from %s, port %d\n", len(store.ModelsCopy()), modelsDir, port)
 
