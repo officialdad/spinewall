@@ -52,7 +52,11 @@ type Result struct {
 	BinPath   string
 	ThemeDir  string
 	Autostart string
-	UnitFile  string
+	// AutostartCommand is the subcommand and flags the autostart entry runs,
+	// including the view backend pin. A compositor that skips XDG autostart
+	// needs the same command in its own config.
+	AutostartCommand []string
+	UnitFile         string
 	// ModelDir is the chosen models folder as an absolute path.
 	ModelDir string
 	// Legacy lists the old Python install files found, which held back autostart.
@@ -230,6 +234,7 @@ func Install(opts Options) (Result, error) {
 	}
 	if startAtLogin {
 		res.Autostart = paths.AutostartFile()
+		res.AutostartCommand = autostartCommand
 		if opts.SystemdUnit {
 			res.UnitFile = paths.UnitFile()
 		}

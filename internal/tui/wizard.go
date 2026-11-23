@@ -131,14 +131,7 @@ func Run(opts Options) (Result, error) {
 	if inst.Autostart != "" {
 		// The line must start the same backend install wrote, or the compositor
 		// session runs a bare server with no window.
-		args := "serve"
-		switch backend {
-		case string(install.BackendLayerShell):
-			args = "serve --with-view --view-backend layer-shell"
-		case string(install.BackendX11):
-			args = "serve --with-view --view-backend x11"
-		}
-		printCompositorLine(stdout, report.Desktop, inst.BinPath, args)
+		printCompositorLine(stdout, report.Desktop, inst.BinPath, strings.Join(inst.AutostartCommand, " "))
 	}
 
 	// The install linked the fetched players into the theme folder. Check that
