@@ -239,6 +239,29 @@ func TestLayerShellBackendWritesTheViewAndStartsWithIt(t *testing.T) {
 	}
 }
 
+func TestX11BackendWritesBothSurfacesAndPinsIt(t *testing.T) {
+	paths := testPaths(t)
+	res, err := Install(Options{Paths: paths, Executable: fakeBinary(t), Backend: BackendX11})
+	if err != nil {
+		t.Fatalf("install x11: %v", err)
+	}
+	for _, name := range []string{"launcher.cpp", "view.qml", "view-x11.qml"} {
+		if _, err := os.Stat(filepath.Join(paths.ViewDir(), name)); err != nil {
+			t.Errorf("view file %s not written: %v", name, err)
+		}
+	}
+	if res.ThemeDir != paths.ViewDir() {
+		t.Errorf("theme dir = %q, want the view dir", res.ThemeDir)
+	}
+	data, err := os.ReadFile(paths.AutostartFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "serve --with-view --view-backend x11") {
+		t.Errorf("autostart does not pin the X11 surface:\n%s", data)
+	}
+}
+
 func TestLayerShellBackendNeverTouchesTheKDETheme(t *testing.T) {
 	paths := testPaths(t)
 	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t), Backend: BackendLayerShell}); err != nil {

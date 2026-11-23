@@ -48,6 +48,11 @@ type Report struct {
 	Network       bool
 	LayerShell    Status
 	WebEngineName string
+	// X11 is whether this is a real X11 session, where the desktop-type view
+	// can run. It is false under XWayland, which is not a desktop.
+	X11 Status
+	// BrowserName is the kiosk browser the fallback would use, empty when none.
+	BrowserName string
 }
 
 // Options let tests replace the detection sources.
@@ -115,6 +120,25 @@ func Detect(opts Options) Report {
 		Name:   "layer-shell",
 		Status: r.LayerShell,
 		Detail: layerShellDetail(r.LayerShell, r.SessionType),
+	})
+
+	// The X11 backend needs a real X11 session. Under Wayland, XWayland is not a
+	// desktop and its windows are not wallpaper.
+	r.X11 = foundOrMissing(native.X11)
+	r.Checks = append(r.Checks, Check{
+		Name:   "X11 session",
+		Status: r.X11,
+		Detail: x11Detail(native.X11),
+	})
+
+	// The kiosk fallback runs the page in a fullscreen browser anywhere there is
+	// one. It is a normal window, not a wallpaper.
+	kiosk, browserName := detectKioskBrowser(lookPath)
+	r.BrowserName = browserName
+	r.Checks = append(r.Checks, Check{
+		Name:   "kiosk browser",
+		Status: kiosk,
+		Detail: kioskDetail(kiosk, browserName),
 	})
 
 	// GPU from /sys/class/drm.
@@ -190,6 +214,11 @@ func nativeRecommendation(native view.DetectResult) string {
 	if native.Ready() {
 		return "layer-shell"
 	}
+	// A real X11 session has no layer-shell, so the desktop-type window is the
+	// native option there. It is unverified, so the user is told so.
+	if native.ReadyX11() {
+		return "x11"
+	}
 	return "kde-legacy"
 }
 
@@ -198,11 +227,32 @@ func nativeRecommendation(native view.DetectResult) string {
 // always offered as the Plasma fallback.
 func (r Report) Backends() []string {
 	out := []string{}
-	if r.Backend == "layer-shell" {
+	switch r.Backend {
+	case "layer-shell":
 		out = append(out, "layer-shell")
+	case "x11":
+		out = append(out, "x11")
 	}
 	out = append(out, "kde-legacy")
 	return out
+}
+
+// Unverified names the backends that are best effort and have not been confirmed
+// on real hardware. X11 and the kiosk fallback are the phase 6 additions; no one
+// has run them yet, so the doctor says so rather than implying they work.
+func (r Report) Unverified() []string {
+	return []string{"x11", "kiosk"}
+}
+
+// GNOME reports whether this is a GNOME session, which has no layer-shell and
+// needs a shell extension the project does not ship.
+func (r Report) GNOME() bool {
+	for _, name := range strings.Split(strings.ToLower(r.Desktop), ":") {
+		if strings.TrimSpace(name) == "gnome" {
+			return true
+		}
+	}
+	return false
 }
 
 // Missing lists the checks that are missing and needed.
@@ -254,6 +304,30 @@ func layerShellDetail(status Status, session string) string {
 		return "compositor does not offer zwlr_layer_shell_v1"
 	}
 	return "not known for this compositor"
+}
+
+func x11Detail(on bool) string {
+	if on {
+		return "X11 session; the desktop-type view can run (unverified)"
+	}
+	return "needs a real X11 session"
+}
+
+// detectKioskBrowser finds a browser for the fullscreen fallback.
+func detectKioskBrowser(lookPath func(string) (string, error)) (Status, string) {
+	for _, browser := range []string{"chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "firefox"} {
+		if _, err := lookPath(browser); err == nil {
+			return Found, browser
+		}
+	}
+	return Missing, ""
+}
+
+func kioskDetail(status Status, name string) string {
+	if status == Found {
+		return "fullscreen browser fallback (" + name + ", unverified)"
+	}
+	return "no chromium or firefox for the kiosk fallback"
 }
 
 func detectGPU(exists func(string) bool) (Status, string) {

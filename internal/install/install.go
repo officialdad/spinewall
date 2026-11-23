@@ -17,6 +17,9 @@ const (
 	BackendKDEBackend Backend = "kde-legacy"
 	// BackendLayerShell is the native view: one layer-shell window per monitor.
 	BackendLayerShell Backend = "layer-shell"
+	// BackendX11 is the native view on a real X11 session: one desktop-type
+	// window per monitor. It is best effort and unverified; see docs/desktops.md.
+	BackendX11 Backend = "x11"
 )
 
 // Options configure one install run.
@@ -71,7 +74,9 @@ func Install(opts Options) (Result, error) {
 	if opts.Backend == "" {
 		opts.Backend = BackendKDEBackend
 	}
-	if opts.Backend != BackendKDEBackend && opts.Backend != BackendLayerShell {
+	switch opts.Backend {
+	case BackendKDEBackend, BackendLayerShell, BackendX11:
+	default:
 		return Result{}, fmt.Errorf("backend %q is not installable yet", opts.Backend)
 	}
 	modelDir, err := absModelDir(paths, opts.ModelDir)
@@ -125,14 +130,19 @@ func Install(opts Options) (Result, error) {
 	var themeDir string
 	var autostartCommand []string
 	switch opts.Backend {
-	case BackendLayerShell:
+	case BackendLayerShell, BackendX11:
 		viewDir, err := installView(w, paths, opts, logf)
 		if err != nil {
 			return Result{}, err
 		}
 		themeDir = viewDir
 		autostartCommand = []string{"serve", "--with-view"}
-		logf("backend: layer-shell view (" + viewDir + ")")
+		if opts.Backend == BackendX11 {
+			// Pin the surface: a Wayland login on the same machine must not
+			// switch the autostart entry to a layer-shell surface that cannot load.
+			autostartCommand = append(autostartCommand, "--view-backend", "x11")
+		}
+		logf("backend: " + string(opts.Backend) + " view (" + viewDir + ")")
 	default:
 		// The KDE legacy backend is the webwallpaper theme directory the plugin reads.
 		themeDir = paths.ThemeDir()

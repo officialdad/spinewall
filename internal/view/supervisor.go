@@ -19,6 +19,7 @@ type Supervisor struct {
 	env     []string
 	apiBase string
 	layer   string
+	backend string
 	logf    func(string)
 }
 
@@ -33,6 +34,8 @@ type SuperviseOptions struct {
 	APIBase string
 	// Layer is "bottom" or "background". Empty is bottom.
 	Layer string
+	// Backend is layer-shell or x11. Empty is layer-shell.
+	Backend string
 	// Logf receives progress lines. Nil discards them.
 	Logf func(string)
 }
@@ -47,7 +50,11 @@ func NewSupervisor(opts SuperviseOptions) *Supervisor {
 	if layer == "" {
 		layer = "bottom"
 	}
-	return &Supervisor{bin: opts.Binary, env: opts.Env, apiBase: opts.APIBase, layer: layer, logf: logf}
+	backend := opts.Backend
+	if backend == "" {
+		backend = BackendLayerShell
+	}
+	return &Supervisor{bin: opts.Binary, env: opts.Env, apiBase: opts.APIBase, layer: layer, backend: backend, logf: logf}
 }
 
 // Run starts a window per monitor and blocks until stop closes and every window
@@ -85,7 +92,7 @@ func (s *Supervisor) superviseOne(m Monitor, stop <-chan struct{}) {
 		if stopped(stop) {
 			return
 		}
-		cmd := exec.Command(s.bin, LaunchArgs(s.bin, PageURL(s.apiBase, ScreenKey(m)), s.apiBase, m, s.layer)...)
+		cmd := exec.Command(s.bin, LaunchArgs(s.bin, PageURL(s.apiBase, ScreenKey(m)), s.apiBase, m, s.layer, s.backend)...)
 		cmd.Env = s.env
 		// The launcher prints its screen, mask changes and errors on stderr, so
 		// the server's log and the journal show what happened.

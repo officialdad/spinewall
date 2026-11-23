@@ -2,8 +2,98 @@ package cli
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+// screensServer answers /screens with the given keys, as the real server does.
+func screensServer(t *testing.T, keys ...string) *httptest.Server {
+	t.Helper()
+	var body strings.Builder
+	body.WriteString("[")
+	for i, k := range keys {
+		if i > 0 {
+			body.WriteString(",")
+		}
+		body.WriteString(`{"screen":"` + k + `"}`)
+	}
+	body.WriteString("]")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(body.String()))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// providerRun is a run wired for a compositor provider test: no KDE, a fake
+// environment and a fake command runner, against the given screens server.
+func providerRun(t *testing.T, srv *httptest.Server, env map[string]string, commands map[string]string) *run {
+	t.Helper()
+	var out, errOut strings.Builder
+	return &run{
+		base:      srv.URL,
+		stdout:    &out,
+		stderr:    &errOut,
+		client:    http.DefaultClient,
+		getenv:    func(k string) string { return env[k] },
+		kdeScreen: func(*run) (string, error) { return "", errScreenUnsupported },
+		execCmd: func(name string, args ...string) ([]byte, error) {
+			key := name + " " + strings.Join(args, " ")
+			body, ok := commands[key]
+			if !ok {
+				return nil, errors.New("unexpected command " + key)
+			}
+			return []byte(body), nil
+		},
+	}
+}
+
+func TestResolveHyprlandUsesTheActiveWorkspaceMonitor(t *testing.T) {
+	srv := screensServer(t, "3440x1440+0+0", "1920x1080+3440+236")
+	r := providerRun(t, srv, map[string]string{"HYPRLAND_INSTANCE_SIGNATURE": "abc"}, map[string]string{
+		"hyprctl -j activeworkspace": `{"monitor":"DP-2","id":1}`,
+		"hyprctl -j monitors": `[{"name":"DP-2","x":0,"y":0,"width":3440,"height":1440,"focused":true},` +
+			`{"name":"HDMI-A-1","x":3440,"y":236,"width":1920,"height":1080,"focused":false}]`,
+	})
+	got, err := r.resolveCurrentScreen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "3440x1440+0+0" {
+		t.Errorf("resolved %q", got)
+	}
+}
+
+func TestResolveSwayUsesTheFocusedOutput(t *testing.T) {
+	srv := screensServer(t, "3440x1440+0+0", "1920x1080+3440+236")
+	r := providerRun(t, srv, map[string]string{"SWAYSOCK": "/run/user/1000/sway"}, map[string]string{
+		"swaymsg -t get_outputs": `[{"name":"DP-2","active":true,"focused":false,"rect":{"x":0,"y":0,"width":3440,"height":1440}},` +
+			`{"name":"HDMI-A-1","active":true,"focused":true,"rect":{"x":3440,"y":236,"width":1920,"height":1080}}]`,
+	})
+	got, err := r.resolveCurrentScreen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "1920x1080+3440+236" {
+		t.Errorf("resolved %q", got)
+	}
+}
+
+func TestResolveWithoutAProviderIsUnsupported(t *testing.T) {
+	srv := screensServer(t)
+	r := providerRun(t, srv, map[string]string{}, map[string]string{})
+	if _, err := r.resolveCurrentScreen(); !errors.Is(err, errScreenUnsupported) {
+		t.Fatalf("err = %v, want errScreenUnsupported", err)
+	}
+}
+
+func TestParseSwayOutputsWithoutAFocusedOutputIsAnError(t *testing.T) {
+	if _, _, err := parseSwayOutputs([]byte(`[{"name":"DP-2","active":true,"focused":false,"rect":{"x":0,"y":0,"width":1,"height":1}}]`)); err == nil {
+		t.Fatal("expected an error for no focused output")
+	}
+}
 
 const sampleSupport = `KWin Support Information:
 Screens

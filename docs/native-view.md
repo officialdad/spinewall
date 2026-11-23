@@ -8,6 +8,12 @@ the click, the picker, the presets, and the multi-character stage are unchanged.
 It is the default backend where `spinewall doctor` reports the whole chain
 present. The [KDE legacy backend](../README.md) stays selectable until the cutover.
 
+On a real X11 session, where layer-shell does not exist, the same launcher draws
+a desktop-type window per monitor instead, selected with `--backend x11`. There
+is also a kiosk-browser fallback. Both are best effort and unverified; the X11
+window, the kiosk fallback, GNOME, and the sway and Hyprland `--screen current`
+providers are described in [desktops.md](desktops.md).
+
 ## How it fits together
 
 - The server (`spinewall serve`) holds the state and serves the page at
@@ -64,7 +70,8 @@ monitor's window uses, for a bug report. `spinewall screens` lists the keys, and
 One window per monitor, each on its own layer-shell surface, each with its own stage
 key. `spinewall view --list-monitors` prints the outputs the launcher sees. Each
 window anchors to all four edges with `exclusionZone: -1`, so it never reserves
-space on the desktop.
+space on the desktop. The X11 surface instead places each window on its output's
+geometry through the window manager; see [desktops.md](desktops.md).
 
 The launcher uses `LayerBottom`, proven on KDE Plasma 6 Wayland: the surface sits
 above Plasma's desktop windows and below normal windows. `--layer background` is

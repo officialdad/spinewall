@@ -14,8 +14,8 @@ import (
 // monitor, so the caller falls back to the default stage instead of failing.
 var errScreenUnsupported = errors.New("screen current is not supported on this desktop")
 
-// kwinOutput is one monitor row from KWin's support information.
-type kwinOutput struct {
+// monitorInfo is one monitor's layout row, from any provider.
+type monitorInfo struct {
 	name    string
 	enabled bool
 	x, y    int
@@ -23,14 +23,34 @@ type kwinOutput struct {
 	hasGeom bool
 }
 
-// resolveCurrentScreen finds the stage key of the monitor KWin calls active, so a
-// shortcut acts on the monitor in use. It reads the active output from D-Bus,
-// the output layout from KWin's support information, and the known stage keys
-// from the server, then applies the same position match the Python CLI used.
+// resolveCurrentScreen finds the stage key of the monitor in use, so a shortcut
+// acts on that monitor. It asks the desktop's provider: KWin on KDE, then
+// Hyprland, then sway. A desktop with no provider answers errScreenUnsupported,
+// so the caller falls back to the default stage.
+func (r *run) resolveCurrentScreen() (string, error) {
+	if key, err := r.kde(); !errors.Is(err, errScreenUnsupported) {
+		return key, err
+	}
+	// A provider is only tried when its compositor is the session. Running
+	// hyprctl under a different desktop would either fail or answer about a
+	// compositor the user is not looking at.
+	if r.env("HYPRLAND_INSTANCE_SIGNATURE") != "" {
+		return r.hyprlandScreen()
+	}
+	if r.env("SWAYSOCK") != "" {
+		return r.swayScreen()
+	}
+	return "", errScreenUnsupported
+}
+
+// kwinScreen finds the stage key of the monitor KWin calls active. It reads the
+// active output from D-Bus, the output layout from KWin's support information,
+// and the known stage keys from the server, then applies the same position match
+// the Python CLI used.
 //
 // A desktop with no KWin answers errScreenUnsupported. A KWin that answers but
 // cannot resolve the monitor is a real error, so the caller names a key instead.
-func (r *run) resolveCurrentScreen() (string, error) {
+func (r *run) kwinScreen() (string, error) {
 	conn, err := dbus.SessionBus()
 	if err != nil {
 		// No session bus means no KDE desktop to ask, so fall back cleanly.
@@ -59,10 +79,118 @@ func (r *run) resolveCurrentScreen() (string, error) {
 	return pickCurrentScreen(name, outputs, known)
 }
 
+// hyprActiveWorkspace is the active workspace row hyprctl prints.
+type hyprActiveWorkspace struct {
+	Monitor string `json:"monitor"`
+}
+
+// hyprMonitor is one monitor row hyprctl prints.
+type hyprMonitor struct {
+	Name    string `json:"name"`
+	X       int    `json:"x"`
+	Y       int    `json:"y"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
+	Focused bool   `json:"focused"`
+}
+
+// hyprlandScreen finds the stage key of the monitor that holds Hyprland's active
+// workspace. Hyprland reports the monitor name and every monitor's geometry, so
+// the match is the same position match KWin uses.
+func (r *run) hyprlandScreen() (string, error) {
+	active, err := r.output("hyprctl", "-j", "activeworkspace")
+	if err != nil {
+		return "", fmt.Errorf("cannot read the active workspace from Hyprland: %v. Name it with --screen KEY", err)
+	}
+	monitors, err := r.output("hyprctl", "-j", "monitors")
+	if err != nil {
+		return "", fmt.Errorf("cannot read the monitor layout from Hyprland: %v. Name it with --screen KEY", err)
+	}
+	name, outputs, err := parseHyprland(active, monitors)
+	if err != nil {
+		return "", err
+	}
+	known, err := r.knownScreens()
+	if err != nil {
+		return "", err
+	}
+	return pickCurrentScreen(name, outputs, known)
+}
+
+// parseHyprland turns hyprctl's active workspace and monitor list into the
+// active monitor name and the layout rows.
+func parseHyprland(active, monitors []byte) (string, []monitorInfo, error) {
+	var ws hyprActiveWorkspace
+	if err := json.Unmarshal(active, &ws); err != nil {
+		return "", nil, fmt.Errorf("cannot read the Hyprland workspace: %v", err)
+	}
+	var rows []hyprMonitor
+	if err := json.Unmarshal(monitors, &rows); err != nil {
+		return "", nil, fmt.Errorf("cannot read the Hyprland monitors: %v", err)
+	}
+	outputs := make([]monitorInfo, 0, len(rows))
+	for _, m := range rows {
+		outputs = append(outputs, monitorInfo{name: m.Name, enabled: true, x: m.X, y: m.Y, w: m.Width, h: m.Height, hasGeom: true})
+	}
+	return ws.Monitor, outputs, nil
+}
+
+// swayOutput is one row swaymsg -t get_outputs prints.
+type swayOutput struct {
+	Name    string `json:"name"`
+	Active  bool   `json:"active"`
+	Focused bool   `json:"focused"`
+	Rect    struct {
+		X      int `json:"x"`
+		Y      int `json:"y"`
+		Width  int `json:"width"`
+		Height int `json:"height"`
+	} `json:"rect"`
+}
+
+// swayScreen finds the stage key of sway's focused output. sway marks the output
+// that owns the focused workspace, so its rect is the monitor in use.
+func (r *run) swayScreen() (string, error) {
+	raw, err := r.output("swaymsg", "-t", "get_outputs")
+	if err != nil {
+		return "", fmt.Errorf("cannot read the monitor layout from sway: %v. Name it with --screen KEY", err)
+	}
+	name, outputs, err := parseSwayOutputs(raw)
+	if err != nil {
+		return "", err
+	}
+	known, err := r.knownScreens()
+	if err != nil {
+		return "", err
+	}
+	return pickCurrentScreen(name, outputs, known)
+}
+
+// parseSwayOutputs turns swaymsg's output list into the focused output name and
+// the layout rows.
+func parseSwayOutputs(raw []byte) (string, []monitorInfo, error) {
+	var rows []swayOutput
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return "", nil, fmt.Errorf("cannot read the sway outputs: %v", err)
+	}
+	focused := ""
+	outputs := make([]monitorInfo, 0, len(rows))
+	for _, o := range rows {
+		outputs = append(outputs, monitorInfo{name: o.Name, enabled: o.Active, x: o.Rect.X, y: o.Rect.Y, w: o.Rect.Width, h: o.Rect.Height, hasGeom: true})
+		if o.Focused {
+			focused = o.Name
+		}
+	}
+	if focused == "" {
+		return "", nil, fmt.Errorf("sway reports no focused output. Name it with --screen KEY")
+	}
+	return focused, outputs, nil
+}
+
 // pickCurrentScreen turns the active output name, the output layout and the
 // known stage keys into one stage key. No known key means the default stage
 // answers: a lone monitor, or a page that has not connected yet.
-func pickCurrentScreen(name string, outputs []kwinOutput, known []string) (string, error) {
+func pickCurrentScreen(name string, outputs []monitorInfo, known []string) (string, error) {
 	if len(known) == 0 {
 		return "", errScreenUnsupported
 	}
@@ -117,8 +245,8 @@ func (r *run) knownScreens() ([]string, error) {
 // wins, because a monitor that once ran in another mode leaves an old key at the
 // same position. A scaled monitor reports a size the page does not use, so the
 // position alone is the fallback.
-func matchScreen(name string, outputs []kwinOutput, known []string) (string, error) {
-	var found *kwinOutput
+func matchScreen(name string, outputs []monitorInfo, known []string) (string, error) {
+	var found *monitorInfo
 	for i := range outputs {
 		if outputs[i].name == name {
 			found = &outputs[i]
@@ -149,9 +277,9 @@ func matchScreen(name string, outputs []kwinOutput, known []string) (string, err
 // parseSupportInformation reads the Screens block of KWin's support information.
 // The block lists each monitor as a "Screen N:" group of Name, Enabled and
 // Geometry fields. The labels are developer text, never translated.
-func parseSupportInformation(text string) []kwinOutput {
-	var out []kwinOutput
-	var cur *kwinOutput
+func parseSupportInformation(text string) []monitorInfo {
+	var out []monitorInfo
+	var cur *monitorInfo
 	started, done := false, false
 	for _, raw := range strings.Split(text, "\n") {
 		line := strings.TrimRight(raw, "\r")
@@ -166,7 +294,7 @@ func parseSupportInformation(text string) []kwinOutput {
 			if cur != nil {
 				out = append(out, *cur)
 			}
-			cur = &kwinOutput{enabled: true}
+			cur = &monitorInfo{enabled: true}
 			continue
 		}
 		if cur == nil {

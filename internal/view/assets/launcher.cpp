@@ -12,7 +12,7 @@
 // one per monitor.
 //
 // argv: <page-url> [--output NAME] [--geometry WxH+X+Y] [--layer bottom|background]
-//      [--poll-ms N]
+//      [--backend layer-shell|x11] [--poll-ms N]
 #include <QDBusConnection>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -40,6 +40,7 @@ struct Options {
     QString output;
     QString geometry;
     QString screenKey;
+    QString backend = QStringLiteral("layer-shell");
     int layer = 1; // 1 = LayerBottom, 0 = LayerBackground
     int pollMs = 400;
     QString apiBase;
@@ -49,7 +50,7 @@ struct Options {
 int usage(const char *argv0) {
     std::fprintf(stderr,
                  "usage: %s <page-url> [--output NAME] [--geometry WxH+X+Y] [--screen KEY] "
-                 "[--layer bottom|background] [--poll-ms N] [--api URL]\n"
+                 "[--layer bottom|background] [--backend layer-shell|x11] [--poll-ms N] [--api URL]\n"
                  "       %s --list-screens\n",
                  argv0, argv0);
     return 64;
@@ -121,6 +122,8 @@ int main(int argc, char **argv) {
         } else if (arg == "--layer" && i + 1 < argc) {
             const QString value = QString::fromLocal8Bit(argv[++i]);
             opt.layer = value == "background" ? 0 : 1;
+        } else if (arg == "--backend" && i + 1 < argc) {
+            opt.backend = QString::fromLocal8Bit(argv[++i]);
         } else if (arg == "--poll-ms" && i + 1 < argc) {
             opt.pollMs = QString::fromLocal8Bit(argv[++i]).toInt();
         } else if (arg == "--api" && i + 1 < argc) {
@@ -191,13 +194,24 @@ int main(int argc, char **argv) {
     }
     std::fprintf(stderr, "SPVIEW screen %s %dx%d\n", screen->name().toLocal8Bit().constData(),
                  screen->geometry().width(), screen->geometry().height());
+    std::fprintf(stderr, "SPVIEW backend %s\n", opt.backend.toLocal8Bit().constData());
+
+    // X11 has no layer-shell, so it loads a desktop-type window placed on the
+    // output's geometry. The layer-shell surface ignores the geometry properties.
+    const QString qmlName =
+        opt.backend == "x11" ? QStringLiteral("view-x11.qml") : QStringLiteral("view.qml");
+    const QRect target = screen->geometry();
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("pageUrl"), opt.pageUrl);
     engine.rootContext()->setContextProperty(QStringLiteral("targetScreen"),
                                              QVariant::fromValue<QObject *>(screen));
     engine.rootContext()->setContextProperty(QStringLiteral("shellLayer"), opt.layer);
-    engine.load(QUrl::fromLocalFile(QCoreApplication::applicationDirPath() + "/view.qml"));
+    engine.rootContext()->setContextProperty(QStringLiteral("targetX"), target.x());
+    engine.rootContext()->setContextProperty(QStringLiteral("targetY"), target.y());
+    engine.rootContext()->setContextProperty(QStringLiteral("targetWidth"), target.width());
+    engine.rootContext()->setContextProperty(QStringLiteral("targetHeight"), target.height());
+    engine.load(QUrl::fromLocalFile(QCoreApplication::applicationDirPath() + "/" + qmlName));
     if (engine.rootObjects().isEmpty()) {
         std::fprintf(stderr, "SPVIEW error no root objects\n");
         return 2;
