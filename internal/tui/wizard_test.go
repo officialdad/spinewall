@@ -222,6 +222,34 @@ func TestSetupLinksFetchedPlayersIntoTheTheme(t *testing.T) {
 	}
 }
 
+// TestSetupLayerShellSkipsTheThemeCheck proves the native backend, which writes
+// no webwallpaper theme, does not warn that the theme cannot load the players.
+func TestSetupLayerShellSkipsTheThemeCheck(t *testing.T) {
+	paths := homePaths(t)
+	t.Setenv("SPINEWALL_PORT", freePort(t))
+	if err := os.MkdirAll(paths.Runtime, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range spanruntime.ServedNames() {
+		if err := os.WriteFile(filepath.Join(paths.Runtime, name), []byte("/* "+name+" */\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, out := runCapture(t, Options{
+		Paths:      paths,
+		Yes:        true,
+		Offline:    true,
+		Backend:    string(install.BackendLayerShell),
+		Executable: buildTestBinary(t),
+		Doctor:     offlineDetect(),
+		Runtime:    spanruntime.New(spanruntime.Options{Dir: paths.Runtime, Offline: true}),
+	})
+	defer install.StopServer(paths, func(string) {})
+	if strings.Contains(out, "theme check") {
+		t.Errorf("layer-shell setup warned about the webwallpaper theme:\n%s", out)
+	}
+}
+
 // TestVerifyThemeRuntimeNamesAMissingLink proves the setup check fails when a
 // cached player has no link in the theme folder, which is the state the bug left.
 func TestVerifyThemeRuntimeNamesAMissingLink(t *testing.T) {

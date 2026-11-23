@@ -47,6 +47,21 @@ test("the native view reports a click mask around the character", async ({ page,
   expect(total).toBeLessThan(1920 * 1080 * 0.9);
 });
 
+test("the normal-mode mask covers the Edit button so a click on it reaches the page", async ({ page, server }) => {
+  await openNative(page, { model: id });
+  await expect.poll(reported(id)).toBeTruthy();
+  const box = await page.locator("#editToggle").boundingBox();
+  expect(box).not.toBeNull();
+  // The launcher passes clicks outside the mask to the desktop, so the button's
+  // whole box must sit inside one reported rectangle.
+  const covers = r => r.x <= box.x && r.y <= box.y &&
+    r.x + r.w >= box.x + box.width && r.y + r.h >= box.y + box.height;
+  await expect.poll(async () => {
+    const mask = await maskFor();
+    return !mask.full && mask.rects.some(covers);
+  }, { timeout: 6000 }).toBe(true);
+});
+
 test("edit mode reports the full window so the dock and handle work", async ({ page, server }) => {
   await openNative(page, { model: id });
   await expect.poll(reported(id)).toBeTruthy();

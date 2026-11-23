@@ -139,8 +139,11 @@ func Run(opts Options) (Result, error) {
 
 	// The install linked the fetched players into the theme folder. Check that
 	// before starting: a page that cannot load them shows "runtime not installed".
-	if err := verifyThemeRuntime(opts.Paths); err != nil {
-		logf("theme check: " + err.Error())
+	// The native view has no theme folder: the server serves its page and players.
+	if backend != string(install.BackendLayerShell) {
+		if err := verifyThemeRuntime(opts.Paths); err != nil {
+			logf("theme check: " + err.Error())
+		}
 	}
 
 	// 7. Start and verify via /info. Next to the old Python install a second

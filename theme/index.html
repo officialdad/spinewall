@@ -2646,8 +2646,8 @@ async function fetchModels() {
 // The layer-shell window takes a click only inside its mask; everywhere else the click reaches the desktop. The
 // page must therefore report where its clickable characters are, so a click on a character reaches the page and a
 // click on empty wallpaper reaches Plasma. Each rectangle is in window pixels. In edit mode the whole window is
-// clickable, because the dock and the drag handle need it. A page with no character to point at reports no
-// rectangles, which lets every click through.
+// clickable, because the dock and the drag handle need it. The Edit button is always in the mask, since it is the
+// way into edit mode and a click on it must not fall through to the desktop.
 const maskRegions = () => {
   if (editMode) return null; // null means full window
   const rects = [];
@@ -2656,6 +2656,10 @@ const maskRegions = () => {
     const r = Math.min(innerWidth, Math.ceil(x + w)), b = Math.min(innerHeight, Math.ceil(y + h));
     if (r - l > 0 && b - t > 0) rects.push({x: l, y: t, w: r - l, h: b - t});
   };
+  if (!editToggle.hidden) {
+    const box = editToggle.getBoundingClientRect();
+    add(box.left, box.top, box.width, box.height);
+  }
   if (multi) {
     const sequence = drawSequence();
     for (const {c, e} of sequence) {
