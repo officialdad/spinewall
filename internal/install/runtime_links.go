@@ -159,6 +159,9 @@ func ownsThemeRuntime(paths Paths) bool {
 	if runtimeDir == filepath.Join(paths.CacheDir, "runtime") {
 		return true
 	}
+	if defaultDir, err := filepath.Abs(runtime.DefaultDir()); err == nil && runtimeDir == defaultDir {
+		return true
+	}
 	for _, name := range runtime.ServedNames() {
 		if target, err := os.Readlink(filepath.Join(paths.ThemeDir(), name)); err == nil && filepath.Dir(target) == runtimeDir {
 			return true

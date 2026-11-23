@@ -272,3 +272,26 @@ func TestRelativeRuntimeDirLinksResolve(t *testing.T) {
 		t.Fatalf("theme cannot load %v from a relative runtime dir", missing)
 	}
 }
+
+// TestRefreshFromAnXDGCacheRelinksTheTheme is the regression for setup linking
+// ~/.cache while `runtime fetch` and the server fetch into $XDG_CACHE_HOME, so a
+// refresh from the true default cache skipped the theme.
+func TestRefreshFromAnXDGCacheRelinksTheTheme(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "xdg-cache"))
+	paths := DefaultPaths()
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t)}); err != nil {
+		t.Fatal(err)
+	}
+
+	fetched := paths
+	fetched.Runtime = runtime.DefaultDir()
+	names := seedCache(t, fetched)
+	if err := RefreshThemeRuntime(fetched, nil); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if missing := themeHasEveryPlayer(t, fetched, names); len(missing) > 0 {
+		t.Fatalf("theme cannot load %v after a fetch into the XDG cache", missing)
+	}
+}

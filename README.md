@@ -326,7 +326,7 @@ Spinewall is a viewer. It includes no Spine runtime. The only models are the few
 | `SPINEWALL_LAYOUT` | `~/.local/state/spinewall/layout.json` | Several-character layout. |
 | `SPINEWALL_SCREENS` | `~/.local/state/spinewall/screens.json` | Layout and last preset of each monitor. |
 | `SPINEWALL_THUMBS` | `~/.cache/spinewall/thumbs` | Thumbnail cache. |
-| `SPINEWALL_RUNTIME_DIR` | `~/.cache/spinewall/runtime` | Fetched Spine players and the cache manifest. |
+| `SPINEWALL_RUNTIME_DIR` | `$XDG_CACHE_HOME/spinewall/runtime`, `~/.cache/spinewall/runtime` when unset | Fetched Spine players and the cache manifest. |
 | `SPINEWALL_OFFLINE` | unset | Set to `1` to refuse every runtime fetch and use only the cache. |
 
 The server listens on `127.0.0.1` only and rejects requests with another `Host` header. It has no login. Any local user can send it commands.

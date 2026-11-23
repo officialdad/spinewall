@@ -6,6 +6,8 @@ package install
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/officialdad/spinewall/internal/runtime"
 )
 
 // Paths are every location the installer reads or writes. They default to the
@@ -16,7 +18,7 @@ type Paths struct {
 	Config   string // config.json
 	DataDir  string // ~/.local/share
 	StateDir string // ~/.local/state/spinewall
-	CacheDir string // ~/.cache/spinewall
+	CacheDir string // $XDG_CACHE_HOME/spinewall, ~/.cache/spinewall by default
 	Runtime  string // runtime cache directory
 }
 
@@ -32,8 +34,8 @@ func DefaultPaths() Paths {
 	p.DataDir = filepath.Join(home, ".local", "share")
 	p.StateDir = filepath.Join(home, ".local", "state", "spinewall")
 	p.Config = filepath.Join(home, ".config", "spinewall", "config.json")
-	p.CacheDir = filepath.Join(home, ".cache", "spinewall")
-	p.Runtime = filepath.Join(p.CacheDir, "runtime")
+	p.Runtime = runtime.DefaultDir()
+	p.CacheDir = filepath.Dir(p.Runtime)
 	return p
 }
 

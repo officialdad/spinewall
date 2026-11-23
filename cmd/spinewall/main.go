@@ -159,7 +159,7 @@ func serve(args []string) error {
 	if err := install.RefreshThemeRuntime(installPaths, logf); err != nil {
 		// The hardened systemd unit mounts the theme folder read-only, so the
 		// server cannot relink it. Say once how to fix it by hand.
-		logf("spinewall: cannot write the theme folder " + installPaths.ThemeDir() + ": " + err.Error() + ". Run 'spinewall runtime fetch' or 'spinewall setup' to relink the players.")
+		logf("spinewall: cannot relink the theme folder " + installPaths.ThemeDir() + ": " + err.Error() + ". Run 'spinewall runtime fetch' or 'spinewall setup' to relink the players.")
 	}
 	if offline {
 		logf("spinewall: runtime offline, using the cache at " + runtimeDir)
