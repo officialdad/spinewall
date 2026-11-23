@@ -6,6 +6,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -44,10 +45,11 @@ type Server struct {
 	theme Theme
 }
 
-// RuntimeProvider serves a validated runtime file, such as spine-player41.js.
+// RuntimeProvider serves a validated runtime file, such as spine-player41.js,
+// fetching it first when the cache lacks it.
 // It is the internal/runtime.Manager in production and a stub in tests.
 type RuntimeProvider interface {
-	File(name string) ([]byte, bool)
+	Serve(name string) ([]byte, bool)
 }
 
 // Theme holds the embedded page bytes and the runtime file provider.
@@ -55,13 +57,14 @@ type Theme struct {
 	Page      []byte
 	LocalHost []byte
 	Runtime   RuntimeProvider
-	// AfterRescan runs once a rescan finishes, so a new model's player is
-	// fetched before the page asks for it.
-	AfterRescan func()
 }
 
 // New builds a Server.
 func New(store *state.Store, port int, theme Theme) *Server {
+	// The page defaults its API to port 8777. When the binary serves the page,
+	// that API is this server, so the page gets the real port. A page loaded
+	// from anywhere else keeps the default.
+	theme.Page = bytes.Replace(theme.Page, []byte("http://127.0.0.1:8777"), []byte(fmt.Sprintf("http://127.0.0.1:%d", port)), 1)
 	return &Server{store: store, port: port, theme: theme}
 }
 
@@ -181,11 +184,7 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	case path == "/models":
 		writeJSON(w, http.StatusOK, s.store.ModelsCopy())
 	case path == "/rescan":
-		models := s.store.Rescan()
-		if s.theme.AfterRescan != nil {
-			s.theme.AfterRescan()
-		}
-		writeJSON(w, http.StatusOK, models)
+		writeJSON(w, http.StatusOK, s.store.Rescan())
 	case path == "/info":
 		writeJSON(w, http.StatusOK, s.store.InfoReply())
 	case strings.HasPrefix(path, "/thumb/") && strings.HasSuffix(path, ".png"):
@@ -213,7 +212,7 @@ func (s *Server) serveRuntimeFile(w http.ResponseWriter, name string) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "runtime not installed"})
 		return
 	}
-	data, ok := s.theme.Runtime.File(name)
+	data, ok := s.theme.Runtime.Serve(name)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "runtime not installed"})
 		return

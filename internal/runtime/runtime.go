@@ -47,7 +47,7 @@ type Options struct {
 	// BaseURL replaces both download hosts. It exists for tests; empty uses the
 	// production npm and GitHub hosts.
 	BaseURL string
-	// Client is the HTTP client. Nil uses one with a 60 second timeout.
+	// Client is the HTTP client. Nil uses one with a 30 second timeout.
 	Client *http.Client
 	// Logf receives human-readable progress. Nil discards it.
 	Logf func(string)
@@ -64,6 +64,9 @@ type Manager struct {
 	logf    func(string)
 	pins    []Pin
 
+	// fetchMu serialises fetches so concurrent misses share one download. mu
+	// guards the in-memory state only and is never held across the network.
+	fetchMu  sync.Mutex
 	mu       sync.Mutex
 	files    map[string][]byte
 	manifest Manifest
@@ -177,9 +180,8 @@ func copyManifest(in Manifest) Manifest {
 // cached bytes against the manifest, refetches a missing or corrupt file, and
 // records the result. In offline mode a missing or corrupt file is an error.
 func (m *Manager) Ensure(globals []string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.loadLocked()
+	m.fetchMu.Lock()
+	defer m.fetchMu.Unlock()
 
 	want := map[string]bool{}
 	for _, global := range globals {
@@ -188,22 +190,20 @@ func (m *Manager) Ensure(globals []string) error {
 		}
 	}
 
-	// The page always links the stylesheet, so it is part of every cache.
-	needCSS := !m.validCSSLocked()
+	m.mu.Lock()
+	m.loadLocked()
+	m.mu.Unlock()
 
 	var problems []string
 	for _, pin := range m.pins {
-		if !want[pin.Global] {
-			continue
-		}
-		if m.validLocked(pin) {
+		if !want[pin.Global] || m.valid(pin) {
 			continue
 		}
 		if m.offline {
 			problems = append(problems, fmt.Sprintf("%s is not cached and the runtime is offline", FileName(pin.Global)))
 			continue
 		}
-		if err := m.fetchLocked(pin); err != nil {
+		if err := m.fetch(pin); err != nil {
 			problems = append(problems, err.Error())
 		}
 	}
@@ -211,11 +211,11 @@ func (m *Manager) Ensure(globals []string) error {
 	// A fetched 4.x tarball writes the stylesheet. When every wanted player was
 	// already cached, or only 3.x players are in use, fetch the cssPin tarball so
 	// a deleted or absent stylesheet still comes back.
-	if needCSS && !m.validCSSLocked() {
+	if !m.validCSS() {
 		if pin, ok := m.pinFor(cssPin); ok {
 			if m.offline {
 				problems = append(problems, cssName+" is not cached and the runtime is offline")
-			} else if err := m.fetchLocked(pin); err != nil {
+			} else if err := m.fetch(pin); err != nil {
 				problems = append(problems, err.Error())
 			}
 		}
@@ -224,6 +224,27 @@ func (m *Manager) Ensure(globals []string) error {
 		return fmt.Errorf("runtime cache %s incomplete: %s", m.dir, strings.Join(problems, "; "))
 	}
 	return nil
+}
+
+// Serve returns a runtime file, fetching it first when the cache lacks it or
+// holds a corrupt copy. A failed fetch is retried on the next miss.
+func (m *Manager) Serve(name string) ([]byte, bool) {
+	if data, ok := m.File(name); ok {
+		return data, true
+	}
+	var globals []string
+	for _, pin := range m.pins {
+		if FileName(pin.Global) == name {
+			globals = append(globals, pin.Global)
+		}
+	}
+	if len(globals) == 0 && name != cssName {
+		return nil, false
+	}
+	if err := m.Ensure(globals); err != nil {
+		m.logf("spinewall: " + err.Error())
+	}
+	return m.File(name)
 }
 
 // FetchAll downloads every pinned runtime and records the cache.
@@ -321,6 +342,18 @@ func (m *Manager) validLocked(pin Pin) bool {
 	return true
 }
 
+func (m *Manager) valid(pin Pin) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.validLocked(pin)
+}
+
+func (m *Manager) validCSS() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.validCSSLocked()
+}
+
 func (m *Manager) validCSSLocked() bool {
 	want, ok := m.manifest.Files[cssName]
 	if !ok || m.manifest.CSSFrom == "" {
@@ -338,9 +371,10 @@ func (m *Manager) validCSSLocked() bool {
 	return true
 }
 
-// fetchLocked downloads one pin, verifies it, transforms it, writes the output,
-// and updates the manifest.
-func (m *Manager) fetchLocked(pin Pin) error {
+// fetch downloads one pin, verifies it, transforms it, writes the output, and
+// updates the manifest. The caller holds fetchMu. The network and the file
+// writes run outside mu, so cached files keep serving during a slow download.
+func (m *Manager) fetch(pin Pin) error {
 	m.logf(fmt.Sprintf("spinewall: fetching Spine %s (%s)", pin.Version, pin.Global))
 	data, err := m.download(pin)
 	if err != nil {
@@ -355,6 +389,9 @@ func (m *Manager) fetchLocked(pin Pin) error {
 	if err := writeAtomic(filepath.Join(m.dir, name), js); err != nil {
 		return err
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.files[name] = js
 	m.manifest.Files[name] = hashHex(js)
 	m.manifest.Pins[pin.Global] = pin.SHA256
@@ -370,10 +407,7 @@ func (m *Manager) fetchLocked(pin Pin) error {
 		m.manifest.CSSFrom = pin.Global
 	}
 
-	if err := m.writeManifestLocked(); err != nil {
-		return err
-	}
-	return nil
+	return m.writeManifestLocked()
 }
 
 func (m *Manager) download(pin Pin) ([]byte, error) {

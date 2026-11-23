@@ -269,7 +269,7 @@ func TestThemeServed(t *testing.T) {
 
 type fakeRuntime map[string][]byte
 
-func (f fakeRuntime) File(name string) ([]byte, bool) {
+func (f fakeRuntime) Serve(name string) ([]byte, bool) {
 	data, ok := f[name]
 	return data, ok
 }
@@ -393,15 +393,5 @@ func TestThumbRejections(t *testing.T) {
 	}
 	if rec := do(t, s, http.MethodPost, "/thumb/nope", notPNG, nil); rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown status %d", rec.Code)
-	}
-}
-
-func TestRescanRunsAfterRescanHook(t *testing.T) {
-	s, _ := newTestServer(t)
-	calls := 0
-	s.theme.AfterRescan = func() { calls++ }
-	rec := do(t, s, "GET", "/rescan", nil, map[string]string{"Host": "127.0.0.1:18777"})
-	if rec.Code != 200 || calls != 1 {
-		t.Fatalf("status %d, hook calls %d", rec.Code, calls)
 	}
 }
