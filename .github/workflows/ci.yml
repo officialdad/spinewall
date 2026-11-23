@@ -47,6 +47,32 @@ jobs:
           SPINEWALL_TEST_NETWORK: "1"
         run: python3 -I -m unittest discover -s tests -t . -p 'test_install.py' -v
 
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Vet
+        run: go vet ./...
+      - name: Unit tests
+        run: go test ./...
+      - name: Static binary builds
+        run: CGO_ENABLED=0 go build -trimpath -o spinewall ./cmd/spinewall
+      - name: Existing Python suite runs against the Go binary
+        env:
+          SPINEWALL_BIN: ${{ github.workspace }}/spinewall
+        run: python3 -I -m unittest discover -s tests -t . -v
+      - name: Differential parity, Python server vs Go server
+        run: |
+          work="$(mktemp -d)"
+          mkdir -p "$work/state" "$work/models"
+          python3 -c "import sys; from tests.server.support import build_default_models; build_default_models(sys.argv[1])" "$work/models"
+          python3 tests/differential.py --go-bin ./spinewall --state-dir "$work/state" --models-dir "$work/models"
+
   page:
     runs-on: ubuntu-latest
     timeout-minutes: 30

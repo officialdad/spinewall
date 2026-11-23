@@ -25,6 +25,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SERVER = ROOT / "server" / "spinewall-server.py"
 CLI = ROOT / "bin" / "spinewall"
+# SPINEWALL_BIN points the black-box server tests at the Go binary instead of the
+# Python server. The in-process unit tests stay Python only: they import the
+# Python module and check its functions directly.
+GO_BIN = os.environ.get("SPINEWALL_BIN")
+
+
+def server_command():
+    """The argv that starts the server under test. A Go binary is run as-is."""
+    if GO_BIN:
+        return [GO_BIN, "serve"]
+    return [sys.executable, "-I", "-B", str(SERVER)]
 
 PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -187,7 +198,7 @@ class ServerProcess:
             self.port = free_port()
             log = open(self.log_file, "wb")
             self.proc = subprocess.Popen(
-                [sys.executable, "-I", "-B", str(SERVER)],
+                server_command(),
                 env=self.env(),
                 stdout=log,
                 stderr=log,

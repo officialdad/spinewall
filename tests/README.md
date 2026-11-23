@@ -10,6 +10,21 @@ python3 -I -m unittest discover -s tests -t . -v
 
 The run takes about 30 s and needs no network, no Plasma, and no models.
 
+Set `SPINEWALL_BIN` to run the black-box server tests against the Go binary instead of the Python server:
+
+```
+CGO_ENABLED=0 go build -o spinewall ./cmd/spinewall
+SPINEWALL_BIN=$PWD/spinewall python3 -I -m unittest discover -s tests -t . -v
+```
+
+The in-process unit tests in `test_scan.py` import the Python module, so they stay Python only.
+
+The differential test starts the Python server and the Go server on one state copy and compares decoded JSON for the read endpoints and every `/cmd/*`:
+
+```
+python3 tests/differential.py --go-bin ./spinewall --state-dir <state copy> --models-dir <models>
+```
+
 | File | Covers |
 |---|---|
 | `tests/server/test_scan.py` | Version detection, skip reasons, `model.json` overrides, `classify_kind`, `assign_characters`. |
