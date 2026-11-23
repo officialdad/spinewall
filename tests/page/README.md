@@ -26,7 +26,7 @@ npx playwright install --with-deps chromium   # CI and fresh machines
 npm test
 ```
 
-`setup.sh` runs `scripts/install.sh` into a throwaway `HOME` under `.work/`. It fetches the runtimes from npm and GitHub, so the first run needs network. It stubs `systemctl`. Run `./setup.sh --force` to reinstall.
+`setup.sh` builds the `spinewall` binary from this tree and runs `spinewall build-theme` into a throwaway `HOME` under `.work/`. It needs Go. It fetches the runtimes from npm and GitHub, so the first run needs network. Run `./setup.sh --force` to reinstall.
 
 Each test starts its own server with its own state directory and removes it after.
 
