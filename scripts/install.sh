@@ -13,11 +13,9 @@
 set -eu
 
 REPO="officialdad/spinewall"
-# Public minisign key for the release signature. PLACEHOLDER: the captain must
-# replace this with the real key and add the secret key to the release workflow
-# before the first signed release. While it is the placeholder, the signature
-# step prints a clear message and skips the check.
-MINISIGN_PUBLIC_KEY="RWSPINEWALLPLACEHOLDERKEYREPLACETHISWITHTHEREALKEY00000000000000000="
+# Public minisign key for the release signature. The matching secret key is the
+# MINISIGN_SECRET_KEY repository secret that the release workflow signs with.
+MINISIGN_PUBLIC_KEY="RWQfxnTcpZHCTkn3a2pNTCqT56AOGC7/hE9ZevJc+h8Jvn3T4AozgPaT"
 
 say() { printf '%s\n' "$*" >&2; }
 die() { say "error: $*"; exit 1; }
@@ -80,13 +78,10 @@ say "checksum ok"
 
 # --- signature ---
 # SHA256SUMS comes from the same place as the binary, so only the minisign
-# signature proves the release is authentic. With a real key, a missing tool,
-# a missing signature, or a bad signature stops the install.
+# signature proves the release is authentic. A missing tool, a missing
+# signature, or a bad signature stops the install.
 sig_url="$base/SHA256SUMS.minisig"
-if [ "${MINISIGN_PUBLIC_KEY#RWSPINEWALLPLACEHOLDER}" != "$MINISIGN_PUBLIC_KEY" ]; then
-  say "note: this build has a placeholder signature key, so the signature is not verified."
-  say "      the SHA256SUMS check above was still run. Check the release page for the key."
-elif [ "${SPINEWALL_SKIP_VERIFY:-}" = "1" ]; then
+if [ "${SPINEWALL_SKIP_VERIFY:-}" = "1" ]; then
   say "WARNING: SPINEWALL_SKIP_VERIFY=1 is set. The release signature was NOT verified."
   say "WARNING: nothing proves this binary came from the spinewall release."
 else

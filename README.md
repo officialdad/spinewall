@@ -140,7 +140,7 @@ One command downloads the release binary, verifies it, and starts a setup wizard
 curl -fsSL https://github.com/officialdad/spinewall/releases/latest/download/install.sh | sh
 ```
 
-The bootstrap downloads `spinewall-<version>-linux-<arch>` and `SHA256SUMS`, checks the hash, and verifies the release signature with `minisign`. Once the release key ships, a missing `minisign`, a missing signature, or a bad signature stops the install. `SPINEWALL_SKIP_VERIFY=1` skips the signature check, with a warning. It then installs the binary to `~/.local/bin/spinewall` and runs `spinewall setup`.
+The bootstrap downloads `spinewall-<version>-linux-<arch>` and `SHA256SUMS`, checks the hash, and verifies the release signature with `minisign`. A missing `minisign`, a missing signature, or a bad signature stops the install. `SPINEWALL_SKIP_VERIFY=1` skips the signature check, with a warning. It then installs the binary to `~/.local/bin/spinewall` and runs `spinewall setup`.
 
 Prefer another way:
 
