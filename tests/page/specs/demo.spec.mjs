@@ -24,6 +24,8 @@ const test = base.extend({
     });
     await new Promise((r) => server.listen(0, "127.0.0.1", r));
     await use(`http://127.0.0.1:${server.address().port}/`);
+    // close() waits for keep-alive sockets from the browser, which can outlast the fixture timeout.
+    server.closeAllConnections();
     await new Promise((r) => server.close(r));
     fs.rmSync(DEMO, { recursive: true, force: true });
   },
