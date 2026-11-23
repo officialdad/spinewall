@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -118,7 +119,11 @@ func runViewCommand(args []string) error {
 // runBrowser starts the kiosk-browser fallback and waits for it, stopping it on
 // the same signals that stop the native view.
 func runBrowser(apiBase string, logf func(string)) error {
-	b, err := view.BrowserCommand(view.BrowserURL(apiBase), nil)
+	profile := filepath.Join(install.DefaultPaths().CacheDir, "kiosk")
+	if err := os.MkdirAll(profile, 0o700); err != nil {
+		return err
+	}
+	b, err := view.BrowserCommand(view.BrowserURL(apiBase), profile, nil)
 	if err != nil {
 		return err
 	}

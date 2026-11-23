@@ -54,6 +54,9 @@ func Print(w io.Writer, r Report) {
 	// The phase 6 backends are best effort and unconfirmed, so say so the way
 	// docs/windows.md does for Windows.
 	fmt.Fprintf(w, "Unverified backends: %s (best effort, not confirmed on real hardware; see docs/desktops.md)\n", strings.Join(r.Unverified(), ", "))
+	if r.ScreenProviderSession {
+		fmt.Fprintf(w, "Unverified --screen current providers: %s\n", strings.Join(r.UnverifiedScreenProviders(), ", "))
+	}
 	if r.GNOME() {
 		fmt.Fprintln(w, "GNOME: unsupported, and no layer-shell backend is offered (see docs/desktops.md)")
 	} else {

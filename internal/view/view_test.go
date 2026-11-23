@@ -3,6 +3,7 @@ package view
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -129,27 +130,49 @@ func TestReadyX11NeedsNoLayerShellQML(t *testing.T) {
 	}
 }
 
+func TestBrowserCommandRunsOnItsOwnProfile(t *testing.T) {
+	cases := map[string][]string{
+		"firefox":  {"--new-instance", "--profile", "/p/kiosk", "--kiosk", "http://x/index.html"},
+		"chromium": {"--user-data-dir=/p/kiosk", "--kiosk", "http://x/index.html"},
+	}
+	for browser, want := range cases {
+		got, err := BrowserCommand("http://x/index.html", "/p/kiosk", func(name string) (string, error) {
+			if name == browser {
+				return "/usr/bin/" + name, nil
+			}
+			return "", os.ErrNotExist
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Name != browser {
+			t.Errorf("browser = %q, want %s", got.Name, browser)
+		}
+		if strings.Join(got.Args, " ") != strings.Join(want, " ") {
+			t.Errorf("%s args = %v, want %v", browser, got.Args, want)
+		}
+	}
+}
+
 func TestBrowserCommandPicksTheFirstInstalled(t *testing.T) {
-	have := map[string]bool{"firefox": true}
-	got, err := BrowserCommand("http://x/index.html", func(name string) (string, error) {
+	have := map[string]bool{"firefox": true, "google-chrome": true}
+	lookPath := func(name string) (string, error) {
 		if have[name] {
 			return "/usr/bin/" + name, nil
 		}
 		return "", os.ErrNotExist
-	})
+	}
+	got, err := BrowserCommand("http://x", "/p", lookPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "firefox" {
-		t.Errorf("browser = %q, want firefox", got.Name)
-	}
-	if len(got.Args) != 2 || got.Args[0] != "--kiosk" || got.Args[1] != "http://x/index.html" {
-		t.Errorf("args = %v", got.Args)
+	if got.Name != "google-chrome" || FindBrowser(lookPath) != got.Name {
+		t.Errorf("browser = %q, FindBrowser = %q, want google-chrome", got.Name, FindBrowser(lookPath))
 	}
 }
 
 func TestBrowserCommandWithoutABrowserIsAnError(t *testing.T) {
-	_, err := BrowserCommand("http://x", func(string) (string, error) { return "", os.ErrNotExist })
+	_, err := BrowserCommand("http://x", "/p", func(string) (string, error) { return "", os.ErrNotExist })
 	if err == nil {
 		t.Fatal("no browser reported as success")
 	}

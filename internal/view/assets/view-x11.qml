@@ -1,23 +1,26 @@
 // The native wallpaper surface on a real X11 session: one desktop-type window,
 // placed on one output, drawing the spinewall page in QtWebEngine.
 //
-// X11 has no layer-shell, so the window asks the window manager to treat it as
-// the desktop, keep it at the bottom, and never take focus. The launcher passes
-// the output's geometry in targetX/targetY/targetWidth/targetHeight. This path
-// is best effort and unverified on real hardware; see docs/desktops.md.
+// X11 has no layer-shell, so the window is a normal frameless window kept at
+// the bottom that never takes focus. Qt.Desktop is not used: the xcb plugin
+// adopts the root window for it, so every monitor would share one surface. The
+// launcher marks the window _NET_WM_WINDOW_TYPE_DESKTOP before it maps, which is
+// why it starts hidden. The launcher passes the output's geometry in
+// targetX/targetY/targetWidth/targetHeight. This path is best effort and
+// unverified on real hardware; see docs/desktops.md.
 import QtQuick
 import QtWebEngine
 
 Window {
     id: win
-    visible: true
+    visible: false
     color: "#000000"
 
     x: targetX
     y: targetY
     width: targetWidth
     height: targetHeight
-    flags: Qt.Desktop | Qt.FramelessWindowHint | Qt.WindowStaysOnBottomHint
+    flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnBottomHint
          | Qt.WindowDoesNotAcceptFocus
 
     WebEngineView {

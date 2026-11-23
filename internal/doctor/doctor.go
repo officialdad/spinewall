@@ -53,6 +53,15 @@ type Report struct {
 	X11 Status
 	// BrowserName is the kiosk browser the fallback would use, empty when none.
 	BrowserName string
+	// LayerShellReady and X11Ready are whether each native view surface can
+	// build and load here, so a backend is offered even when not recommended.
+	LayerShellReady bool
+	X11Ready        bool
+	// Plasma is a KDE Plasma session, where kde-legacy is the verified backend.
+	Plasma bool
+	// ScreenProviderSession is a Hyprland or sway session, where --screen
+	// current uses a provider no one has confirmed on real hardware.
+	ScreenProviderSession bool
 }
 
 // Options let tests replace the detection sources.
@@ -133,12 +142,12 @@ func Detect(opts Options) Report {
 
 	// The kiosk fallback runs the page in a fullscreen browser anywhere there is
 	// one. It is a normal window, not a wallpaper.
-	kiosk, browserName := detectKioskBrowser(lookPath)
-	r.BrowserName = browserName
+	r.BrowserName = view.FindBrowser(lookPath)
+	kiosk := foundOrMissing(r.BrowserName != "")
 	r.Checks = append(r.Checks, Check{
 		Name:   "kiosk browser",
 		Status: kiosk,
-		Detail: kioskDetail(kiosk, browserName),
+		Detail: kioskDetail(kiosk, r.BrowserName),
 	})
 
 	// GPU from /sys/class/drm.
@@ -157,6 +166,7 @@ func Detect(opts Options) Report {
 	})
 
 	// The Plasma wallpaper plugin. Only needed by the KDE legacy backend.
+	r.Plasma = hasDesktop(r.Desktop, "kde") || strings.Contains(strings.ToLower(r.Desktop), "plasma")
 	if _, err := lookPath("plasmashell"); err == nil {
 		r.Checks = append(r.Checks, Check{Name: "plasmashell", Status: Found, Detail: "KDE Plasma session"})
 	}
@@ -202,38 +212,44 @@ func Detect(opts Options) Report {
 	// Both backends are reported. internal/view alone decides whether the native
 	// layer-shell view can build and load here; kde-legacy needs Plasma and the
 	// webwallpaper plugin. setup preselects the recommended one.
-	r.Backend = nativeRecommendation(native)
+	r.LayerShellReady = native.Ready()
+	r.X11Ready = native.ReadyX11()
+	r.ScreenProviderSession = getenv("HYPRLAND_INSTANCE_SIGNATURE") != "" || getenv("SWAYSOCK") != ""
+	r.Backend = r.recommend()
 	return r
 }
 
-// nativeRecommendation picks the backend this machine should run. The native
-// layer-shell view is preferred when the whole chain is present. The KDE legacy
-// backend is the fallback for Plasma users until the cutover, and the default
-// elsewhere, because it is the only backend this release ships for them.
-func nativeRecommendation(native view.DetectResult) string {
-	if native.Ready() {
+// recommend picks the backend this machine should run, and the one setup --yes
+// installs without asking. An unverified backend never replaces a verified one:
+// the layer-shell view comes first, then kde-legacy on Plasma even on X11, and
+// the unverified X11 view only where neither verified backend can run. The KDE
+// legacy backend stays the default otherwise, as the only one this release
+// ships for those desktops.
+func (r Report) recommend() string {
+	switch {
+	case r.LayerShellReady:
 		return "layer-shell"
-	}
-	// A real X11 session has no layer-shell, so the desktop-type window is the
-	// native option there. It is unverified, so the user is told so.
-	if native.ReadyX11() {
+	case r.Plasma:
+		return "kde-legacy"
+	case r.X11Ready:
 		return "x11"
 	}
 	return "kde-legacy"
 }
 
-// Backends lists the backends a user may pick, recommended first. The native
-// view is offered only when this machine can run it; the legacy backend is
-// always offered as the Plasma fallback.
+// Backends lists the backends a user may pick, recommended first. A native
+// view surface is offered only when this machine can run it; the legacy
+// backend is always offered as the Plasma fallback.
 func (r Report) Backends() []string {
-	out := []string{}
-	switch r.Backend {
-	case "layer-shell":
-		out = append(out, "layer-shell")
-	case "x11":
-		out = append(out, "x11")
+	out := []string{r.Backend}
+	for _, c := range []struct {
+		name string
+		ok   bool
+	}{{"layer-shell", r.LayerShellReady}, {"x11", r.X11Ready}, {"kde-legacy", true}} {
+		if c.ok && c.name != r.Backend {
+			out = append(out, c.name)
+		}
 	}
-	out = append(out, "kde-legacy")
 	return out
 }
 
@@ -244,11 +260,22 @@ func (r Report) Unverified() []string {
 	return []string{"x11", "kiosk"}
 }
 
+// UnverifiedScreenProviders names the --screen current providers no one has
+// confirmed on real hardware.
+func (r Report) UnverifiedScreenProviders() []string {
+	return []string{"hyprland", "sway"}
+}
+
 // GNOME reports whether this is a GNOME session, which has no layer-shell and
 // needs a shell extension the project does not ship.
 func (r Report) GNOME() bool {
-	for _, name := range strings.Split(strings.ToLower(r.Desktop), ":") {
-		if strings.TrimSpace(name) == "gnome" {
+	return hasDesktop(r.Desktop, "gnome")
+}
+
+// hasDesktop reports whether a colon-separated XDG_CURRENT_DESKTOP names want.
+func hasDesktop(desktops, want string) bool {
+	for _, name := range strings.Split(strings.ToLower(desktops), ":") {
+		if strings.TrimSpace(name) == want {
 			return true
 		}
 	}
@@ -311,16 +338,6 @@ func x11Detail(on bool) string {
 		return "X11 session; the desktop-type view can run (unverified)"
 	}
 	return "needs a real X11 session"
-}
-
-// detectKioskBrowser finds a browser for the fullscreen fallback.
-func detectKioskBrowser(lookPath func(string) (string, error)) (Status, string) {
-	for _, browser := range []string{"chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "firefox"} {
-		if _, err := lookPath(browser); err == nil {
-			return Found, browser
-		}
-	}
-	return Missing, ""
 }
 
 func kioskDetail(status Status, name string) string {

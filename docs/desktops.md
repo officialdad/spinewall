@@ -23,7 +23,9 @@ The lines below are what it prints for the unverified parts.
 
 X11 has no `zwlr_layer_shell_v1`, so the native view draws a desktop-type window
 instead: one per monitor, kept at the bottom and out of focus by the window
-manager. It is the same launcher and the same page as the layer-shell view, with
+manager. Each window is a normal frameless window that the launcher marks
+`_NET_WM_WINDOW_TYPE_DESKTOP` before it maps. Qt's own `Qt::Desktop` flag is not
+used, because it takes over the root window, so every monitor would share it. It is the same launcher and the same page as the layer-shell view, with
 a different QML surface (`view-x11.qml`). The click mask still works, because
 `QWindow::setMask` exists on X11 too.
 
@@ -39,9 +41,12 @@ Or start both halves in one process tree:
 spinewall serve --with-view --view-backend x11
 ```
 
-`spinewall setup` recommends the X11 backend on a real X11 session when the
-launcher can build, and pins it in the autostart entry. Under Wayland, XWayland
-is not a desktop, so the X11 backend is not offered there.
+`spinewall setup` offers the X11 backend on a real X11 session when the launcher
+can build, marked unverified. It recommends it, and `setup --yes` installs it,
+only when no verified backend can run. On KDE Plasma the KDE legacy backend
+stays the recommendation, even on X11. When chosen, the X11 backend is pinned in
+the autostart entry. Under Wayland, XWayland is not a desktop, so the X11
+backend is not offered there.
 
 Known limits, untested:
 
@@ -64,7 +69,10 @@ spinewall view --browser
 ```
 
 It uses the first of `chromium`, `chromium-browser`, `google-chrome-stable`,
-`google-chrome`, or `firefox`, with `--kiosk`. The page still shows the Edit
+`google-chrome`, or `firefox`, with `--kiosk`. It runs on its own profile in
+`~/.cache/spinewall/kiosk`, so a browser you already have open does not take the
+page as a normal tab, and the page shares no cookies or storage with your
+browsing. The page still shows the Edit
 button, so edit mode works with no containment patch. Nothing else is needed:
 no launcher build and no layer-shell.
 

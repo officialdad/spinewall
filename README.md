@@ -164,7 +164,7 @@ Prefer another way:
 2. The Spine licence notice, with a consent prompt.
 3. Fetches the Spine runtimes into `~/.cache/spinewall/runtime` (under `$XDG_CACHE_HOME` when set), checking each download against a pinned sha256.
 4. Asks for the models folder, kept in `~/.config/spinewall/config.json`.
-5. Chooses a backend. The native view (layer-shell, or X11 on a real X11 session) installs when this machine can build it; the KDE Plasma legacy backend is always offered as the fallback.
+5. Chooses a backend. The native view (layer-shell, or X11 on a real X11 session) installs when this machine can build it; the KDE Plasma legacy backend is always offered as the fallback. An unverified backend is never the `--yes` default while a verified one can run, so KDE Plasma keeps the legacy backend on X11.
 6. Installs the files, an XDG autostart entry, and optionally a systemd user unit, then starts the server and verifies it with `/info`. For the KDE Plasma legacy backend the install links the fetched players into the theme folder (`~/.local/share/webwallpaper/themes/spinewall`), because the KDE backend opens the page from `file://` and the page loads each player by relative URL. A refetch or `spinewall runtime fetch` relinks them. The opt-in systemd unit mounts the theme folder read-only, so a server under it cannot relink the players and logs that once. Run `spinewall runtime fetch` or `spinewall setup` to relink them. A `--runtime-dir` or `SPINEWALL_RUNTIME_DIR` that is not the default cache, and not the one the theme links to, never touches the installed theme or its manifest.
 
 Run `spinewall doctor` on its own at any time, and paste its table into a bug report.

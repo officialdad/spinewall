@@ -297,6 +297,37 @@ func TestRecommendX11OnARealX11Session(t *testing.T) {
 	}
 }
 
+func TestPlasmaX11KeepsTheVerifiedBackend(t *testing.T) {
+	env := map[string]string{"XDG_SESSION_TYPE": "x11", "XDG_CURRENT_DESKTOP": "KDE", "DISTRO_ID": "arch"}
+	present := map[string]bool{
+		"c++": true, "moc": true, "pkg-config": true, "pkg:qt-dev": true,
+		"/usr/lib/qt6/qml/QtWebEngine": true, "plasmashell": true,
+	}
+	r := Detect(fakeEnv(env, present, true))
+	if r.Backend != "kde-legacy" {
+		t.Errorf("backend = %q, want kde-legacy on Plasma X11", r.Backend)
+	}
+	if got := r.Backends(); len(got) != 2 || got[0] != "kde-legacy" || got[1] != "x11" {
+		t.Errorf("backends = %v, want kde-legacy then the unverified x11", got)
+	}
+}
+
+func TestPrintMarksTheScreenProvidersOnHyprlandAndSway(t *testing.T) {
+	const line = "Unverified --screen current providers: hyprland, sway\n"
+	cases := map[string]bool{"HYPRLAND_INSTANCE_SIGNATURE": true, "SWAYSOCK": true, "": false}
+	for key, want := range cases {
+		env := map[string]string{"XDG_SESSION_TYPE": "wayland", "DISTRO_ID": "arch"}
+		if key != "" {
+			env[key] = "set"
+		}
+		var sb strings.Builder
+		Print(&sb, Detect(fakeEnv(env, map[string]bool{}, true)))
+		if got := strings.Contains(sb.String(), line); got != want {
+			t.Errorf("%q set: providers line printed = %v, want %v:\n%s", key, got, want, sb.String())
+		}
+	}
+}
+
 func TestPrintMarksTheUnverifiedBackends(t *testing.T) {
 	r := Detect(fakeEnv(map[string]string{"XDG_CURRENT_DESKTOP": "GNOME", "DISTRO_ID": "arch"}, map[string]bool{}, true))
 	var sb strings.Builder

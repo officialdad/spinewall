@@ -222,6 +222,16 @@ int main(int argc, char **argv) {
         return 3;
     }
 
+    // The xcb platform plugin reads this property when it creates the native
+    // window and writes the matching _NET_WM_WINDOW_TYPE, so the window manager
+    // treats each monitor's window as the desktop. 0x2 is its Desktop type. The
+    // X11 surface starts hidden so the property is set before the window exists.
+    if (opt.backend == "x11") {
+        window->setProperty("_q_xcb_wm_window_type", 0x000002);
+        window->show();
+        std::fprintf(stderr, "SPVIEW x11 window type desktop\n");
+    }
+
     // The mask belongs to this window's stage, so the poll names the same screen
     // key the page's URL carries. An empty key is the default stage.
     QString maskUrl = opt.apiBase + "/mask";
