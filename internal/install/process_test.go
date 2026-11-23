@@ -12,11 +12,15 @@ import (
 
 // startProcess runs a shell under a chosen argv, so the matcher sees the same
 // /proc cmdline and environ a real process would show. sh reads the script
-// named by argv[1] from dir.
+// named by argv[1], relative to dir unless it is absolute.
 func startProcess(t *testing.T, port string, args ...string) *exec.Cmd {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, args[1]), []byte("sleep 30\n"), 0o644); err != nil {
+	script := args[1]
+	if !filepath.IsAbs(script) {
+		script = filepath.Join(dir, script)
+	}
+	if err := os.WriteFile(script, []byte("sleep 30\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	sh, err := exec.LookPath("sh")
@@ -74,13 +78,19 @@ func TestOnlySpinewallServeOnThePortMatches(t *testing.T) {
 	}
 }
 
-func TestLegacyMatcherFindsOnlyThePythonServer(t *testing.T) {
-	legacy := startProcess(t, "8777", "python3", "spinewall-server")
-	editor := startProcess(t, "8777", "nvim", "spinewall-server")
-	if !isLegacyServer(legacy.Process.Pid) {
-		t.Error("python3 spinewall-server did not match")
+func TestLegacyMatcherFindsOnlyThisHomesPythonServer(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "spinewall-server")
+	other := filepath.Join(t.TempDir(), "spinewall-server")
+	legacy := startProcess(t, "8777", "python3", script)
+	elsewhere := startProcess(t, "8777", "python3", other)
+	editor := startProcess(t, "8777", "nvim", script)
+	if !isLegacyServer(legacy.Process.Pid, script) {
+		t.Error("python3 spinewall-server in this home did not match")
 	}
-	if isLegacyServer(editor.Process.Pid) {
+	if isLegacyServer(elsewhere.Process.Pid, script) {
+		t.Error("a python server from another home matched")
+	}
+	if isLegacyServer(editor.Process.Pid, script) {
 		t.Error("an editor on spinewall-server matched")
 	}
 }

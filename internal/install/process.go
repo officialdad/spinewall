@@ -19,11 +19,19 @@ func hasCommand(name string) bool {
 	return err == nil
 }
 
-// runQuiet runs a command and discards its output. A missing command or a
-// non-zero exit is not fatal; callers use it for best-effort steps.
-func runQuiet(name string, args ...string) {
-	cmd := exec.Command(name, args...)
-	_ = cmd.Run()
+// unitCommand runs `systemctl --user <args> spinewall.service` only when the
+// user manager loaded the unit file in this install's home. A throwaway home,
+// or a unit file the manager does not read, never reaches the real unit.
+func unitCommand(paths Paths, args ...string) bool {
+	if !hasCommand("systemctl") {
+		return false
+	}
+	out, err := exec.Command("systemctl", "--user", "show", "-p", "FragmentPath", "--value", "spinewall.service").Output()
+	if err != nil || strings.TrimSpace(string(out)) != paths.UnitFile() {
+		return false
+	}
+	full := append([]string{"--user"}, args...)
+	return exec.Command("systemctl", append(full, "spinewall.service")...).Run() == nil
 }
 
 // processArgs is a pid's argv. A process that is gone or not readable has none.
@@ -60,18 +68,18 @@ func isServeOnPort(pid int, port string) bool {
 	return processPort(pid) == port
 }
 
-// isLegacyServer reports whether pid is the old Python server, run directly or
-// through a python interpreter.
-func isLegacyServer(pid int) bool {
+// isLegacyServer reports whether pid runs this home's old Python server
+// script, directly or through a python interpreter. A server from another
+// home is never this install's to stop.
+func isLegacyServer(pid int, script string) bool {
 	args := processArgs(pid)
 	if len(args) == 0 {
 		return false
 	}
-	if filepath.Base(args[0]) == "spinewall-server" {
+	if args[0] == script {
 		return true
 	}
-	return len(args) > 1 && strings.HasPrefix(filepath.Base(args[0]), "python") &&
-		filepath.Base(args[1]) == "spinewall-server"
+	return len(args) > 1 && strings.HasPrefix(filepath.Base(args[0]), "python") && args[1] == script
 }
 
 // killMatching sends SIGTERM to every process of this user that match accepts.
@@ -109,8 +117,8 @@ func StopServer(paths Paths, logf func(string)) error {
 	if portBusy("127.0.0.1", port) {
 		// The unit runs on the default port, so a server on another port is never
 		// the unit's.
-		if port == "8777" && hasCommand("systemctl") {
-			runQuiet("systemctl", "--user", "stop", "spinewall.service")
+		if port == "8777" {
+			unitCommand(paths, "stop")
 		}
 		killMatching(func(pid int) bool { return isServeOnPort(pid, port) }, logf)
 	}

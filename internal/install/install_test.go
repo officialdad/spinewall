@@ -347,3 +347,38 @@ func TestNoLegacyInAFreshHome(t *testing.T) {
 		t.Errorf("the new unit was taken for the legacy one: %v", found)
 	}
 }
+
+func TestLegacyUninstallKeepsTheNewUnitAndTheme(t *testing.T) {
+	paths := testPaths(t)
+	writeLegacy(t, paths, false)
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t), SystemdUnit: true, AllowLegacy: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := LegacyUninstall(paths, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(paths.LegacyServer()); err == nil {
+		t.Error("legacy server kept")
+	}
+	for _, kept := range []string{paths.UnitFile(), filepath.Join(paths.ThemeDir(), "index.html")} {
+		if _, err := os.Stat(kept); err != nil {
+			t.Errorf("legacy uninstall removed the new install's %s: %v", kept, err)
+		}
+	}
+}
+
+func TestLegacyUninstallRemovesTheOldUnitAndTheme(t *testing.T) {
+	paths := testPaths(t)
+	writeLegacy(t, paths, true)
+	if err := os.MkdirAll(paths.ThemeDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := LegacyUninstall(paths, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{paths.LegacyServer(), paths.UnitFile(), paths.ThemeDir()} {
+		if _, err := os.Stat(gone); err == nil {
+			t.Errorf("legacy %s kept", gone)
+		}
+	}
+}

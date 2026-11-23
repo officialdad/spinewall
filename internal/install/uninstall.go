@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 )
 
 // UninstallOptions configure one uninstall run.
@@ -56,7 +58,9 @@ func Uninstall(opts UninstallOptions) (UninstallResult, error) {
 
 	// Turn off any enabled systemd unit before removing its file.
 	if _, ok := manifest.entry(paths.UnitFile()); ok {
-		disableUnit(logf)
+		if unitCommand(paths, "disable", "--now") {
+			logf("disabled the systemd user unit")
+		}
 	}
 
 	for _, e := range manifest.Files {
@@ -131,27 +135,31 @@ func removeIfEmpty(dir string) (bool, error) {
 	return true, nil
 }
 
-// disableUnit runs the systemd disable command when a user session exists. A
-// missing systemd is not an error: the desktop may not run it.
-func disableUnit(logf func(string)) {
-	if !hasCommand("systemctl") {
-		return
-	}
-	runQuiet("systemctl", "--user", "disable", "--now", "spinewall.service")
-	logf("disabled the systemd user unit")
-}
-
 // legacyPythonPaths are the files the old Python installer wrote. Uninstall
 // --legacy removes them so an existing user migrates cleanly. The patched
 // containment copy lives beside the system plasmoid; removing it lets the
-// desktop fall back to the system one, or to its restored .bak.
+// desktop fall back to the system one, or to its restored .bak. The unit and
+// the theme share their paths with the new install, so each is only listed
+// while it still belongs to the old one.
 func legacyPythonPaths(paths Paths) []string {
-	return []string{
-		paths.LegacyServer(),
-		paths.UnitFile(),
-		paths.ThemeDir(),
-		paths.LegacyContainment(),
+	found := []string{paths.LegacyServer(), paths.LegacyContainment()}
+	if isLegacyUnit(paths.UnitFile()) {
+		found = append(found, paths.UnitFile())
 	}
+	if !manifestHasUnder(loadManifest(paths.ManifestPath()), paths.ThemeDir()) {
+		found = append(found, paths.ThemeDir())
+	}
+	return found
+}
+
+// manifestHasUnder reports whether the install manifest records a file inside dir.
+func manifestHasUnder(m Manifest, dir string) bool {
+	for _, e := range m.Files {
+		if strings.HasPrefix(e.Path, dir+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // LegacyUninstall removes the old Python install and restores the patched
@@ -163,12 +171,12 @@ func LegacyUninstall(paths Paths, logf func(string)) error {
 	if paths.Home == "" {
 		paths = DefaultPaths()
 	}
-	if hasCommand("systemctl") {
-		runQuiet("systemctl", "--user", "disable", "--now", "spinewall.service")
+	if isLegacyUnit(paths.UnitFile()) {
+		unitCommand(paths, "disable", "--now")
 	}
 
 	// Stop a python server a user may have started by hand.
-	killMatching(isLegacyServer, logf)
+	killMatching(func(pid int) bool { return isLegacyServer(pid, paths.LegacyServer()) }, logf)
 
 	for _, f := range legacyPythonPaths(paths) {
 		info, err := os.Stat(f)

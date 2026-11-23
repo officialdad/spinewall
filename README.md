@@ -145,7 +145,7 @@ The bootstrap downloads `spinewall-<version>-linux-<arch>` and `SHA256SUMS`, che
 Prefer another way:
 
 - **Go:** `go install github.com/officialdad/spinewall/cmd/spinewall@latest`, then run `spinewall setup`.
-- **Tarball:** download `spinewall-X.Y.Z.tar.gz` and `SHA256SUMS` from the [releases page](https://github.com/officialdad/spinewall/releases). Run `sha256sum -c SHA256SUMS`, extract the archive, and run `go build -o spinewall ./cmd/spinewall`, then `./spinewall setup`.
+- **Tarball:** download `spinewall-X.Y.Z.tar.gz` and `SHA256SUMS` from the [releases page](https://github.com/officialdad/spinewall/releases). Run `sha256sum -c --ignore-missing SHA256SUMS`, extract the archive, and run `go build -o spinewall ./cmd/spinewall`, then `./spinewall setup`.
 
 `spinewall setup` is a terminal wizard. Run it yourself to see each step, or `spinewall setup --yes` for a non-interactive run with defaults. Each step is skippable and safe to run again:
 
@@ -351,7 +351,7 @@ The installer records every file it writes in `~/.local/state/spinewall/install-
 
 - `spinewall uninstall --yes` removes state and cache too, which returns a fresh install to its starting home.
 - `spinewall uninstall --keep-state` keeps your prefs and the runtime cache.
-- `spinewall uninstall --legacy` also removes an old Python install (`~/.local/bin/spinewall-server`, the old unit, the theme under `~/.local/share/webwallpaper/themes/spinewall`, and the patched containment copy, restoring its `.bak` when present).
+- `spinewall uninstall --legacy` also removes an old Python install (`~/.local/bin/spinewall-server`, the old unit, the theme under `~/.local/share/webwallpaper/themes/spinewall`, and the patched containment copy, restoring its `.bak` when present). It leaves a unit or theme the new install wrote to the normal uninstall. Run `spinewall setup` again afterwards.
 
 Then restart plasmashell if you removed the containment patch.
 

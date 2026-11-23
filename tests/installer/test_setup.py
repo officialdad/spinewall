@@ -136,14 +136,27 @@ class Harness(unittest.TestCase):
                 output += chunk
             return True
 
+        def settle(limit=8.0, quiet=0.8):
+            # A key sent before its form is drawn is lost, so wait for new
+            # output, then for the screen to go quiet, before the next key.
+            start = len(output)
+            end = time.time() + limit
+            while time.time() < end:
+                seen = len(output)
+                if not drain(quiet):
+                    return False
+                if len(output) > start and len(output) == seen:
+                    return True
+            return True
+
         try:
-            drain(2.0)
+            settle(limit=15.0)
             for key in keys:
                 try:
                     os.write(fd, key)
                 except OSError:
                     break
-                if not drain(1.2):
+                if not settle():
                     break
             for _ in range(60):
                 if not drain(0.3):
