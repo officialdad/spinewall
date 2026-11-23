@@ -11,31 +11,32 @@ import (
 	"strings"
 
 	"github.com/officialdad/spinewall/internal/api"
+	"github.com/officialdad/spinewall/internal/cli"
 	"github.com/officialdad/spinewall/internal/runtime"
 	"github.com/officialdad/spinewall/internal/state"
 	"github.com/officialdad/spinewall/theme"
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
-		os.Exit(1)
+	// A first argument of serve or runtime is the server. Anything else is a
+	// client command against the running server, including no argument (info).
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "serve":
+			if err := serve(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "runtime":
+			if err := runtimeCommand(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
 	}
-}
-
-func run(args []string) error {
-	command := "serve"
-	if len(args) > 0 {
-		command = args[0]
-	}
-	switch command {
-	case "serve":
-		return serve(args[1:])
-	case "runtime":
-		return runtimeCommand(args[1:])
-	default:
-		return fmt.Errorf("unknown command %q. This build ships 'serve' and 'runtime'.", command)
-	}
+	os.Exit(cli.Run(os.Args[1:]))
 }
 
 func envOrDefault(key, def string) string {

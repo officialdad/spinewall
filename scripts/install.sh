@@ -80,7 +80,15 @@ mkdir -p "$theme_dir" "$models_dir" "$state_dir" "$cache_dir" "$bin_dir" "$HOME/
 cp "$stage"/* "$theme_dir/"
 
 install -m 755 "$root/server/spinewall-server.py" "$bin_dir/spinewall-server"
-install -m 755 "$root/bin/spinewall" "$bin_dir/spinewall"
+# The CLI is the Go binary now. Install a build from the repo root when one is
+# there; keep the thin shim otherwise. The installer phase replaces this with a
+# prebuilt download.
+if [ -x "$root/spinewall" ]; then
+  install -m 755 "$root/spinewall" "$bin_dir/spinewall"
+else
+  install -m 755 "$root/bin/spinewall" "$bin_dir/spinewall"
+  echo "note: no built CLI at $root/spinewall, so the shim is installed. Build it with: go build -o spinewall ./cmd/spinewall" >&2
+fi
 cp "$root/systemd/spinewall.service" "$HOME/.config/systemd/user/"
 systemctl --user daemon-reload
 systemctl --user enable spinewall.service

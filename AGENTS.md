@@ -10,12 +10,14 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 | `theme/local-host.js` | Local mode. Mirrors the server state logic in the page. Change it together with `server/spinewall-server.py` and `internal/state`. |
 | `theme/embed.go` | Embeds `theme/index.html` and `theme/local-host.js` into the Go binary. Never embeds the Spine players. |
 | `server/spinewall-server.py` | Local HTTP server on `127.0.0.1:8777`. Holds state, scans models, serves model files. |
-| `cmd/spinewall` | Go server. `spinewall serve` is a drop-in for the Python server (phase 1 of the portable plan). Standard library only, `CGO_ENABLED=0`. |
+| `cmd/spinewall` | Go binary. `spinewall serve` is a drop-in for the Python server (phase 1 of the portable plan). Any other argument is a client command (phase 3). Standard library plus `godbus` for `--screen current`, `CGO_ENABLED=0`. |
 | `internal/api` | Go HTTP handlers, guards (Host and Origin allowlists, `Sec-Fetch-Site`), body caps, model file serving. |
 | `internal/state` | Go stage, characters, presets and prefs. One lock, no global state swap. |
+| `internal/runtime` | Go runtime pins, fetch, verify and serve. Never embeds the players. |
+| `internal/cli` | Go client commands: percent-encoding, 3-argument limit, exit codes, shortcut log, `--screen current` over D-Bus on KDE. |
 | `internal/scan` | Go model scan, version sniff, atlas regions, kind detection. |
 | `tests/differential.py` | Starts the Python and Go servers on one state copy and compares decoded JSON for the read endpoints and every `/cmd/*`. |
-| `bin/spinewall` | CLI. Sends commands to the server. |
+| `bin/spinewall` | Deprecated shim. Runs a built `spinewall` binary next to it. The CLI is the Go binary; the installer phase removes the shim. |
 | `plasma/desktopcontainment.patch` | Patch for a local copy of the Plasma desktop containment. |
 | `scripts/install.sh` | Installs theme, server, CLI, user service. Fetches the Spine runtimes from npm. |
 | `scripts/package-windows.py` | Builds the Lively zip and the Wallpaper Engine files from a model directory. Runs the page in local mode. Windows is unconfirmed (issue #2). `install.sh --build-theme DIR` builds the theme only, so the runtime pins stay in one file. |
@@ -32,7 +34,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 
 ## Data flow
 
-1. A click, shortcut, or CLI call sends `GET /cmd/<name>[/arg]` to the server.
+1. A click, shortcut, or CLI call sends `GET /cmd/<name>[/arg]` to the server. The CLI is `spinewall <command>` in the Go binary, in `internal/cli`.
 2. The server changes `STATE` and bumps `rev` (model, animation) or `vrev` (view).
 3. The page polls `/state` every 700 ms and applies the change when a revision differs.
 4. The page reports the animation list to `POST /report` after each model load.
@@ -86,13 +88,15 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 
 ## Run the tests
 
-1. Python: `python3 -I -m unittest discover -s tests -t . -v`.
-2. Go: `go vet ./... && go test ./...`.
-3. The same Python suite against the Go server: `CGO_ENABLED=0 go build -o spinewall ./cmd/spinewall && SPINEWALL_BIN=$PWD/spinewall python3 -I -m unittest discover -s tests -t . -v`. The in-process unit tests stay Python only.
-4. Differential: `python3 tests/differential.py --go-bin ./spinewall --state-dir <state copy> --models-dir <models>`. It starts both servers on one state copy and compares the read endpoints and every `/cmd/*`.
-5. Page: `cd tests/page && npm install && SPINEWALL_PORT_TEST=18777 npx playwright test`. A running wallpaper server holds port 8777, so set the port. The run takes about 2 min.
-6. Shell: `shellcheck scripts/*.sh bin/spinewall tests/page/setup.sh`.
-7. The suites use a throwaway `HOME` and their own ports. They never touch the real wallpaper or models.
+1. Go: `go vet ./... && go test ./...`.
+2. Build the binary first, or the CLI tests skip: `CGO_ENABLED=0 go build -o spinewall ./cmd/spinewall`.
+3. Python, Go CLI against the Python server: `python3 -I -m unittest discover -s tests -t . -v`. The `spinewall` binary in the repo root is the CLI under test.
+4. The same Python suite against the Go server and Go CLI: `SPINEWALL_BIN=$PWD/spinewall python3 -I -m unittest discover -s tests -t . -v`. The in-process unit tests stay Python only.
+5. Differential: `python3 tests/differential.py --go-bin ./spinewall --state-dir <state copy> --models-dir <models>`. It starts both servers on one state copy and compares the read endpoints and every `/cmd/*`.
+6. Page: `cd tests/page && npm install && SPINEWALL_PORT_TEST=18777 npx playwright test`. A running wallpaper server holds port 8777, so set the port. The run takes about 2 min.
+7. Shell: `shellcheck scripts/*.sh bin/spinewall tests/page/setup.sh`.
+8. The suites use a throwaway `HOME` and their own ports. They never touch the real wallpaper or models.
+9. On the real desktop, prove `--screen current` against a throwaway server on its own port, never the live wallpaper on 8777: `SPINEWALL_PORT=18779 ./spinewall --screen current next-preset`.
 
 ## Next phase
 

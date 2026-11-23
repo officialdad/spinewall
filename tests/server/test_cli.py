@@ -1,22 +1,33 @@
-"""bin/spinewall against a live server on a temp port."""
+"""The spinewall CLI (the Go binary) against a live server on a temp port."""
 
 import json
 import subprocess
 import unittest
 
-from tests.server.support import CLI, ServerCase, cli_path
+from tests.server.support import CLI, ServerCase, cli_path, require_cli
 
 
 class CliCase(ServerCase):
+    def setUp(self):
+        super().setUp()
+        require_cli(self)
+
     def run_cli(self, *args, port=None):
         env = {"PATH": cli_path(), "HOME": str(self.tmp), "SPINEWALL_PORT": str(port or self.server.port)}
         return subprocess.run([str(CLI), *args], env=env, capture_output=True, text=True, timeout=20)
 
 
 class ErrorLog(CliCase):
+    def log_path(self):
+        return self.tmp / ".local/state/spinewall/shortcut.log"
+
     def log_text(self):
-        path = self.tmp / ".local/state/spinewall/shortcut.log"
+        path = self.log_path()
         return path.read_text() if path.exists() else ""
+
+    def run_cli_log(self, log, *args, port=None):
+        env = {"PATH": cli_path(), "HOME": str(self.tmp), "SPINEWALL_PORT": str(port or self.server.port), "SPINEWALL_LOG": str(log)}
+        return subprocess.run([str(CLI), *args], env=env, capture_output=True, text=True, timeout=20)
 
     def test_error_without_a_terminal_reaches_stderr_and_the_log(self):
         done = self.run_cli("info", port=1)
@@ -27,6 +38,20 @@ class ErrorLog(CliCase):
     def test_success_writes_no_log(self):
         self.assertEqual(self.run_cli("info").returncode, 0)
         self.assertEqual(self.log_text(), "")
+
+    def test_the_log_restarts_past_100_kb(self):
+        path = self.log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x" * (102400 + 1))
+        self.run_cli("info", port=1)
+        # The rollover empties the log, then the error line lands in the fresh file.
+        self.assertLess(len(self.log_text()), 102400)
+        self.assertNotIn("x" * 200, self.log_text())
+
+    def test_spinewall_log_env_names_the_log(self):
+        log = self.tmp / "custom.log"
+        self.run_cli_log(log, "info", port=1)
+        self.assertIn("exited with status", log.read_text())
 
 
 class Commands(CliCase):

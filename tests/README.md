@@ -17,6 +17,8 @@ CGO_ENABLED=0 go build -o spinewall ./cmd/spinewall
 SPINEWALL_BIN=$PWD/spinewall python3 -I -m unittest discover -s tests -t . -v
 ```
 
+The CLI tests run the Go binary in the repo root by default. `SPINEWALL_CLI` names a different one, and the tests skip when no Go binary is built. The Python CLI in `bin/spinewall` is now a shim that runs a built binary, so it holds no logic to test.
+
 The in-process unit tests in `test_scan.py` import the Python module, so they stay Python only.
 
 The differential test starts the Python server and the Go server on one state copy and compares decoded JSON for the read endpoints and every `/cmd/*`:
@@ -30,7 +32,7 @@ python3 tests/differential.py --go-bin ./spinewall --state-dir <state copy> --mo
 | `tests/server/test_scan.py` | Version detection, skip reasons, `model.json` overrides, `classify_kind`, `assign_characters`. |
 | `tests/server/test_api.py` | Every `/cmd` name, characters, layout, prefs, recents, thumbnails, `/report`, `/input`, rescan, concurrency. |
 | `tests/server/test_security.py` | Host, Origin, and `Sec-Fetch-Site` guards, CORS, 415, 413, file whitelist, traversal, corrupt state files, legacy state migration. |
-| `tests/server/test_cli.py` | `bin/spinewall` against a live server: encoding, usage errors, exit codes. |
+| `tests/server/test_cli.py` | The Go CLI against a live server: encoding, usage errors, exit codes, shortcut log and rollover. |
 | `tests/scripts/test_install.py` | `scripts/install.sh` with stub `npm`, `curl`, `sha256sum`, `systemctl`. |
 | `tests/scripts/test_patch.py` | `scripts/patch-plasmoid.sh` against a fake containment built from the patch. |
 | `tests/scripts/test_static.py` | `py_compile`, `bash -n`, shellcheck, tracked-file denylist. |
