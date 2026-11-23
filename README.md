@@ -154,7 +154,7 @@ Prefer another way:
 3. Fetches the Spine runtimes into `~/.cache/spinewall/runtime`, checking each download against a pinned sha256.
 4. Asks for the models folder, kept in `~/.config/spinewall/config.json`.
 5. Chooses a backend. KDE Plasma legacy installs today.
-6. Installs the files, an XDG autostart entry, and optionally a systemd user unit, then starts the server and verifies it with `/info`. The install links the fetched players into the theme folder (`~/.local/share/webwallpaper/themes/spinewall`), because the KDE backend opens the page from `file://` and the page loads each player by relative URL. A refetch or `spinewall runtime fetch` relinks them.
+6. Installs the files, an XDG autostart entry, and optionally a systemd user unit, then starts the server and verifies it with `/info`. The install links the fetched players into the theme folder (`~/.local/share/webwallpaper/themes/spinewall`), because the KDE backend opens the page from `file://` and the page loads each player by relative URL. A refetch or `spinewall runtime fetch` relinks them. The opt-in systemd unit mounts the theme folder read-only, so a server under it cannot relink the players and logs that once. Run `spinewall runtime fetch` or `spinewall setup` to relink them. A `--runtime-dir` or `SPINEWALL_RUNTIME_DIR` that is not the default cache, and not the one the theme links to, never touches the installed theme or its manifest.
 
 Run `spinewall doctor` on its own at any time, and paste its table into a bug report.
 

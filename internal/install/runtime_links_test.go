@@ -3,6 +3,7 @@ package install
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/officialdad/spinewall/internal/runtime"
@@ -174,5 +175,100 @@ func TestInstallKeepsAHandMadeLink(t *testing.T) {
 	}
 	if _, err := os.Lstat(hand); err != nil {
 		t.Errorf("uninstall removed the hand-made link: %v", err)
+	}
+}
+
+// themeSnapshot records each theme player's link target or bytes, so a test can
+// prove a refresh left the installed theme as it was.
+func themeSnapshot(t *testing.T, paths Paths) map[string]string {
+	t.Helper()
+	snap := map[string]string{}
+	for _, name := range runtime.ServedNames() {
+		dst := filepath.Join(paths.ThemeDir(), name)
+		if target, err := os.Readlink(dst); err == nil {
+			snap[name] = "link:" + target
+		} else if data, err := os.ReadFile(dst); err == nil {
+			snap[name] = "file:" + string(data)
+		}
+	}
+	return snap
+}
+
+// TestScratchRuntimeDirLeavesTheInstalledThemeAlone is the regression for a
+// throwaway server or fetch with a scratch --runtime-dir re-pointing the live
+// wallpaper's links at that scratch cache and rewriting the real manifest.
+func TestScratchRuntimeDirLeavesTheInstalledThemeAlone(t *testing.T) {
+	paths := testPaths(t)
+	seedCache(t, paths)
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t)}); err != nil {
+		t.Fatal(err)
+	}
+	themeBefore := themeSnapshot(t, paths)
+	manifestBefore, err := os.ReadFile(paths.ManifestPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scratch := paths
+	scratch.Runtime = t.TempDir()
+	seedCache(t, scratch)
+	if err := RefreshThemeRuntime(scratch, nil); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	if got := themeSnapshot(t, paths); !reflect.DeepEqual(got, themeBefore) {
+		t.Errorf("a scratch runtime dir changed the installed theme:\nbefore %v\nafter  %v", themeBefore, got)
+	}
+	manifestAfter, err := os.ReadFile(paths.ManifestPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(manifestAfter) != string(manifestBefore) {
+		t.Error("a scratch runtime dir rewrote the install manifest")
+	}
+}
+
+// TestRefreshFollowsTheDirTheThemeLinksTo keeps a theme installed against a
+// custom cache maintainable: a refresh from that same dir still relinks it.
+func TestRefreshFollowsTheDirTheThemeLinksTo(t *testing.T) {
+	paths := testPaths(t)
+	paths.Runtime = t.TempDir()
+	names := runtime.ServedNames()
+	if err := os.WriteFile(filepath.Join(paths.Runtime, names[0]), []byte("/* first */\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Readlink(filepath.Join(paths.ThemeDir(), names[0])); err != nil {
+		t.Skipf("symlinks are refused here: %v", err)
+	}
+	seedCache(t, paths)
+
+	if err := RefreshThemeRuntime(paths, nil); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if missing := themeHasEveryPlayer(t, paths, names); len(missing) > 0 {
+		t.Fatalf("theme cannot load %v after a refresh from its own cache", missing)
+	}
+}
+
+// TestRelativeRuntimeDirLinksResolve is the regression for a relative
+// --runtime-dir writing links that resolve against the theme folder and dangle.
+func TestRelativeRuntimeDirLinksResolve(t *testing.T) {
+	paths := testPaths(t)
+	t.Chdir(paths.Home)
+	rel, err := filepath.Rel(paths.Home, paths.Runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths.Runtime = rel
+	names := seedCache(t, paths)
+
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t)}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if missing := themeHasEveryPlayer(t, paths, names); len(missing) > 0 {
+		t.Fatalf("theme cannot load %v from a relative runtime dir", missing)
 	}
 }

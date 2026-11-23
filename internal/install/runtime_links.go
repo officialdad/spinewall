@@ -28,9 +28,15 @@ func ThemeRuntimeEntries(paths Paths, logf func(string)) ([]Entry, error) {
 	if !exists(themeDir) {
 		return nil, nil
 	}
+	// A relative target would resolve against the theme folder, not the
+	// caller's working directory, and swap a good link for a dangling one.
+	runtimeDir, err := filepath.Abs(paths.Runtime)
+	if err != nil {
+		return nil, err
+	}
 	var entries []Entry
 	for _, name := range runtime.ServedNames() {
-		src := filepath.Join(paths.Runtime, name)
+		src := filepath.Join(runtimeDir, name)
 		dst := filepath.Join(themeDir, name)
 
 		// A player the cache does not hold yet has no link. A dangling link from
@@ -112,9 +118,16 @@ func ownEntries(m *Manifest, entries []Entry) bool {
 // records the result in the install manifest. setup, `runtime fetch`, `runtime
 // verify`, and the server start call it so a theme installed before a fetch, or
 // a refetched or repaired cache, ends up reachable from the file:// page.
+//
+// Only the theme's own runtime dir relinks it: the default one, or the one its
+// links already point into. A scratch --runtime-dir for a throwaway server or
+// fetch must leave the live wallpaper and its manifest alone.
 func RefreshThemeRuntime(paths Paths, logf func(string)) error {
 	if logf == nil {
 		logf = func(string) {}
+	}
+	if !ownsThemeRuntime(paths) {
+		return nil
 	}
 	entries, err := ThemeRuntimeEntries(paths, logf)
 	if err != nil {
@@ -134,4 +147,22 @@ func RefreshThemeRuntime(paths Paths, logf func(string)) error {
 		return nil
 	}
 	return manifest.save(paths.ManifestPath())
+}
+
+// ownsThemeRuntime reports whether paths.Runtime is the cache the installed
+// theme reads: the default runtime dir, or the dir a theme link points into.
+func ownsThemeRuntime(paths Paths) bool {
+	runtimeDir, err := filepath.Abs(paths.Runtime)
+	if err != nil {
+		return false
+	}
+	if runtimeDir == filepath.Join(paths.CacheDir, "runtime") {
+		return true
+	}
+	for _, name := range runtime.ServedNames() {
+		if target, err := os.Readlink(filepath.Join(paths.ThemeDir(), name)); err == nil && filepath.Dir(target) == runtimeDir {
+			return true
+		}
+	}
+	return false
 }
