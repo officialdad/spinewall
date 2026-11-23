@@ -115,7 +115,13 @@ test("edit-mode drag moves the selected character in multi mode", async ({ open,
   ]);
   await expect.poll(() => page.locator("#layers canvas").count()).toBe(2);
   const [left] = await chars();
-  const [px, py] = at(-0.3, 0);
+  // Edit mode shrinks the stage beside the dock, and a slow runner loads the skeleton late,
+  // so press only once the page itself hits the left character at the fitted point.
+  let px, py;
+  await expect.poll(async () => {
+    [px, py] = await page.evaluate(([x, y]) => [fit.ox + x * fit.s, fit.oy + y * fit.s], at(-0.3, 0));
+    return page.evaluate(([x, y]) => hitTest(x, y)?.uid ?? null, [px, py]);
+  }).toBe(left.uid);
   await page.mouse.move(px, py);
   await page.mouse.down();
   await page.mouse.move(px + 100, py + 40, { steps: 8 });
