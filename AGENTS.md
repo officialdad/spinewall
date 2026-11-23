@@ -16,14 +16,17 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 | `internal/runtime` | Go runtime pins, fetch, verify and serve. Never embeds the players. |
 | `internal/cli` | Go client commands: percent-encoding, 3-argument limit, exit codes, shortcut log, `--screen current` over D-Bus on KDE. |
 | `internal/scan` | Go model scan, version sniff, atlas regions, kind detection. |
+| `internal/doctor` | `spinewall doctor`: session, desktop, layer-shell, GPU, web engine, systemd and network detection, with the distro package command. Never runs a package manager. |
+| `internal/install` | `spinewall install` and `uninstall`: the install manifest with a sha256 per file, the XDG autostart entry, the opt-in systemd unit, and `uninstall --legacy`. |
+| `internal/tui` | `spinewall setup`: the huh and bubbletea wizard. Doctor, licence consent, runtime fetch, models folder, backend choice, install, start and verify. `--yes` runs it non-interactively. |
 | `tests/differential.py` | Starts the Python and Go servers on one state copy and compares decoded JSON for the read endpoints and every `/cmd/*`. |
 | `bin/spinewall` | Deprecated shim. Runs a built `spinewall` binary next to it. The CLI is the Go binary; the installer phase removes the shim. |
 | `plasma/desktopcontainment.patch` | Patch for a local copy of the Plasma desktop containment. |
-| `scripts/install.sh` | Installs theme, server, CLI, user service. Fetches the Spine runtimes from npm. |
-| `scripts/package-windows.py` | Builds the Lively zip and the Wallpaper Engine files from a model directory. Runs the page in local mode. Windows is unconfirmed (issue #2). `install.sh --build-theme DIR` builds the theme only, so the runtime pins stay in one file. |
+| `scripts/install.sh` | The POSIX sh bootstrap only. Downloads the release binary, checks `SHA256SUMS` and the minisign signature, installs to `~/.local/bin`, then runs `spinewall setup`. It no longer installs files or fetches runtimes itself. |
+| `scripts/package-windows.py` | Builds the Lively zip and the Wallpaper Engine files from a model directory. Runs the page in local mode. Windows is unconfirmed (issue #2). It runs `spinewall build-theme DIR`, so the runtime pins stay in the Go binary. |
 | `docs/windows.md` | Windows steps for Lively and Wallpaper Engine. |
 | `scripts/patch-plasmoid.sh` | Applies the patch to a local copy of the containment. |
-| `systemd/spinewall.service` | User service for the server. |
+| `systemd/spinewall.service` | The hardened user unit template. `spinewall setup` can generate it as an opt-in; the XDG autostart entry is the default. |
 | `docs/demo/models/` | Sample models for the Pages demo (list in `models/index.json`). Neutral display names only. |
 | `scripts/build-demo.py` | Builds the Pages demo from `theme/index.html` in local mode, with one pinned CDN player. `.github/workflows/pages.yml` runs it. |
 | `docs/assets.md` | Model directory layout and `model.json` keys. |
@@ -43,8 +46,8 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 ## Rules
 
 - Never commit models, `.skel`, `.atlas`, or atlas images, with one exception: `docs/demo/models/` holds the sample models for the Pages demo. The user approved that on 2026-11-01. Add nothing else there and keep the sample count small.
-- Never commit Spine runtime files, demo included. The runtime license forbids redistribution. The install script fetches it, and the demo loads it from the npm CDN with pinned versions and SRI hashes.
-- The Spine players define the global `spine`. The install script renames the 4.x players to `spine40`, `spine41`, and `spine42` with `sed`. It wraps the 3.7 and 3.8 players in a function that returns `spine37` or `spine38`, because those players name `spine` internally. The 3.7 player reads JSON only, so the server skips a 3.7 `.skel` model. Keep the theme and the script in step.
+- Never commit Spine runtime files, demo included. The runtime license forbids redistribution. `spinewall setup` fetches them on the user's machine, and the demo loads it from the npm CDN with pinned versions and SRI hashes.
+- The Spine players define the global `spine`. `internal/runtime` renames the 4.x players to `spine40`, `spine41`, and `spine42` by replacing the declaration line. It wraps the 3.7 and 3.8 players in a function that returns `spine37` or `spine38`, because those players name `spine` internally. The 3.7 player reads JSON only, so the server skips a 3.7 `.skel` model. Keep the theme and the transform in step.
 - Local mode (`?local=<index url>` or `window.SPINEWALL_LOCAL`) routes every state call through `api()` to `theme/local-host.js`, with no server. It keeps state, prefs, and layout in `localStorage`. Thumbnails stay in memory. Server mode stays the default and never loads the index.
 - The page drops animations that draw no image slot, such as an animation that hides every region and mesh. `drawingAnimations` decides, and a model with no drawing animation keeps all of them.
 - Server state keys are `model`, `animation`, `rev`, `scale`, `x`, `y`, `vrev`, `auto`, `preset`, `characters`, `crev`. The page and server share them. Change both together.
@@ -81,7 +84,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 
 ## Check a change
 
-1. Run `scripts/install.sh`. It restarts the server.
+1. Build and install the binary: `CGO_ENABLED=0 go build -o spinewall ./cmd/spinewall`, then `./spinewall setup --yes`. It installs and restarts the server.
 2. Run `spinewall info`. Check `models`, `skipped`, and `input`.
 3. Test on the real desktop. Click in normal mode and check `input.fired` rises. Drag and wheel in edit mode.
 4. A bug fix needs a reproduction in the real wallpaper first, not only in a browser tab.
@@ -93,10 +96,11 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 3. Python, Go CLI against the Python server: `python3 -I -m unittest discover -s tests -t . -v`. The `spinewall` binary in the repo root is the CLI under test.
 4. The same Python suite against the Go server and Go CLI: `SPINEWALL_BIN=$PWD/spinewall python3 -I -m unittest discover -s tests -t . -v`. The in-process unit tests stay Python only.
 5. Differential: `python3 tests/differential.py --go-bin ./spinewall --state-dir <state copy> --models-dir <models>`. It starts both servers on one state copy and compares the read endpoints and every `/cmd/*`.
-6. Page: `cd tests/page && npm install && SPINEWALL_PORT_TEST=18777 npx playwright test`. A running wallpaper server holds port 8777, so set the port. The run takes about 2 min.
-7. Shell: `shellcheck scripts/*.sh bin/spinewall tests/page/setup.sh`.
-8. The suites use a throwaway `HOME` and their own ports. They never touch the real wallpaper or models.
-9. On the real desktop, prove `--screen current` against a throwaway server on its own port, never the live wallpaper on 8777: `SPINEWALL_PORT=18779 ./spinewall --screen current next-preset`.
+6. Installer end to end: `python3 -I -m unittest discover -s tests -t . -p 'test_setup.py' -v`. It drives `spinewall setup` under a throwaway `HOME`, including a pty and a byte-identical home after uninstall, and builds the Go binary itself.
+7. Page: `cd tests/page && npm install && SPINEWALL_PORT_TEST=18777 npx playwright test`. A running wallpaper server holds port 8777, so set the port. The run takes about 2 min.
+8. Shell: `shellcheck scripts/*.sh bin/spinewall tests/page/setup.sh`.
+9. The suites use a throwaway `HOME` and their own ports. They never touch the real wallpaper or models.
+10. On the real desktop, prove `--screen current` against a throwaway server on its own port, never the live wallpaper on 8777: `SPINEWALL_PORT=18779 ./spinewall --screen current next-preset`.
 
 ## Next phase
 

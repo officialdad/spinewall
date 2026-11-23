@@ -40,6 +40,8 @@ One-time steps after the 0.1.0 release PR merges:
 
 ## Install from a release
 
-1. Download `spinewall-X.Y.Z.tar.gz` and `SHA256SUMS` from the release page.
-2. Run `sha256sum -c SHA256SUMS`.
-3. Extract the archive and run `scripts/install.sh` from it. The script needs no git checkout.
+1. One command: `curl -fsSL https://github.com/officialdad/spinewall/releases/latest/download/install.sh | sh`. The bootstrap checks `SHA256SUMS` and the minisign signature, installs the binary, and runs `spinewall setup`.
+2. Or download `spinewall-X.Y.Z.tar.gz` and `SHA256SUMS`, run `sha256sum -c SHA256SUMS`, extract the archive, and run `go build -o spinewall ./cmd/spinewall` then `./spinewall setup`. The archive needs no git checkout.
+3. The release also carries `spinewall-X.Y.Z-linux-amd64` and `spinewall-X.Y.Z-linux-arm64` binaries for `go install`-free installs.
+
+Before the first signed release the captain supplies the minisign public key in `scripts/install.sh` (`MINISIGN_PUBLIC_KEY`) and adds the secret key as the `MINISIGN_SECRET_KEY` repository secret. The release workflow signs `SHA256SUMS` into `SHA256SUMS.minisig` and stops if the secret is missing.

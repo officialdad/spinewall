@@ -21,8 +21,61 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  assets:
+  build:
     needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { goarch: amd64, goarm: "" }
+          - { goarch: arm64, goarm: "" }
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build the static binary
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: "0"
+        run: |
+          version="${TAG#v}"
+          out="spinewall-${version}-linux-${GOARCH}${GOARM}"
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${version}" \
+            -o "$out" ./cmd/spinewall
+          # A static binary has no dynamic loader and no libc dependency.
+          if command -v file >/dev/null 2>&1; then file "$out"; fi
+          if go version -m "$out" | grep -q 'CGO_ENABLED=1'; then
+            echo "error: $out was built with cgo"
+            exit 1
+          fi
+      - name: Checksum this binary
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: |
+          version="${TAG#v}"
+          out="spinewall-${version}-linux-${GOARCH}${GOARM}"
+          sha256sum "$out" > "${out}.sha256"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spinewall-${{ matrix.goarch }}
+          path: spinewall-*-linux-${{ matrix.goarch }}*
+          if-no-files-found: error
+
+  assets:
+    needs: [release-please, build]
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
     permissions:
@@ -34,6 +87,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          path: dist
+          merge-multiple: true
       - name: Build source tarball
         run: |
           name="spinewall-${TAG#v}"
@@ -43,13 +100,45 @@ jobs:
             echo "error: archive holds models or runtime files. Release stops."
             exit 1
           fi
-          sha256sum "$name.tar.gz" > SHA256SUMS
+      - name: Combine checksums
+        run: |
+          # One SHA256SUMS for the bootstrap to verify. Binary checksums come
+          # from the build matrix; the source tarball is added here.
+          cd dist
+          cat spinewall-*-linux-*.sha256 | sort -k2 > SHA256SUMS
+          (cd .. && sha256sum "spinewall-${TAG#v}.tar.gz") >> SHA256SUMS
+          cat SHA256SUMS
       - name: Check install script runs from the tarball
         run: |
           name="spinewall-${TAG#v}"
           mkdir "$RUNNER_TEMP/extract"
           tar xzf "$name.tar.gz" -C "$RUNNER_TEMP/extract"
-          bash -n "$RUNNER_TEMP/extract/$name/scripts/install.sh"
+          sh -n "$RUNNER_TEMP/extract/$name/scripts/install.sh"
           test -f "$RUNNER_TEMP/extract/$name/theme/index.html"
+      - name: Sign SHA256SUMS with minisign
+        # Signing needs the secret key the captain adds at MINISIGN_SECRET_KEY.
+        # Without it the step says so and stops before uploading a half-signed
+        # release, rather than pretending the checksums are signed.
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            echo "error: MINISIGN_SECRET_KEY is not set. Add the minisign secret key as a repository secret before the first signed release."
+            exit 1
+          fi
+          sudo apt-get update && sudo apt-get install -y minisign
+          printf '%s' "$MINISIGN_SECRET_KEY" > "$RUNNER_TEMP/minisign.key"
+          # Ship the signature on SHA256SUMS, which the bootstrap verifies.
+          cd dist
+          minisign -Sm SHA256SUMS -s "$RUNNER_TEMP/minisign.key"
+          rm -f "$RUNNER_TEMP/minisign.key"
       - name: Upload assets
-        run: gh release upload "$TAG" "spinewall-${TAG#v}.tar.gz" SHA256SUMS --clobber
+        run: |
+          name="spinewall-${TAG#v}"
+          gh release upload "$TAG" \
+            dist/spinewall-*-linux-* \
+            dist/SHA256SUMS \
+            dist/SHA256SUMS.minisig \
+            "$name.tar.gz" \
+            scripts/install.sh \
+            --clobber

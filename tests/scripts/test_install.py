@@ -1,242 +1,246 @@
-"""scripts/install.sh with stub npm, curl, systemctl, and sha256sum, so no network is used.
+"""scripts/install.sh, the POSIX bootstrap, with stub curl/sha256sum/minisign/install.
 
-The stub sha256sum stands in for the pinned hashes, which only match the real packages.
-The real-network pin check now lives in the Go runtime tests, gated by SPINEWALL_TEST_NETWORK=1.
+The runtime fetch and the theme build moved into the Go binary (`spinewall setup`
+and `spinewall build-theme`), so this file only checks the bootstrap: arch
+detection, checksum and signature verification, install location, and that it
+hands off to `spinewall setup`.
 """
 
 import os
-import shutil
+import pty
 import subprocess
 import unittest
-from pathlib import Path
 
-from tests.scripts.support import ROOT, SCRIPTS, ScriptCase, write_stub
+from tests.scripts.support import SCRIPTS, ScriptCase, write_stub
 
-TOOLS = ("npm", "curl", "sha256sum", "python3", "systemctl", "tar", "sed")
-STUBBED = ("npm", "curl", "sha256sum", "systemctl")
-CORE = ("bash", "dirname", "mktemp", "mkdir", "cp", "rm", "cat", "grep", "install", "echo", "printf")
-
-NPM_STUB = r"""
-# usage: npm pack @esotericsoftware/spine-player@VERSION --silent
-version="${2##*@}"
-if [ -n "${STUB_NPM_FAIL:-}" ]; then echo "npm error" >&2; exit 1; fi
-d="$(mktemp -d)"
-mkdir -p "$d/package/dist/iife"
-if [ -n "${STUB_NO_VAR_SPINE:-}" ]; then
-  echo "window.spine = {};" > "$d/package/dist/iife/spine-player.js"
-else
-  printf 'var spine = {version: "%s"};\nconsole.log(spine);\n' "$version" > "$d/package/dist/iife/spine-player.js"
-fi
-echo ".spine-player{}" > "$d/package/dist/spine-player.css"
-tar czf "esotericsoftware-spine-player-$version.tgz" -C "$d" package
-rm -rf "$d"
-"""
-
+# curl serves the release API, the binary, and SHA256SUMS from files the test
+# writes, so the bootstrap exercises its real parsing without the network.
+# The stub scans for -o and the URL, because the bootstrap passes -fsSL as one
+# combined flag.
 CURL_STUB = r"""
 out=""
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = "-o" ]; then out="$2"; shift; fi
-  shift
+url=""
+prev=""
+for arg in "$@"; do
+  case "$arg" in
+    http*) url="$arg" ;;
+  esac
+  if [ "$prev" = "-o" ]; then out="$arg"; fi
+  prev="$arg"
 done
 if [ -n "${STUB_CURL_FAIL:-}" ]; then echo "curl: (22) 404" >&2; exit 22; fi
-printf 'var spine = {};\n' > "$out"
+case "$url" in
+  *api.github.com*releases/latest*) printf '{"tag_name": "%s"}\n' "${STUB_TAG:-v1.2.3}" ;;
+  *SHA256SUMS.minisig) [ -n "${STUB_SIG_FAIL:-}" ] && exit 22; printf 'sig\n' ;;
+  *SHA256SUMS) cp "$STUB_SUMS" "$out" ;;
+  *spinewall-*-linux-*) cp "$STUB_BINARY" "$out" ;;
+  *) echo "unexpected url $url" >&2; exit 22 ;;
+esac
 """
 
-SHA_STUB = r"""
-cat >/dev/null
-if [ -n "${STUB_SHA_FAIL:-}" ]; then echo "sha256sum: WARNING: 1 computed checksum did NOT match" >&2; exit 1; fi
-exit 0
-"""
-
-SYSTEMCTL_STUB = r"""
-echo "$*" >> "$STUB_LOG"
-"""
+# The downloaded binary is a stand-in that records the `setup` handoff. The
+# bootstrap copies exactly these bytes to ~/.local/bin/spinewall and runs them.
+# The SUMS are compiled in setUp with the real hash of those bytes, so the
+# bootstrap's own checksum comparison is the thing under test.
 
 
-class InstallCase(ScriptCase):
+class BootstrapCase(ScriptCase):
     def setUp(self):
         super().setUp()
-        self.log = self.tmp / "systemctl.log"
-        write_stub(self.stubs, "npm", NPM_STUB)
-        write_stub(self.stubs, "curl", CURL_STUB)
-        write_stub(self.stubs, "sha256sum", SHA_STUB)
-        write_stub(self.stubs, "systemctl", SYSTEMCTL_STUB)
-        self.theme = self.home / ".local/share/webwallpaper/themes/spinewall"
+        self.log = self.tmp / "calls.log"
+        # A fake release binary that logs the `setup` call it receives.
+        self.binary = self.tmp / "fake-binary"
+        self.binary.write_text(
+            "#!/bin/sh\n"
+            'echo "$@" >> "${STUB_LOG:-/dev/null}"\n'
+            'if [ -t 0 ]; then echo tty > "${STUB_STDIN_LOG:-/dev/null}"; '
+            'else echo not-tty > "${STUB_STDIN_LOG:-/dev/null}"; fi\n'
+        )
+        self.binary.chmod(0o755)
+        # The SHA256SUMS for the fake binary, computed the real way.
+        import hashlib
 
-    def install(self, **env):
+        digest = hashlib.sha256(self.binary.read_bytes()).hexdigest()
+        sums = self.tmp / "SHA256SUMS"
+        sums.write_text(f"{digest}  spinewall-1.2.3-linux-amd64\n")
+        self.sums = sums
+        write_stub(self.stubs, "curl", CURL_STUB)
+
+    def run_bootstrap(self, **env):
+        env.setdefault("STUB_SUMS", str(self.sums))
+        env.setdefault("STUB_BINARY", str(self.binary))
         env.setdefault("STUB_LOG", str(self.log))
-        # The installer builds the CLI. Go would otherwise create ~/go and a build cache under the throwaway
-        # HOME, and would refetch modules, so point it at the caches of the real toolchain.
-        for name in ("GOMODCACHE", "GOCACHE"):
-            found = subprocess.run(["go", "env", name], capture_output=True, text=True)
-            if found.returncode == 0 and found.stdout.strip():
-                env.setdefault(name, found.stdout.strip())
         return self.run_script(SCRIPTS / "install.sh", env_extra=env)
 
 
-class HappyPath(InstallCase):
-    def test_install_succeeds_and_prints_next_steps(self):
-        done = self.install()
+class Bootstrap(BootstrapCase):
+    def test_installs_the_binary_and_runs_setup(self):
+        done = self.run_bootstrap()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("Installed.", done.stdout)
-        self.assertIn("patch-plasmoid.sh", done.stdout)
+        installed = self.home / ".local/bin/spinewall"
+        self.assertTrue(installed.is_file(), "binary not installed")
+        self.assertTrue(os.access(installed, os.X_OK), "binary not executable")
+        self.assertEqual(self.log.read_text().strip(), "setup")
 
-    def test_theme_has_one_renamed_player_per_runtime(self):
-        self.install()
-        for suffix, global_name in (("40", "spine40"), ("41", "spine41"), ("42", "spine42")):
-            text = (self.theme / f"spine-player{suffix}.js").read_text()
-            self.assertTrue(text.startswith(f"var {global_name} = "), suffix)
-            self.assertNotIn("var spine = ", text)
-
-    def test_rename_touches_only_the_declaration_line(self):
-        self.install()
-        text = (self.theme / "spine-player42.js").read_text()
-        self.assertIn("console.log(spine);", text)
-
-    def test_legacy_players_are_wrapped_in_a_function_scope(self):
-        self.install()
-        for global_name in ("spine37", "spine38"):
-            with self.subTest(runtime=global_name):
-                text = (self.theme / f"spine-player{global_name[5:]}.js").read_text()
-                self.assertTrue(text.startswith(f"var {global_name} = (function () {{"))
-                self.assertIn("var spine = {};", text)
-                self.assertTrue(text.rstrip().endswith("return spine;\n})();".rstrip()))
-
-    def test_theme_files_are_copied(self):
-        self.install()
-        for name in ("index.html", "local-host.js", "spinewall.theme", "spine-player.css"):
-            self.assertTrue((self.theme / name).is_file(), name)
-        self.assertEqual((self.theme / "index.html").read_bytes(), (ROOT / "theme/index.html").read_bytes())
-
-    def test_server_and_cli_are_installed_executable(self):
-        self.install()
-        for name in ("spinewall-server", "spinewall"):
-            path = self.home / ".local/bin" / name
-            self.assertTrue(os.access(path, os.X_OK), name)
-
-    def test_directories_are_created(self):
-        self.install()
-        for rel in (".local/share/spinewall/models", ".local/state/spinewall", ".cache/spinewall", ".config/systemd/user"):
-            self.assertTrue((self.home / rel).is_dir(), rel)
-
-    def test_unit_is_installed_and_the_service_restarted(self):
-        self.install()
-        self.assertTrue((self.home / ".config/systemd/user/spinewall.service").is_file())
-        self.assertEqual(
-            self.log.read_text().splitlines(),
-            ["--user daemon-reload", "--user enable spinewall.service", "--user restart spinewall.service"],
-        )
-
-    def test_no_pinned_tarball_leaks_into_the_theme(self):
-        self.install()
-        self.assertEqual([p.name for p in self.theme.glob("*.tgz")], [])
-
-    def test_the_temp_work_directory_is_removed(self):
-        before = {p.name for p in self.tmp.iterdir()}
-        self.install()
-        leftovers = [p for p in self.tmp.iterdir() if p.name not in before and p.name.startswith("tmp")]
-        self.assertEqual(leftovers, [])
-
-    def test_a_second_run_gives_the_same_theme(self):
-        self.install()
-        first = {p.name: p.read_bytes() for p in self.theme.iterdir()}
-        done = self.install()
-        self.assertEqual(done.returncode, 0)
-        self.assertEqual({p.name: p.read_bytes() for p in self.theme.iterdir()}, first)
-
-    def test_models_already_in_the_models_directory_are_kept(self):
-        keep = self.home / ".local/share/spinewall/models/mine"
-        keep.mkdir(parents=True)
-        (keep / "mine.skel").write_text("x")
-        self.install()
-        self.assertTrue((keep / "mine.skel").exists())
-
-    def test_nothing_outside_home_and_tmp_is_written(self):
-        self.install()
-        self.assertEqual(sorted(p.name for p in self.home.iterdir()), [".cache", ".config", ".local"])
-
-
-class Failures(InstallCase):
-    def assert_theme_untouched(self):
-        self.assertFalse(self.theme.exists())
-        self.assertFalse((self.home / ".local/bin").exists())
-        self.assertFalse(self.log.exists())
-
-    def test_each_missing_tool_is_named_and_stops_the_install(self):
-        for tool in TOOLS:
-            with self.subTest(tool=tool):
-                # The stubs stand in for the network tools, so the test needs no real npm. The directory is
-                # removed even when an assertion fails, because a leftover link hides the next tool as present.
-                path = self.path_without(tool, tools=[t for t in TOOLS + CORE if t not in STUBBED])
-                self.addCleanup(shutil.rmtree, path, True)
-                for stub in STUBBED:
-                    if stub != tool:
-                        (Path(path) / stub).symlink_to(self.stubs / stub)
-                try:
-                    done = self.run_script(SCRIPTS / "install.sh", path=path, env_extra={"STUB_LOG": str(self.log)})
-                    self.assertEqual(done.returncode, 1)
-                    self.assertIn(f"error: {tool} is required", done.stderr)
-                    self.assert_theme_untouched()
-                finally:
-                    shutil.rmtree(path, True)
-
-    def test_a_bad_hash_stops_the_install_before_anything_is_written(self):
-        done = self.install(STUB_SHA_FAIL="1")
+    def test_a_checksum_mismatch_stops_before_install(self):
+        # Point the SUMS at a different hash than the binary.
+        self.sums.write_text("0" * 64 + "  spinewall-1.2.3-linux-amd64\n")
+        done = self.run_bootstrap()
         self.assertNotEqual(done.returncode, 0)
-        self.assert_theme_untouched()
+        self.assertIn("checksum mismatch", done.stderr)
+        self.assertFalse((self.home / ".local/bin/spinewall").exists())
 
-    def test_a_bad_hash_leaves_an_existing_theme_untouched(self):
-        self.assertEqual(self.install().returncode, 0)
-        before = {p.name: p.read_bytes() for p in self.theme.iterdir()}
-        done = self.install(STUB_SHA_FAIL="1")
+    def test_a_missing_checksum_entry_stops_the_install(self):
+        self.sums.write_text("x  other-file\n")
+        done = self.run_bootstrap()
         self.assertNotEqual(done.returncode, 0)
-        self.assertEqual({p.name: p.read_bytes() for p in self.theme.iterdir()}, before)
+        self.assertIn("not listed in SHA256SUMS", done.stderr)
 
-    def test_a_player_without_the_rename_target_fails_loudly(self):
-        done = self.install(STUB_NO_VAR_SPINE="1")
-        self.assertEqual(done.returncode, 1)
-        self.assertIn("has no 'var spine = ' line", done.stderr)
-        self.assertIn("Update this script", done.stderr)
-        self.assert_theme_untouched()
+    def test_a_placeholder_key_skips_the_signature_and_says_so(self):
+        done = self.run_bootstrap()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("placeholder signature key", done.stderr)
+        self.assertTrue((self.home / ".local/bin/spinewall").is_file())
 
-    def test_an_npm_error_stops_the_install(self):
-        done = self.install(STUB_NPM_FAIL="1")
+    def test_an_unsupported_architecture_is_named(self):
+        # Shadow uname so it reports an arch the bootstrap rejects.
+        uname = write_stub(self.stubs, "uname", 'echo sparc\n')
+        self.assertTrue(uname.exists())
+        done = self.run_bootstrap()
         self.assertNotEqual(done.returncode, 0)
-        self.assert_theme_untouched()
-
-    def test_a_curl_error_stops_the_install(self):
-        done = self.install(STUB_CURL_FAIL="1")
-        self.assertNotEqual(done.returncode, 0)
-        self.assert_theme_untouched()
-
-    def test_a_systemctl_error_is_not_swallowed(self):
-        write_stub(self.stubs, "systemctl", 'echo "$*" >> "$STUB_LOG"; exit 1')
-        done = self.install()
-        self.assertNotEqual(done.returncode, 0)
-        self.assertNotIn("Installed.", done.stdout)
+        self.assertIn("unsupported architecture", done.stderr)
 
 
-class Pins(unittest.TestCase):
-    def test_every_runtime_is_pinned_by_a_64_digit_hash(self):
-        import re
+REAL_KEY = "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3"
 
+# minisign verifies with the key on the command line. The stub records its
+# arguments and passes or fails as the test asks.
+MINISIGN_STUB = r"""
+echo "$@" > "$STUB_MINISIGN_LOG"
+[ -n "${STUB_MINISIGN_BAD:-}" ] && { echo "Signature verification failed" >&2; exit 1; }
+exit 0
+"""
+
+# The tools the bootstrap and the curl stub need, so a test can leave minisign
+# off PATH even on a machine that has it.
+BOOTSTRAP_TOOLS = (
+    "bash", "env", "sh", "sha256sum", "awk", "sed", "head", "mktemp", "rm",
+    "mkdir", "cp", "chmod", "uname", "cat",
+)
+
+
+class SignedBootstrap(BootstrapCase):
+    """The bootstrap once the captain has put the real key in place."""
+
+    def setUp(self):
+        super().setUp()
         text = (SCRIPTS / "install.sh").read_text()
-        calls = re.findall(r"^fetch_runtime (\S+) (\S+) (\S+)$", text, re.M)
-        self.assertEqual([c[1] for c in calls], ["spine40", "spine41", "spine42"])
-        for _, _, digest in calls:
-            self.assertRegex(digest, r"^[0-9a-f]{64}$")
-        legacy = re.findall(r"^fetch_runtime_legacy (\S+) (\S+) (\S+)$", text, re.M)
-        self.assertEqual([c[0] for c in legacy], ["spine38", "spine37"])
-        for _, commit, digest in legacy:
-            self.assertRegex(commit, r"^[0-9a-f]{40}$")
-            self.assertRegex(digest, r"^[0-9a-f]{64}$")
+        start = text.index('MINISIGN_PUBLIC_KEY="') + len('MINISIGN_PUBLIC_KEY="')
+        end = text.index('"', start)
+        self.script = self.tmp / "install.sh"
+        self.script.write_text(text[:start] + REAL_KEY + text[end:])
+        self.minisign_log = self.tmp / "minisign.log"
 
-    def test_the_theme_loads_every_player_the_script_installs(self):
-        page = (ROOT / "theme/index.html").read_text()
-        for name in ("spine-player37.js", "spine-player38.js", "spine-player40.js", "spine-player41.js", "spine-player42.js"):
-            self.assertIn(name, page)
-        for global_name in ("spine37", "spine38", "spine40", "spine41", "spine42"):
-            self.assertIn(global_name, page)
+    def run_signed(self, with_minisign=True, **env):
+        if with_minisign:
+            write_stub(self.stubs, "minisign", MINISIGN_STUB)
+        env.setdefault("STUB_SUMS", str(self.sums))
+        env.setdefault("STUB_BINARY", str(self.binary))
+        env.setdefault("STUB_LOG", str(self.log))
+        env.setdefault("STUB_MINISIGN_LOG", str(self.minisign_log))
+        limited = self.path_without("minisign", tools=BOOTSTRAP_TOOLS)
+        env["PATH"] = f"{self.stubs}:{limited}"
+        return self.run_script(self.script, env_extra=env)
+
+    def assert_not_installed(self, done, message):
+        self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn(message, done.stderr)
+        self.assertFalse((self.home / ".local/bin/spinewall").exists())
+        self.assertFalse(self.log.exists(), "setup ran after a failed signature check")
+
+    def test_a_good_signature_installs(self):
+        done = self.run_signed()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("signature ok", done.stderr)
+        args = self.minisign_log.read_text().split()
+        self.assertEqual(args[0], "-Vm")
+        self.assertEqual(args[-2:], ["-P", REAL_KEY])
+        self.assertEqual(self.log.read_text().strip(), "setup")
+
+    def test_missing_minisign_stops_and_says_what_to_do(self):
+        done = self.run_signed(with_minisign=False)
+        self.assert_not_installed(done, "minisign is required")
+        self.assertIn(f"minisign -Vm SHA256SUMS -P {REAL_KEY}", done.stderr)
+        self.assertIn("SPINEWALL_SKIP_VERIFY=1", done.stderr)
+
+    def test_a_missing_signature_stops_the_install(self):
+        done = self.run_signed(STUB_SIG_FAIL="1")
+        self.assert_not_installed(done, "has no signature")
+
+    def test_a_bad_signature_stops_the_install(self):
+        done = self.run_signed(STUB_MINISIGN_BAD="1")
+        self.assert_not_installed(done, "signature check failed")
+
+    def test_the_opt_out_installs_with_a_warning(self):
+        done = self.run_signed(with_minisign=False, STUB_SIG_FAIL="1", SPINEWALL_SKIP_VERIFY="1")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("WARNING", done.stderr)
+        self.assertIn("NOT verified", done.stderr)
+        self.assertTrue((self.home / ".local/bin/spinewall").is_file())
+
+
+class PipedBootstrap(BootstrapCase):
+    """`curl | sh`: the script arrives on stdin, so the wizard must read the terminal."""
+
+    def run_piped(self, controlling_tty):
+        stdin_log = self.tmp / "stdin.log"
+        env = {
+            "HOME": str(self.home),
+            "PATH": f"{self.stubs}:{os.environ.get('PATH', '')}",
+            "TMPDIR": str(self.tmp),
+            "STUB_SUMS": str(self.sums),
+            "STUB_BINARY": str(self.binary),
+            "STUB_LOG": str(self.log),
+            "STUB_STDIN_LOG": str(stdin_log),
+        }
+        primary, secondary = pty.openpty()
+        tty_name = os.ttyname(secondary)
+
+        def new_session():
+            os.setsid()
+            if controlling_tty:
+                # Opening a terminal as a new session leader makes it the
+                # controlling terminal, as a login shell has.
+                os.close(os.open(tty_name, os.O_RDWR))
+
+        try:
+            done = subprocess.run(
+                ["sh"], input=(SCRIPTS / "install.sh").read_text(), env=env,
+                capture_output=True, text=True, timeout=60, cwd=str(self.tmp),
+                preexec_fn=new_session,
+            )
+        finally:
+            os.close(primary)
+            os.close(secondary)
+        return done, stdin_log.read_text().strip() if stdin_log.exists() else ""
+
+    def test_setup_reads_the_terminal_under_a_pipe(self):
+        done, stdin = self.run_piped(controlling_tty=True)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(stdin, "tty")
+
+    def test_setup_without_a_terminal_still_runs(self):
+        done, stdin = self.run_piped(controlling_tty=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(stdin, "not-tty")
+        self.assertEqual(self.log.read_text().strip(), "setup")
+
+
+class BootstrapScript(unittest.TestCase):
+    def test_the_bootstrap_is_posix_sh(self):
+        # It must run under plain sh, not bash. A bash-only construct fails -n on sh.
+        done = subprocess.run(["sh", "-n", str(SCRIPTS / "install.sh")], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
 
 
 if __name__ == "__main__":

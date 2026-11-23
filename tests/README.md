@@ -33,9 +33,10 @@ python3 tests/differential.py --go-bin ./spinewall --state-dir <state copy> --mo
 | `tests/server/test_api.py` | Every `/cmd` name, characters, layout, prefs, recents, thumbnails, `/report`, `/input`, rescan, concurrency. |
 | `tests/server/test_security.py` | Host, Origin, and `Sec-Fetch-Site` guards, CORS, 415, 413, file whitelist, traversal, corrupt state files, legacy state migration. |
 | `tests/server/test_cli.py` | The Go CLI against a live server: encoding, usage errors, exit codes, shortcut log and rollover. |
-| `tests/scripts/test_install.py` | `scripts/install.sh` with stub `npm`, `curl`, `sha256sum`, `systemctl`. |
+| `tests/scripts/test_install.py` | `scripts/install.sh`, the POSIX bootstrap, with stub `curl`. Arch detection, checksum and signature handling, install location, and the `spinewall setup` handoff. |
+| `tests/installer/test_setup.py` | `spinewall setup` end to end under a throwaway HOME with every XDG path overridden: `--yes` install, the interactive wizard driven over a pty, no models, no network, and a byte-identical home after uninstall. Builds the Go binary; skips without Go. |
 | `tests/scripts/test_patch.py` | `scripts/patch-plasmoid.sh` against a fake containment built from the patch. |
-| `tests/scripts/test_static.py` | `py_compile`, `bash -n`, shellcheck, tracked-file denylist. |
+| `tests/scripts/test_static.py` | `py_compile`, `sh -n`/`bash -n`, shellcheck, tracked-file denylist. |
 
 Run one file:
 
@@ -48,10 +49,12 @@ How it works:
 - Each server test starts `server/spinewall-server.py` as a subprocess on a free port. Every `SPINEWALL_*` path and `HOME` point into a temp directory.
 - Models are synthetic. `tests/server/support.py` writes minimal `.skel`, `.json`, and `.atlas` files. No real model is used.
 - `tests/scripts/test_patch.py` runs a copy of the script with only the `system_dir` line changed. The real script hardcodes `/usr/share/plasma/plasmoids/org.kde.desktopcontainment`.
+- `tests/installer/test_setup.py` builds the Go binary, then runs it under a pty and with `--yes`, each in its own throwaway `HOME` and on its own port. The live wallpaper on `8777` is never touched.
+- `tests/scripts/test_install.py` runs the bootstrap with a stub `curl` that serves the release files from disk, so no network is used. The real `sha256sum` still checks the fake binary, so a wrong `SHA256SUMS` is caught for real.
 
 Known gaps:
 
-- The `install.sh` happy path uses a stub `sha256sum`, so the pinned hashes are not checked offline. The real runtime check is the Go test, gated by `SPINEWALL_TEST_NETWORK=1` (`go test ./internal/runtime`).
+- The `install.sh` bootstrap test cannot verify a real minisign signature: the release is unsigned until the captain adds the secret key, so the test covers the placeholder and checksum paths only. The runtime pin check is the Go test, gated by `SPINEWALL_TEST_NETWORK=1` (`go test ./internal/runtime`).
 - The patch is tested against files rebuilt from its own old side. It is not tested against a real `plasma-desktop` 6.8.1 tree.
 - shellcheck tests skip when `shellcheck` is not on PATH.
 
