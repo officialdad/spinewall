@@ -128,7 +128,13 @@ func Run(opts Options) (Result, error) {
 	}
 	res.Install = inst
 	if inst.Autostart != "" {
-		printCompositorLine(stdout, report.Desktop, inst.BinPath)
+		// The line must start the same backend install wrote, or the compositor
+		// session runs a bare server with no window.
+		args := "serve"
+		if backend == string(install.BackendLayerShell) {
+			args = "serve --with-view"
+		}
+		printCompositorLine(stdout, report.Desktop, inst.BinPath, args)
 	}
 
 	// The install linked the fetched players into the theme folder. Check that
@@ -379,11 +385,15 @@ func PrintLegacyWarning(w io.Writer, legacy []string) {
 
 // compositorStartLine is the line a compositor that skips XDG autostart needs
 // in its own config, and that config's usual path. Spinewall prints it and
-// never edits the file.
-func compositorStartLine(desktop, binPath string) (config, line string, ok bool) {
-	command := binPath + " serve"
+// never edits the file. `args` is the subcommand line, such as "serve" or
+// "serve --with-view", so the line starts the same backend setup installed.
+func compositorStartLine(desktop, binPath, args string) (config, line string, ok bool) {
+	if args == "" {
+		args = "serve"
+	}
+	command := binPath + " " + args
 	if strings.ContainsAny(binPath, " \t'\"") {
-		command = "'" + strings.ReplaceAll(binPath, "'", `'\''`) + "' serve"
+		command = "'" + strings.ReplaceAll(binPath, "'", `'\''`) + "' " + args
 	}
 	for _, name := range strings.Split(strings.ToLower(desktop), ":") {
 		switch name {
@@ -399,8 +409,8 @@ func compositorStartLine(desktop, binPath string) (config, line string, ok bool)
 }
 
 // printCompositorLine prints the startup line for sway, Hyprland, or river.
-func printCompositorLine(w io.Writer, desktop, binPath string) {
-	config, line, ok := compositorStartLine(desktop, binPath)
+func printCompositorLine(w io.Writer, desktop, binPath, args string) {
+	config, line, ok := compositorStartLine(desktop, binPath, args)
 	if !ok {
 		return
 	}

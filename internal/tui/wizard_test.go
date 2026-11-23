@@ -394,23 +394,24 @@ func sameTree(a, b map[string]string) bool {
 func TestCompositorStartLineForEachCompositor(t *testing.T) {
 	bin := "/opt/u/bin/spinewall"
 	cases := []struct {
-		desktop, config, line string
+		desktop, args, config, line string
 	}{
-		{"sway", "~/.config/sway/config", "exec /opt/u/bin/spinewall serve"},
-		{"Hyprland", "~/.config/hypr/hyprland.conf", "exec-once = /opt/u/bin/spinewall serve"},
-		{"river", "~/.config/river/init", `riverctl spawn "/opt/u/bin/spinewall serve"`},
+		{"sway", "serve", "~/.config/sway/config", "exec /opt/u/bin/spinewall serve"},
+		{"Hyprland", "serve", "~/.config/hypr/hyprland.conf", "exec-once = /opt/u/bin/spinewall serve"},
+		{"river", "serve", "~/.config/river/init", `riverctl spawn "/opt/u/bin/spinewall serve"`},
+		{"sway", "serve --with-view", "~/.config/sway/config", "exec /opt/u/bin/spinewall serve --with-view"},
 	}
 	for _, c := range cases {
 		var out strings.Builder
-		printCompositorLine(&out, c.desktop, bin)
+		printCompositorLine(&out, c.desktop, bin, c.args)
 		text := out.String()
 		if !strings.Contains(text, "Add this line to "+c.config) || !strings.Contains(text, "\n  "+c.line+"\n") {
-			t.Errorf("%s: printed\n%s\nwant %q in %s", c.desktop, text, c.line, c.config)
+			t.Errorf("%s %s: printed\n%s\nwant %q in %s", c.desktop, c.args, text, c.line, c.config)
 		}
 	}
 	for _, desktop := range []string{"KDE", "GNOME", "unknown"} {
 		var out strings.Builder
-		printCompositorLine(&out, desktop, bin)
+		printCompositorLine(&out, desktop, bin, "serve")
 		if out.Len() != 0 {
 			t.Errorf("%s: printed a compositor line:\n%s", desktop, out.String())
 		}
