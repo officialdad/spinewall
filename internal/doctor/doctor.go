@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/officialdad/spinewall/internal/view"
 )
 
 // Status is one row's result.
@@ -46,9 +48,13 @@ type Report struct {
 	Network       bool
 	LayerShell    Status
 	WebEngineName string
-	// Buildable is true when the C++ toolchain, moc and pkg-config can build the
-	// native view launcher. The layer-shell backend needs it.
+	// Buildable is true when the C++ toolchain, moc, pkg-config and the Qt
+	// development modules can build the native view launcher. The layer-shell
+	// backend needs it.
 	Buildable bool
+	// LayerShellQML is true when the org.kde.layershell QML module the native
+	// view loads is present. The layer-shell backend needs it.
+	LayerShellQML bool
 }
 
 // Options let tests replace the detection sources.
@@ -61,6 +67,9 @@ type Options struct {
 	// WaylandGlobals is a file listing the compositor's Wayland globals, as
 	// wayland-info prints them. Empty falls back to the known desktops.
 	WaylandGlobals string
+	// HasPkg reports whether the named pkg-config modules resolve. Nil runs
+	// pkg-config itself.
+	HasPkg func([]string) bool
 }
 
 // Detect runs every check and returns a report.
@@ -125,16 +134,30 @@ func Detect(opts Options) Report {
 		r.Checks = append(r.Checks, Check{Name: "plasmashell", Status: Found, Detail: "KDE Plasma session"})
 	}
 
-	// The C++ toolchain and Qt development files the native view launcher needs.
-	// It builds on the user's machine because QtWebEngine cannot link into a
-	// static Go binary.
-	buildable, buildDetail := detectBuildToolchain(lookPath)
-	r.Buildable = buildable
+	// The C++ toolchain and Qt development files the native view launcher needs,
+	// and the layer-shell QML module it loads. It builds on the user's machine
+	// because QtWebEngine cannot link into a static Go binary. internal/view runs
+	// the same check setup's build relies on, so a recommendation can build.
+	native := view.Detect(view.Options{
+		Getenv:         getenv,
+		LookPath:       lookPath,
+		Exists:         exists,
+		WaylandGlobals: opts.WaylandGlobals,
+		HasPkg:         opts.HasPkg,
+	})
+	r.Buildable = native.Buildable
 	r.Checks = append(r.Checks, Check{
 		Name:    "view build toolchain",
-		Status:  foundOrMissing(buildable),
-		Detail:  buildDetail,
+		Status:  foundOrMissing(native.Buildable),
+		Detail:  buildDetail(native),
 		Package: toolchainPackage(r.Distro, release["ID_LIKE"]),
+	})
+	r.LayerShellQML = native.LayerShellQML
+	r.Checks = append(r.Checks, Check{
+		Name:    "layer-shell QML module",
+		Status:  foundOrMissing(native.LayerShellQML),
+		Detail:  layerShellQMLDetail(native.LayerShellQML),
+		Package: r.PackageCmd,
 	})
 
 	// systemd user session.
@@ -160,7 +183,8 @@ func Detect(opts Options) Report {
 	})
 
 	// Both backends are reported. The native layer-shell view needs a layer-shell
-	// compositor, Qt WebEngine and the build toolchain; kde-legacy needs Plasma
+	// compositor, Qt WebEngine, the layer-shell QML module and the build
+	// toolchain; kde-legacy needs Plasma
 	// and the webwallpaper plugin. setup preselects the recommended one.
 	r.Backend = nativeRecommendation(r)
 	return r
@@ -173,7 +197,7 @@ func Detect(opts Options) Report {
 func nativeRecommendation(r Report) string {
 	if r.LayerShell == Found && r.WebEngineName != "" && !strings.HasPrefix(r.WebEngineName, "chromium") &&
 		!strings.HasPrefix(r.WebEngineName, "firefox") && !strings.HasPrefix(r.WebEngineName, "google") &&
-		r.Buildable {
+		r.Buildable && r.LayerShellQML {
 		return "layer-shell"
 	}
 	return "kde-legacy"
@@ -316,42 +340,29 @@ func detectWebEngine(lookPath func(string) (string, error), exists func(string) 
 	return Missing, "no Qt WebEngine or browser", pkgCmd
 }
 
-// detectBuildToolchain reports whether the native view launcher can be built:
-// a C++ compiler, moc and pkg-config. It returns a human detail and no error.
-func detectBuildToolchain(lookPath func(string) (string, error)) (bool, string) {
-	compiler := ""
-	for _, name := range []string{"c++", "g++", "clang++"} {
-		if _, err := lookPath(name); err == nil {
-			compiler = name
-			break
-		}
+// buildDetail names what the native view launcher build is missing.
+func buildDetail(native view.DetectResult) string {
+	if native.Buildable {
+		return "can build the layer-shell view"
 	}
-	_, mocErr := lookPath("moc")
-	_, pkgErr := lookPath("pkg-config")
-	var missing []string
-	if compiler == "" {
-		missing = append(missing, "C++ compiler")
+	return "missing " + strings.Join(native.BuildMissing, ", ")
+}
+
+func layerShellQMLDetail(found bool) string {
+	if found {
+		return "org.kde.layershell for the layer-shell view"
 	}
-	if mocErr != nil {
-		missing = append(missing, "moc")
-	}
-	if pkgErr != nil {
-		missing = append(missing, "pkg-config")
-	}
-	if len(missing) > 0 {
-		return false, "missing " + strings.Join(missing, ", ")
-	}
-	return true, "can build the layer-shell view"
+	return "no org.kde.layershell QML module (layer-shell-qt)"
 }
 
 // toolchainPackages is the build toolchain package command per distro family.
 var toolchainPackages = map[string]string{
-	"arch":     "sudo pacman -S base-devel qt6-base",
-	"debian":   "sudo apt install build-essential qt6-base-dev-tools pkg-config",
-	"fedora":   "sudo dnf install gcc-c++ qt6-qtbase-devel pkgconf",
-	"opensuse": "sudo zypper install gcc-c++ qt6-base-devel pkg-config",
-	"alpine":   "sudo apk add build-base qt6-qtbase-dev pkgconf",
-	"void":     "sudo xbps-install -S base-devel qt6-base-devel pkgconf",
+	"arch":     "sudo pacman -S base-devel qt6-base qt6-webengine",
+	"debian":   "sudo apt install build-essential qt6-base-dev-tools qt6-webengine-dev qt6-declarative-dev pkg-config",
+	"fedora":   "sudo dnf install gcc-c++ qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtdeclarative-devel pkgconf",
+	"opensuse": "sudo zypper install gcc-c++ qt6-base-devel qt6-webengine-devel qt6-declarative-devel pkg-config",
+	"alpine":   "sudo apk add build-base qt6-qtbase-dev qt6-qtwebengine-dev qt6-qtdeclarative-dev pkgconf",
+	"void":     "sudo xbps-install -S base-devel qt6-base-devel qt6-webengine-devel qt6-declarative-devel pkgconf",
 }
 
 // toolchainPackage maps a distro id, then its ID_LIKE family, to the toolchain

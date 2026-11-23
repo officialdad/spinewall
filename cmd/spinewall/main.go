@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -198,24 +199,38 @@ func serve(args []string) error {
 	// page and the launcher draws it. The view waits for the listener above, so
 	// its first page load reaches a live server. A build failure is not fatal to
 	// the server; the page is still there for a browser or the KDE legacy backend.
-	if withView {
-		stop := make(chan struct{})
-		go func() {
-			logf := func(line string) { fmt.Fprintln(os.Stderr, line) }
-			bin, err := view.Build(viewDir(), logf)
-			if err != nil {
-				logf("spinewall: native view unavailable: " + err.Error())
-				return
-			}
-			if err := launchView(bin, apiBase(), viewLayer, logf, stop); err != nil {
-				logf("spinewall: native view stopped: " + err.Error())
-			}
-		}()
-		defer close(stop)
+	server := &http.Server{Handler: srv}
+	if !withView {
+		return server.Serve(listener)
 	}
 
-	server := &http.Server{Handler: srv}
-	return server.Serve(listener)
+	// The signal ends both halves: the windows stop without a restart, and the
+	// server frees the port, so setup and uninstall can start a new one.
+	ctx, cancel := stopSignals()
+	defer cancel()
+	viewDone := make(chan struct{})
+	go func() {
+		defer close(viewDone)
+		bin, err := view.Build(viewDir(), logf)
+		if err != nil {
+			logf("spinewall: native view unavailable: " + err.Error())
+			return
+		}
+		if err := launchView(bin, apiBase(), viewLayer, logf, ctx.Done()); err != nil {
+			logf("spinewall: native view stopped: " + err.Error())
+		}
+	}()
+	go func() {
+		<-ctx.Done()
+		_ = server.Close()
+	}()
+	err = server.Serve(listener)
+	cancel()
+	<-viewDone
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }
 
 // writePidFile records the process id beside the server state.

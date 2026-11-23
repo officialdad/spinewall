@@ -13,6 +13,7 @@
 //
 // argv: <page-url> [--output NAME] [--geometry WxH+X+Y] [--layer bottom|background]
 //      [--poll-ms N]
+#include <QDBusConnection>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -154,7 +155,6 @@ int main(int argc, char **argv) {
         opt.apiBase = QStringLiteral("http://127.0.0.1:8777");
     }
 
-    QtWebEngineQuick::initialize();
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("spinewall-view"));
     // The wallpaper must never quit when the last window would close on a lock.
@@ -250,11 +250,49 @@ int main(int argc, char **argv) {
                                 r.value(QStringLiteral("w")).toInt(),
                                 r.value(QStringLiteral("h")).toInt());
             }
+            // An empty QRegion removes the mask, which would take every click. A
+            // region outside the window takes none, so the desktop gets them all.
+            if (region.isEmpty()) {
+                region = QRegion(-1, -1, 1, 1);
+            }
             window->setMask(region);
             std::fprintf(stderr, "SPVIEW mask %d rect(s) rev %d\n", int(rects.size()), rev);
         });
     });
     timer->start(opt.pollMs > 0 ? opt.pollMs : 400);
+
+    // A lock, a suspend or a fullscreen client can leave the page's draw loop
+    // dead while the surface stays mapped, so the window never sees a visibility
+    // change. Reload on the session's own lock and sleep signals instead. The
+    // signals connect to QTimer::start(), a slot with no arguments, so no moc is
+    // needed; the timer also folds a burst of signals into one reload. Both edges
+    // reload, which is harmless before the lock and fixes the page after it.
+    QObject *web = window->findChild<QObject *>(QStringLiteral("webview"));
+    auto *reload = new QTimer(&app);
+    reload->setSingleShot(true);
+    reload->setInterval(1000);
+    QObject::connect(reload, &QTimer::timeout, window, [web]() {
+        if (web) {
+            QMetaObject::invokeMethod(web, "reload");
+            std::fprintf(stderr, "SPVIEW reload on resume\n");
+        }
+    });
+    QDBusConnection system = QDBusConnection::systemBus();
+    QDBusConnection session = QDBusConnection::sessionBus();
+    system.connect(QStringLiteral("org.freedesktop.login1"), QStringLiteral("/org/freedesktop/login1"),
+                   QStringLiteral("org.freedesktop.login1.Manager"), QStringLiteral("PrepareForSleep"),
+                   reload, SLOT(start()));
+    // An empty path matches every session object, since the signal names the
+    // session's real path rather than /session/auto.
+    system.connect(QStringLiteral("org.freedesktop.login1"), QString(),
+                   QStringLiteral("org.freedesktop.login1.Session"), QStringLiteral("Unlock"), reload,
+                   SLOT(start()));
+    // KDE emits ActiveChanged on /ScreenSaver and /org/freedesktop/ScreenSaver,
+    // other lockers on the latter, so match any sender and path.
+    session.connect(QString(), QString(), QStringLiteral("org.freedesktop.ScreenSaver"),
+                    QStringLiteral("ActiveChanged"), reload, SLOT(start()));
+    session.connect(QString(), QString(), QStringLiteral("org.kde.screensaver"),
+                    QStringLiteral("ActiveChanged"), reload, SLOT(start()));
 
     return app.exec();
 }

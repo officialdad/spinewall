@@ -54,8 +54,9 @@ menu keep working.
   click.
 
 The mask is stored per screen, never written to disk, and reset to full when a
-screen's stage is created. `spinewall mask` prints the current region for a bug
-report.
+screen's stage is created. `spinewall mask --screen KEY` prints the region one
+monitor's window uses, for a bug report. `spinewall screens` lists the keys, and
+`--screen current` names the monitor under the pointer on KDE.
 
 ## Per-monitor windows
 
@@ -72,9 +73,13 @@ available for a compositor that wants the wallpaper layer instead.
 
 The old webwallpaper plugin paused on fullscreen windows and never restarted the
 draw loop, so the page reloaded on `webwallpaper:resume`. The native surface has no
-such pause: a fullscreen window hides it and it stays alive underneath. The page
-still reloads on `webglcontextlost`, and on becoming visible again after it was
-hidden (a lock, a resume), which covers the case the plugin handled badly.
+such pause: a fullscreen window hides it and it stays alive underneath. A lock, a suspend or
+a fullscreen client can still leave the draw loop dead without the window ever
+becoming invisible, so the launcher reloads the page on the session's own signals:
+logind `PrepareForSleep` and the session `Unlock`, and `ActiveChanged` from
+`org.freedesktop.ScreenSaver` or `org.kde.screensaver`. A burst of signals makes one
+reload, and the launcher logs `SPVIEW reload on resume`. The page still reloads on
+`webglcontextlost` as well.
 
 ## Edit mode without the patch
 

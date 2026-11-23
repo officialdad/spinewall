@@ -1,7 +1,6 @@
 package install
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/officialdad/spinewall/internal/view"
@@ -15,10 +14,7 @@ import (
 // a CGO_ENABLED=0 Go binary. A build failure is not fatal: the source stays in
 // place, and `spinewall serve --with-view` builds it on first start.
 func installView(w *writer, paths Paths, opts Options, logf func(string)) (string, error) {
-	dir := opts.ViewDir
-	if dir == "" {
-		dir = paths.ViewDir()
-	}
+	dir := paths.ViewDir()
 	if err := w.ensureDir(dir); err != nil {
 		return "", err
 	}
@@ -52,14 +48,8 @@ func installView(w *writer, paths Paths, opts Options, logf func(string)) (strin
 	return dir, nil
 }
 
-// ViewDir is where the native launcher source and binary live.
+// ViewDir is where the native launcher source and binary live. It is the one
+// definition: setup installs here and serve builds and runs from here.
 func (p Paths) ViewDir() string {
 	return filepath.Join(p.CacheDir, "view")
-}
-
-// IsViewInstalled reports whether the launcher source is present, so doctor and
-// setup can say whether the native backend is ready without building it.
-func IsViewInstalled(paths Paths) bool {
-	_, err := os.Stat(filepath.Join(paths.ViewDir(), "launcher.cpp"))
-	return err == nil
 }

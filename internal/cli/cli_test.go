@@ -286,6 +286,32 @@ func TestEditWithTwoArgumentsIsUsageError(t *testing.T) {
 	}
 }
 
+func TestEditRejectsAnythingButOnAndOff(t *testing.T) {
+	for _, arg := range []string{"0", "1", "true", "false", "of"} {
+		srv, seen := collectServer(t)
+		var out, errOut strings.Builder
+		r := newRunnable(srv.URL, &out, &errOut)
+		if code := r.exec([]string{"edit", arg}); code != 2 {
+			t.Errorf("edit %s: exit %d, want 2", arg, code)
+		}
+		if len(*seen) != 0 {
+			t.Errorf("edit %s sent a request: %v", arg, *seen)
+		}
+	}
+}
+
+func TestMaskCarriesTheScreen(t *testing.T) {
+	srv, seen := collectServer(t)
+	var out, errOut strings.Builder
+	r := newRunnable(srv.URL, &out, &errOut)
+	if code := r.exec([]string{"mask", "--screen", "2560x1440+0+0"}); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	if len(*seen) != 1 || (*seen)[0] != "/mask?screen=2560x1440%2B0%2B0" {
+		t.Fatalf("server saw %v", *seen)
+	}
+}
+
 func TestMaskReadsTheMaskPath(t *testing.T) {
 	srv, seen := collectServer(t)
 	var out, errOut strings.Builder

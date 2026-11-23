@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"path/filepath"
+	"os/signal"
 	"strings"
+	"syscall"
 
+	"github.com/officialdad/spinewall/internal/install"
 	"github.com/officialdad/spinewall/internal/view"
 )
 
@@ -28,13 +31,10 @@ func viewEnv() []string {
 	return env
 }
 
-// viewDir is where the launcher source and binary live.
+// viewDir is where the launcher source and binary live. It is the directory
+// setup installs into and records in the manifest, so serve runs that launcher.
 func viewDir() string {
-	if dir := os.Getenv("SPINEWALL_VIEW_DIR"); dir != "" {
-		return dir
-	}
-	cache := envOrDefault("XDG_CACHE_HOME", homePath(".cache"))
-	return filepath.Join(cache, "spinewall", "view")
+	return install.DefaultPaths().ViewDir()
 }
 
 // apiBase is the server origin for this process.
@@ -78,15 +78,21 @@ func runViewCommand(args []string) error {
 		}
 		return nil
 	}
-	return launchView(bin, apiBase(), layer, logf, nil)
+	ctx, cancel := stopSignals()
+	defer cancel()
+	return launchView(bin, apiBase(), layer, logf, ctx.Done())
+}
+
+// stopSignals ends on SIGTERM or SIGINT. Notify turns off Go's default exit, so
+// whoever calls it must stop everything it runs when the context ends.
+func stopSignals() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 }
 
 // launchView starts the supervisor for one window per monitor and blocks until
-// stop closes. It is shared by `view` and `serve --with-view`.
+// stop closes and the windows have exited. It is shared by `view` and
+// `serve --with-view`.
 func launchView(bin, apiBase, layer string, logf func(string), stop <-chan struct{}) error {
-	if stop == nil {
-		stop = make(chan struct{}) // never closed: run until a signal
-	}
 	sup := view.NewSupervisor(view.SuperviseOptions{
 		Binary:  bin,
 		Env:     viewEnv(),

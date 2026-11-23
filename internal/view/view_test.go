@@ -29,19 +29,20 @@ func fakeOpts(session, desktop string, present map[string]bool) Options {
 	}
 }
 
-func TestDetectRecommendsLayerShellWhenProven(t *testing.T) {
+func TestDetectIsReadyWhenProven(t *testing.T) {
 	opts := fakeOpts("wayland", "KDE", map[string]bool{
-		"c++":                          true,
-		"moc":                          true,
-		"pkg-config":                   true,
-		"/usr/lib/qt6/qml/QtWebEngine": true,
-		"pkg:Qt6Quick":                 true,
+		"c++":                                 true,
+		"moc":                                 true,
+		"pkg-config":                          true,
+		"/usr/lib/qt6/qml/QtWebEngine":        true,
+		"/usr/lib/qt6/qml/org/kde/layershell": true,
+		"pkg:Qt6Quick":                        true,
 	})
 	r := Detect(opts)
-	if r.Recommended != BackendLayerShell {
-		t.Errorf("recommended = %q, want layer-shell (reasons: %v)", r.Recommended, r.Reasons)
+	if !r.Ready() {
+		t.Errorf("not ready (reasons: %v)", r.Reasons)
 	}
-	if !r.LayerShell || !r.WebEngine || !r.Buildable {
+	if !r.LayerShell || !r.WebEngine || !r.LayerShellQML || !r.Buildable {
 		t.Errorf("detect = %+v", r)
 	}
 	if len(r.Reasons) != 0 {
@@ -49,15 +50,16 @@ func TestDetectRecommendsLayerShellWhenProven(t *testing.T) {
 	}
 }
 
-func TestDetectFallsBackToLegacyOnKDE(t *testing.T) {
-	// No compiler, so the launcher cannot build. On KDE the legacy backend is the
-	// fallback, and the reason names the missing piece.
+func TestDetectWithoutACompilerIsNotReady(t *testing.T) {
+	// No compiler, so the launcher cannot build, and the reason names the
+	// missing piece.
 	opts := fakeOpts("wayland", "KDE", map[string]bool{
-		"/usr/lib/qt6/qml/QtWebEngine": true,
+		"/usr/lib/qt6/qml/QtWebEngine":        true,
+		"/usr/lib/qt6/qml/org/kde/layershell": true,
 	})
 	r := Detect(opts)
-	if r.Recommended != BackendKDELegacy {
-		t.Errorf("recommended = %q, want kde-legacy", r.Recommended)
+	if r.Ready() {
+		t.Error("ready with no compiler")
 	}
 	if r.Buildable {
 		t.Error("buildable with no compiler")
@@ -74,8 +76,8 @@ func TestDetectGNOMENeedsNoLayerShell(t *testing.T) {
 	if r.LayerShell {
 		t.Error("GNOME reported as layer-shell")
 	}
-	if r.Recommended == BackendLayerShell {
-		t.Error("recommended the native view on GNOME, which has no layer-shell")
+	if r.Ready() {
+		t.Error("the native view is ready on GNOME, which has no layer-shell")
 	}
 	assertReason(t, r.Reasons, "zwlr_layer_shell_v1")
 }
@@ -104,9 +106,20 @@ func TestDetectReadsTheGlobalsProbe(t *testing.T) {
 	if !r.LayerShell {
 		t.Error("layer-shell not read from the probe file")
 	}
-	if r.Recommended != BackendLayerShell {
-		t.Errorf("recommended = %q", r.Recommended)
+}
+
+func TestDetectWithoutTheLayerShellQMLModuleIsNotReady(t *testing.T) {
+	// view.qml imports org.kde.layershell, so without layer-shell-qt the window
+	// cannot load even when the launcher builds.
+	opts := fakeOpts("wayland", "KDE", map[string]bool{
+		"c++": true, "moc": true, "pkg-config": true,
+		"/usr/lib/qt6/qml/QtWebEngine": true, "pkg:Qt6Quick": true,
+	})
+	r := Detect(opts)
+	if !r.Buildable || r.LayerShellQML || r.Ready() {
+		t.Errorf("detect = %+v", r)
 	}
+	assertReason(t, r.Reasons, "org.kde.layershell")
 }
 
 func TestPageURLNamesTheMonitorAndTheNativeView(t *testing.T) {

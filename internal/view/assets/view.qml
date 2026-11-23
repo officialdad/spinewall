@@ -3,6 +3,7 @@
 //
 // The launcher (launcher.cpp) supplies the context properties below and sets
 // and updates the window input mask, because QML Window has no mask property.
+// It also reloads the "webview" item after a lock or a resume.
 import QtQuick
 import QtWebEngine
 import org.kde.layershell 1.0 as LayerShell
@@ -32,16 +33,5 @@ Window {
         settings.localContentCanAccessRemoteUrls: true
         settings.localStorageEnabled: true
         settings.playbackRequiresUserGesture: false
-    }
-
-    // The plugin used to fire webwallpaper:resume after a pause, and the draw
-    // loop never restarted. The native launcher has no such pause: the surface
-    // stays alive behind a fullscreen window. A real reload only helps after the
-    // surface was hidden, such as a lock or a resume, so reload when the window
-    // becomes visible again, never on the first show.
-    property bool wasShown: false
-    onVisibleChanged: {
-        if (visible && wasShown) web.reload();
-        if (visible) wasShown = true;
     }
 }

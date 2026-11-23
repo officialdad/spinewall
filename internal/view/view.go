@@ -10,20 +10,8 @@ package view
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
-)
-
-// Backend names a wallpaper host. The native layer-shell backend is this
-// package; the KDE legacy backend is the webwallpaper plugin plus the patched
-// containment, which stays installable until the cutover.
-type Backend string
-
-const (
-	BackendLayerShell Backend = "layer-shell"
-	BackendKDELegacy  Backend = "kde-legacy"
-	BackendNone       Backend = "none"
 )
 
 // Scope is the layer-shell scope name the surface registers under.
@@ -42,18 +30,21 @@ type Options struct {
 	HasPkg func([]string) bool
 }
 
-// Detect reports which native backend this machine can run and why.
+// DetectResult reports whether this machine can run the native view and why.
 type DetectResult struct {
-	// Recommended is the backend to preselect in setup and doctor.
-	Recommended Backend
 	// LayerShell is true when the compositor offers zwlr_layer_shell_v1.
 	LayerShell bool
 	// WebEngine is true when the Qt WebEngine QML module is present.
 	WebEngine bool
+	// LayerShellQML is true when the org.kde.layershell QML module that view.qml
+	// imports is present. Without it the window cannot load.
+	LayerShellQML bool
 	// Buildable is true when moc, a C++ compiler, pkg-config and the Qt
 	// development modules are all present, so the launcher can be built.
 	Buildable bool
-	// Reasons names each missing piece, empty when Buildable and WebEngine.
+	// BuildMissing names each build requirement that is missing.
+	BuildMissing []string
+	// Reasons names each missing piece, empty when the native view can run.
 	Reasons []string
 }
 
@@ -67,6 +58,14 @@ var qtWebEngineModules = []string{
 	"/usr/lib64/qt6/qml/QtWebEngine",
 	"/usr/lib/x86_64-linux-gnu/qt6/qml/QtWebEngine",
 	"/usr/lib/aarch64-linux-gnu/qt6/qml/QtWebEngine",
+}
+
+// layerShellQMLModules are where distros install layer-shell-qt's QML module.
+var layerShellQMLModules = []string{
+	"/usr/lib/qt6/qml/org/kde/layershell",
+	"/usr/lib64/qt6/qml/org/kde/layershell",
+	"/usr/lib/x86_64-linux-gnu/qt6/qml/org/kde/layershell",
+	"/usr/lib/aarch64-linux-gnu/qt6/qml/org/kde/layershell",
 }
 
 // launcherPkgs are the pkg-config modules the launcher links against.
@@ -93,13 +92,13 @@ func Detect(opts Options) DetectResult {
 
 	var r DetectResult
 	if runtime.GOOS != "linux" {
-		r.Recommended = BackendNone
 		r.Reasons = append(r.Reasons, "the native view runs on Linux only")
 		return r
 	}
 
 	r.LayerShell = detectLayerShell(getenv, opts.WaylandGlobals)
-	r.WebEngine = detectWebEngine(exists)
+	r.WebEngine = anyExists(exists, qtWebEngineModules)
+	r.LayerShellQML = anyExists(exists, layerShellQMLModules)
 	compiler, moc, pkgOK := detectToolchain(lookPath)
 	pkgModules := hasPkg(launcherPkgs)
 	r.Buildable = compiler && moc && pkgOK && pkgModules
@@ -110,41 +109,32 @@ func Detect(opts Options) DetectResult {
 	if !r.WebEngine {
 		r.Reasons = append(r.Reasons, "the Qt WebEngine QML module is missing")
 	}
+	if !r.LayerShellQML {
+		r.Reasons = append(r.Reasons, "the org.kde.layershell QML module is missing (install layer-shell-qt)")
+	}
 	if !compiler {
+		r.BuildMissing = append(r.BuildMissing, "C++ compiler")
 		r.Reasons = append(r.Reasons, "no C++ compiler (install a C++ toolchain)")
 	}
 	if !moc {
+		r.BuildMissing = append(r.BuildMissing, "moc")
 		r.Reasons = append(r.Reasons, "no moc (install the Qt base development package)")
 	}
 	if !pkgOK {
+		r.BuildMissing = append(r.BuildMissing, "pkg-config")
 		r.Reasons = append(r.Reasons, "no pkg-config (install pkgconf)")
 	}
 	if !pkgModules {
+		r.BuildMissing = append(r.BuildMissing, "Qt development modules")
 		r.Reasons = append(r.Reasons, "missing Qt development modules: "+strings.Join(launcherPkgs, " "))
 	}
 
-	switch {
-	case r.LayerShell && r.WebEngine && r.Buildable:
-		r.Recommended = BackendLayerShell
-	case isKDE(getenv):
-		r.Recommended = BackendKDELegacy
-		r.Reasons = append(r.Reasons, "falling back to the KDE legacy backend")
-	default:
-		r.Recommended = BackendNone
-	}
 	return r
 }
 
-// isKDE reports whether this is a KDE Plasma session, which decides the
-// fallback backend the reason names.
-func isKDE(getenv func(string) string) bool {
-	desktop := strings.ToLower(getenv("XDG_CURRENT_DESKTOP") + ":" + getenv("DESKTOP_SESSION"))
-	for _, name := range strings.Split(desktop, ":") {
-		if name == "kde" || name == "plasma" {
-			return true
-		}
-	}
-	return false
+// Ready reports whether the native view can build and load on this machine.
+func (r DetectResult) Ready() bool {
+	return r.LayerShell && r.WebEngine && r.LayerShellQML && r.Buildable
 }
 
 func detectLayerShell(getenv func(string) string, globalsFile string) bool {
@@ -167,8 +157,8 @@ func detectLayerShell(getenv func(string) string, globalsFile string) bool {
 	return false
 }
 
-func detectWebEngine(exists func(string) bool) bool {
-	for _, dir := range qtWebEngineModules {
+func anyExists(exists func(string) bool, dirs []string) bool {
+	for _, dir := range dirs {
 		if exists(dir) {
 			return true
 		}
@@ -197,19 +187,4 @@ func pkgConfigHas(pkgs []string) bool {
 		}
 	}
 	return true
-}
-
-// ViewDir is the cache directory the launcher source and binary live in.
-func ViewDir(getenv func(string) string) string {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	if dir := getenv("SPINEWALL_VIEW_DIR"); dir != "" {
-		return dir
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "."
-	}
-	return filepath.Join(home, ".cache", "spinewall", "view")
 }

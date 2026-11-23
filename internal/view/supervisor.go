@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"sync"
 	"syscall"
 	"time"
@@ -21,9 +20,6 @@ type Supervisor struct {
 	apiBase string
 	layer   string
 	logf    func(string)
-
-	mu   sync.Mutex
-	cmds []*exec.Cmd
 }
 
 // SuperviseOptions configure one launch.
@@ -54,9 +50,10 @@ func NewSupervisor(opts SuperviseOptions) *Supervisor {
 	return &Supervisor{bin: opts.Binary, env: opts.Env, apiBase: opts.APIBase, layer: layer, logf: logf}
 }
 
-// Run starts a window per monitor and blocks until stop closes or the process
-// is signalled. An empty monitors list lists them from the launcher. A window
-// that exits on its own is restarted after a short pause.
+// Run starts a window per monitor and blocks until stop closes and every window
+// has exited. An empty monitors list lists them from the launcher. A window that
+// exits on its own is restarted after a short pause. The caller owns signal
+// handling and closes stop, so a signal never leaves a restart loop behind.
 func (s *Supervisor) Run(monitors []Monitor, stop <-chan struct{}) error {
 	if len(monitors) == 0 {
 		var err error
@@ -78,15 +75,6 @@ func (s *Supervisor) Run(monitors []Monitor, stop <-chan struct{}) error {
 		}(m)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
-	defer signal.Stop(sig)
-
-	select {
-	case <-stop:
-	case <-sig:
-	}
-	s.StopAll()
 	wg.Wait()
 	return nil
 }
@@ -110,9 +98,6 @@ func (s *Supervisor) superviseOne(m Monitor, stop <-chan struct{}) {
 			}
 			continue
 		}
-		s.mu.Lock()
-		s.cmds = append(s.cmds, cmd)
-		s.mu.Unlock()
 
 		exited := make(chan error, 1)
 		go func() { exited <- cmd.Wait() }()
@@ -129,19 +114,6 @@ func (s *Supervisor) superviseOne(m Monitor, stop <-chan struct{}) {
 			if stoppedPause(stop) {
 				return
 			}
-		}
-	}
-}
-
-// StopAll signals every running window.
-func (s *Supervisor) StopAll() {
-	s.mu.Lock()
-	cmds := append([]*exec.Cmd(nil), s.cmds...)
-	s.cmds = nil
-	s.mu.Unlock()
-	for _, cmd := range cmds {
-		if cmd.Process != nil {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
 		}
 	}
 }

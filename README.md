@@ -204,7 +204,7 @@ spinewall --screen KEY next-preset
 spinewall --screen current next-preset
 ```
 
-On a multi-monitor desktop each monitor has its own layout and preset. A command reaches every monitor unless it carries `--screen KEY`. `spinewall screens` lists the keys. `spinewall mask` prints the native view's current click region.
+On a multi-monitor desktop each monitor has its own layout and preset. A command reaches every monitor unless it carries `--screen KEY`. `spinewall screens` lists the keys. `spinewall mask --screen KEY` prints the click region of that monitor's native view window.
 
 Bind these to global shortcuts in System Settings, under Shortcuts, with a custom command. To cycle presets on the monitor you are using, bind `spinewall next-preset --screen current` and `spinewall prev-preset --screen current`. Bind `spinewall edit` to enter or leave edit mode from any monitor.
 

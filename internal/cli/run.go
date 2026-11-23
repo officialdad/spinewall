@@ -71,7 +71,7 @@ func (r *run) exec(argv []string) int {
 	if len(positional) > 0 {
 		command = positional[0]
 	}
-	if command == "edit" && len(positional) > 2 {
+	if command == "edit" && (len(positional) > 2 || (len(positional) == 2 && positional[1] != "on" && positional[1] != "off")) {
 		fmt.Fprintln(r.stderr, "error: edit takes at most one argument, on or off")
 		return 2
 	}
@@ -145,7 +145,8 @@ func routePath(command string, positional []string) (path string, hasScreen bool
 	case "screens":
 		return "/screens", false
 	case "mask":
-		return "/mask", false
+		// The native view writes each window's mask to its screen's stage.
+		return "/mask", true
 	case "edit":
 		return editPath(positional[1:]), false
 	}
@@ -159,18 +160,17 @@ func routePath(command string, positional []string) (path string, hasScreen bool
 }
 
 // editPath turns the optional on/off argument of `spinewall edit` into an edit
-// path. A bare `edit` toggles server-side, so a shortcut bound to it flips the
-// flag whichever way it currently is.
+// path. exec has already rejected any other word. A bare `edit` toggles
+// server-side, so a shortcut bound to it flips the flag whichever way it
+// currently is.
 func editPath(args []string) string {
-	if len(args) > 0 {
-		switch args[0] {
-		case "off", "0", "false":
-			return "/edit/0"
-		case "on", "1", "true":
-			return "/edit/1"
-		}
+	if len(args) == 0 {
+		return "/edit/toggle"
 	}
-	return "/edit/toggle"
+	if args[0] == "on" {
+		return "/edit/1"
+	}
+	return "/edit/0"
 }
 
 // fail records the exit like the shell's ERR trap: a shortcut with no terminal

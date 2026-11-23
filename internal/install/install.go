@@ -33,9 +33,6 @@ type Options struct {
 	// AllowLegacy writes the autostart entry even when the old Python install is
 	// still present, which the user confirmed. Both start a server on one port.
 	AllowLegacy bool
-	// ViewDir is where the native launcher source and binary are written. Empty
-	// uses the default cache directory. Ignored by the KDE legacy backend.
-	ViewDir string
 	// BuildView compiles the launcher when true. setup passes false in a test
 	// with no Qt toolchain, so the files are still written for a later build.
 	BuildView bool
