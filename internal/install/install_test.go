@@ -192,12 +192,60 @@ func TestUninstallLeavesHomeIdenticalToPreInstall(t *testing.T) {
 	}
 }
 
-func TestLegacyBackendIsTheOnlyInstallableOne(t *testing.T) {
+func TestUnknownBackendIsRejected(t *testing.T) {
 	paths := testPaths(t)
 	exe := fakeBinary(t)
-	_, err := Install(Options{Paths: paths, Executable: exe, Backend: "layer-shell"})
+	_, err := Install(Options{Paths: paths, Executable: exe, Backend: "gnome-shell"})
 	if err == nil {
-		t.Fatal("a not-yet backend installed without error")
+		t.Fatal("an unknown backend installed without error")
+	}
+}
+
+func TestLayerShellBackendWritesTheViewAndStartsWithIt(t *testing.T) {
+	paths := testPaths(t)
+	exe := fakeBinary(t)
+	// BuildView is off, so the test needs no Qt toolchain: the source is written
+	// and the first start builds it.
+	res, err := Install(Options{Paths: paths, Executable: exe, Backend: BackendLayerShell})
+	if err != nil {
+		t.Fatalf("install layer-shell: %v", err)
+	}
+	src := filepath.Join(paths.ViewDir(), "launcher.cpp")
+	qml := filepath.Join(paths.ViewDir(), "view.qml")
+	for _, want := range []string{src, qml} {
+		if _, err := os.Stat(want); err != nil {
+			t.Errorf("view file %s not written: %v", want, err)
+		}
+	}
+	if res.ThemeDir != paths.ViewDir() {
+		t.Errorf("theme dir = %q, want the view dir", res.ThemeDir)
+	}
+	data, err := os.ReadFile(paths.AutostartFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "serve --with-view") {
+		t.Errorf("autostart does not start the view:\n%s", data)
+	}
+	// The view files are in the manifest, so uninstall removes them.
+	recorded := false
+	for _, e := range res.Manifest.Files {
+		if e.Path == src {
+			recorded = true
+		}
+	}
+	if !recorded {
+		t.Error("the launcher source is not in the manifest")
+	}
+}
+
+func TestLayerShellBackendNeverTouchesTheKDETheme(t *testing.T) {
+	paths := testPaths(t)
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t), Backend: BackendLayerShell}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(paths.ThemeDir(), "index.html")); err == nil {
+		t.Error("the layer-shell backend wrote the webwallpaper theme")
 	}
 }
 

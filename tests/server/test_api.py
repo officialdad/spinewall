@@ -603,5 +603,67 @@ class Concurrency(ServerCase):
         self.assertEqual(json.loads(self.server.prefs_file.read_text())["favorites"], [])
 
 
+class NativeView(ServerCase):
+    """The native view edits mode and reports its click mask through the server."""
+
+    def test_mask_starts_full(self):
+        mask = self.get("/mask").json
+        self.assertIs(mask["full"], True)
+        self.assertEqual(mask["rects"], [])
+        self.assertEqual(mask["rev"], 0)
+
+    def test_mask_post_stores_rects_and_bumps_rev(self):
+        resp = self.post("/mask", {"rects": [{"x": 10, "y": 20, "w": 100, "h": 200}]})
+        self.assertEqual(resp.status, 200)
+        mask = resp.json
+        self.assertIs(mask["full"], False)
+        self.assertEqual(mask["rects"], [{"x": 10, "y": 20, "w": 100, "h": 200}])
+        self.assertEqual(mask["rev"], 1)
+        # A later read returns the same region.
+        self.assertEqual(self.get("/mask").json["rects"], mask["rects"])
+
+    def test_mask_post_identical_region_keeps_rev(self):
+        body = {"rects": [{"x": 1, "y": 2, "w": 3, "h": 4}]}
+        self.post("/mask", body)
+        again = self.post("/mask", body).json
+        self.assertEqual(again["rev"], 1)
+
+    def test_mask_post_full_takes_every_click(self):
+        self.post("/mask", {"rects": [{"x": 0, "y": 0, "w": 5, "h": 5}]})
+        full = self.post("/mask", {"full": True}).json
+        self.assertIs(full["full"], True)
+        self.assertEqual(full["rects"], [])
+
+    def test_mask_post_empty_rects_lets_clicks_through(self):
+        mask = self.post("/mask", {"rects": []}).json
+        self.assertIs(mask["full"], False)
+        self.assertEqual(mask["rects"], [])
+
+    def test_mask_post_drops_an_empty_rect(self):
+        mask = self.post("/mask", {"rects": [{"x": 0, "y": 0, "w": 0, "h": 9}, {"x": 4, "y": 4, "w": 8, "h": 8}]}).json
+        self.assertEqual(mask["rects"], [{"x": 4, "y": 4, "w": 8, "h": 8}])
+
+    def test_mask_post_bad_body_is_400(self):
+        for body in ({}, {"rects": "nope"}, {"rects": ["x"]}):
+            self.assertEqual(self.post("/mask", body).status, 400, body)
+
+    def test_mask_is_per_screen_and_never_shared(self):
+        screen = "1920x1080+0+0"
+        self.post("/mask", {"rects": [{"x": 0, "y": 0, "w": 50, "h": 50}]})
+        other = self.get(f"/mask?screen={screen}").json
+        self.assertIs(other["full"], True, "a new screen inherited another's mask")
+
+    def test_mask_post_caps_new_screens_like_go(self):
+        self.assertEqual(self.post("/mask", {"full": True}).status, 200)
+        statuses = [self.post(f"/mask?screen=K{i}", {"full": True}).status for i in range(1, 18)]
+        self.assertEqual(statuses[:16], [200] * 16)
+        self.assertEqual(statuses[16], 400, "a screen past the cap got a mask")
+
+    def test_edit_toggle_flips_the_flag(self):
+        self.assertEqual(self.get("/edit/0").json["on"], 0)
+        self.assertEqual(self.get("/edit/toggle").json["on"], 1)
+        self.assertEqual(self.get("/edit/toggle").json["on"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

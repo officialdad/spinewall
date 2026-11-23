@@ -120,6 +120,7 @@ func Run(opts Options) (Result, error) {
 		ModelDir:    modelDir,
 		AllowLegacy: allowLegacy,
 		Executable:  opts.Executable,
+		BuildView:   backend == string(install.BackendLayerShell),
 		Logf:        logf,
 	})
 	if err != nil {
@@ -127,13 +128,22 @@ func Run(opts Options) (Result, error) {
 	}
 	res.Install = inst
 	if inst.Autostart != "" {
-		printCompositorLine(stdout, report.Desktop, inst.BinPath)
+		// The line must start the same backend install wrote, or the compositor
+		// session runs a bare server with no window.
+		args := "serve"
+		if backend == string(install.BackendLayerShell) {
+			args = "serve --with-view"
+		}
+		printCompositorLine(stdout, report.Desktop, inst.BinPath, args)
 	}
 
 	// The install linked the fetched players into the theme folder. Check that
 	// before starting: a page that cannot load them shows "runtime not installed".
-	if err := verifyThemeRuntime(opts.Paths); err != nil {
-		logf("theme check: " + err.Error())
+	// The native view has no theme folder: the server serves its page and players.
+	if backend != string(install.BackendLayerShell) {
+		if err := verifyThemeRuntime(opts.Paths); err != nil {
+			logf("theme check: " + err.Error())
+		}
 	}
 
 	// 7. Start and verify via /info. Next to the old Python install a second
@@ -243,36 +253,68 @@ func chooseModelDir(opts Options, report doctor.Report, stdout *os.File) string 
 	return value
 }
 
-// chooseBackend asks which backend to install. Only the KDE legacy backend is
-// installable now; the others are listed as not available yet.
+// chooseBackend asks which backend to install. The native layer-shell view is
+// offered when this machine can run it, with the KDE legacy backend beside it as
+// the fallback that needs no compiler.
 func chooseBackend(opts Options, report doctor.Report, stdout *os.File) string {
 	if opts.Backend != "" {
 		return opts.Backend
 	}
+	available := report.Backends()
+	recommended := report.Backend
 	if opts.Yes || !interactive(opts) {
-		return string(install.BackendKDEBackend)
+		return recommended
 	}
-	// A select with the installable backend plus disabled-looking rows would
-	// mislead; the note names what is not ready and the select holds the one
-	// installable choice.
-	choice := string(install.BackendKDEBackend)
+	// The select holds the backends this machine can run, recommendation first.
+	options := make([]huh.Option[string], 0, len(available))
+	for _, name := range available {
+		options = append(options, huh.NewOption(backendLabel(name, report), name))
+	}
+	choice := recommended
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewNote().
 				Title("Backend").
-				Description("Layer-shell (Wayland), X11, and GNOME backends are not available yet.\nThe KDE Plasma legacy backend installs today."),
+				Description(backendNote(report)),
 			huh.NewSelect[string]().
 				Title("Choose a backend").
-				Options(huh.NewOption("KDE Plasma legacy (webwallpaper + containment patch)", string(install.BackendKDEBackend))).
+				Options(options...).
 				Value(&choice),
 		),
 	)
 	form.WithInput(stdin(opts))
 	form.WithOutput(stdout)
 	if err := form.Run(); err != nil {
-		return string(install.BackendKDEBackend)
+		return recommended
 	}
 	return choice
+}
+
+// backendLabel is the human name of a backend in the select.
+func backendLabel(name string, report doctor.Report) string {
+	switch name {
+	case "layer-shell":
+		return "Native layer-shell view (no plugin, no patch)"
+	case "kde-legacy":
+		if report.LayerShell != doctor.Found {
+			return "KDE Plasma legacy (webwallpaper + containment patch)"
+		}
+		return "KDE Plasma legacy (webwallpaper + containment patch, fallback)"
+	default:
+		return name
+	}
+}
+
+// backendNote explains what each backend needs on this machine.
+func backendNote(report doctor.Report) string {
+	if report.Backend == "layer-shell" {
+		return "The native view draws one layer-shell window per monitor and needs no plugin.\n" +
+			"Edit mode comes from an Edit button and the `spinewall edit` shortcut.\n" +
+			"The KDE legacy backend stays available as a fallback."
+	}
+	return "The native layer-shell view is not ready on this machine.\n" +
+		"Missing: " + report.Summary() + "\n" +
+		"The KDE legacy backend installs today and needs the webwallpaper plugin and the containment patch."
 }
 
 // chooseSystemdUnit asks once whether to generate the opt-in systemd user unit.
@@ -346,11 +388,15 @@ func PrintLegacyWarning(w io.Writer, legacy []string) {
 
 // compositorStartLine is the line a compositor that skips XDG autostart needs
 // in its own config, and that config's usual path. Spinewall prints it and
-// never edits the file.
-func compositorStartLine(desktop, binPath string) (config, line string, ok bool) {
-	command := binPath + " serve"
+// never edits the file. `args` is the subcommand line, such as "serve" or
+// "serve --with-view", so the line starts the same backend setup installed.
+func compositorStartLine(desktop, binPath, args string) (config, line string, ok bool) {
+	if args == "" {
+		args = "serve"
+	}
+	command := binPath + " " + args
 	if strings.ContainsAny(binPath, " \t'\"") {
-		command = "'" + strings.ReplaceAll(binPath, "'", `'\''`) + "' serve"
+		command = "'" + strings.ReplaceAll(binPath, "'", `'\''`) + "' " + args
 	}
 	for _, name := range strings.Split(strings.ToLower(desktop), ":") {
 		switch name {
@@ -366,8 +412,8 @@ func compositorStartLine(desktop, binPath string) (config, line string, ok bool)
 }
 
 // printCompositorLine prints the startup line for sway, Hyprland, or river.
-func printCompositorLine(w io.Writer, desktop, binPath string) {
-	config, line, ok := compositorStartLine(desktop, binPath)
+func printCompositorLine(w io.Writer, desktop, binPath, args string) {
+	config, line, ok := compositorStartLine(desktop, binPath, args)
 	if !ok {
 		return
 	}

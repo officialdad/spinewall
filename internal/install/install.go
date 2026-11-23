@@ -9,12 +9,14 @@ import (
 	"github.com/officialdad/spinewall/theme"
 )
 
-// Backend names the wallpaper host the installer can prepare. Until the
-// layer-shell view ships, only the KDE legacy backend can be installed.
+// Backend names the wallpaper host the installer can prepare.
 type Backend string
 
 const (
+	// BackendKDEBackend is the webwallpaper plugin plus the patched containment.
 	BackendKDEBackend Backend = "kde-legacy"
+	// BackendLayerShell is the native view: one layer-shell window per monitor.
+	BackendLayerShell Backend = "layer-shell"
 )
 
 // Options configure one install run.
@@ -31,6 +33,9 @@ type Options struct {
 	// AllowLegacy writes the autostart entry even when the old Python install is
 	// still present, which the user confirmed. Both start a server on one port.
 	AllowLegacy bool
+	// BuildView compiles the launcher when true. setup passes false in a test
+	// with no Qt toolchain, so the files are still written for a later build.
+	BuildView bool
 	// Executable is the binary to install as ~/.local/bin/spinewall. Empty uses
 	// the running executable.
 	Executable string
@@ -66,7 +71,7 @@ func Install(opts Options) (Result, error) {
 	if opts.Backend == "" {
 		opts.Backend = BackendKDEBackend
 	}
-	if opts.Backend != BackendKDEBackend {
+	if opts.Backend != BackendKDEBackend && opts.Backend != BackendLayerShell {
 		return Result{}, fmt.Errorf("backend %q is not installable yet", opts.Backend)
 	}
 	modelDir, err := absModelDir(paths, opts.ModelDir)
@@ -114,41 +119,58 @@ func Install(opts Options) (Result, error) {
 	}
 	logf("installed binary: " + binPath)
 
-	// The KDE legacy backend is the webwallpaper theme directory the plugin reads.
-	themeDir := paths.ThemeDir()
-	files := []struct {
-		name string
-		data []byte
-	}{
-		{"index.html", theme.IndexHTML},
-		{"local-host.js", theme.LocalHostJS},
-		{"spinewall.theme", theme.ThemeManifest},
-	}
-	for _, f := range files {
-		if err := w.write(filepath.Join(themeDir, f.name), f.data, 0o644); err != nil {
+	// The backend decides the files and the autostart command. The KDE legacy
+	// backend writes the webwallpaper theme the plugin reads; the native backend
+	// writes the launcher source and binary and starts the server with a view.
+	var themeDir string
+	var autostartCommand []string
+	switch opts.Backend {
+	case BackendLayerShell:
+		viewDir, err := installView(w, paths, opts, logf)
+		if err != nil {
 			return Result{}, err
 		}
-	}
-	// The page loads the Spine players by relative URL over file://, so link the
-	// cached players into the theme folder. A cache that is still empty (an
-	// offline first run) gets its links on the next setup or fetch.
-	runtimeEntries, err := ThemeRuntimeEntries(paths, logf)
-	if err != nil {
-		return Result{}, err
-	}
-	for _, e := range runtimeEntries {
-		if prev, ok := w.prev.entry(e.Path); ok && prev.Created {
-			e.Created = true
+		themeDir = viewDir
+		autostartCommand = []string{"serve", "--with-view"}
+		logf("backend: layer-shell view (" + viewDir + ")")
+	default:
+		// The KDE legacy backend is the webwallpaper theme directory the plugin reads.
+		themeDir = paths.ThemeDir()
+		files := []struct {
+			name string
+			data []byte
+		}{
+			{"index.html", theme.IndexHTML},
+			{"local-host.js", theme.LocalHostJS},
+			{"spinewall.theme", theme.ThemeManifest},
 		}
-		w.files[e.Path] = e
+		for _, f := range files {
+			if err := w.write(filepath.Join(themeDir, f.name), f.data, 0o644); err != nil {
+				return Result{}, err
+			}
+		}
+		// The page loads the Spine players by relative URL over file://, so link the
+		// cached players into the theme folder. A cache that is still empty (an
+		// offline first run) gets its links on the next setup or fetch.
+		runtimeEntries, err := ThemeRuntimeEntries(paths, logf)
+		if err != nil {
+			return Result{}, err
+		}
+		for _, e := range runtimeEntries {
+			if prev, ok := w.prev.entry(e.Path); ok && prev.Created {
+				e.Created = true
+			}
+			w.files[e.Path] = e
+		}
+		autostartCommand = []string{"serve"}
+		logf("installed theme: " + themeDir)
 	}
-	logf("installed theme: " + themeDir)
 
 	// XDG autostart is the portable default, so the server runs at login without
 	// assuming systemd. Next to the old Python install it would start a second
 	// server on the same port, so it waits until the user confirms.
 	if startAtLogin {
-		if err := w.write(paths.AutostartFile(), []byte(autostartEntry(binPath)), 0o644); err != nil {
+		if err := w.write(paths.AutostartFile(), []byte(autostartEntry(binPath, autostartCommand...)), 0o644); err != nil {
 			return Result{}, err
 		}
 		logf("installed autostart: " + paths.AutostartFile())
@@ -259,14 +281,19 @@ func sameFile(a, b string) bool {
 	return os.SameFile(ia, ib)
 }
 
-// autostartEntry is the XDG desktop entry that runs the server at login.
-func autostartEntry(binPath string) string {
+// autostartEntry is the XDG desktop entry that runs the server at login, with
+// the given subcommand and flags.
+func autostartEntry(binPath string, command ...string) string {
+	execLine := shellQuote(binPath)
+	if len(command) > 0 {
+		execLine += " " + strings.Join(command, " ")
+	}
 	return strings.Join([]string{
 		"[Desktop Entry]",
 		"Type=Application",
 		"Name=Spinewall",
 		"Comment=Live Spine wallpaper control server",
-		"Exec=" + shellQuote(binPath) + " serve",
+		"Exec=" + execLine,
 		"Terminal=false",
 		"X-GNOME-Autostart-enabled=true",
 		"",

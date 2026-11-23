@@ -187,9 +187,20 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.store.Rescan())
 	case path == "/info":
 		writeJSON(w, http.StatusOK, s.store.InfoReply())
+	case path == "/mask":
+		mask, status, msg := s.store.MaskFor(screen, hasScreen, true)
+		if status != 0 {
+			writeJSON(w, status, map[string]any{"error": msg})
+			return
+		}
+		writeJSON(w, http.StatusOK, mask)
 	case strings.HasPrefix(path, "/thumb/") && strings.HasSuffix(path, ".png"):
 		s.serveThumb(w, path[7:len(path)-4])
 	case strings.HasPrefix(path, "/edit/"):
+		if strings.HasSuffix(path, "/toggle") {
+			writeJSON(w, http.StatusOK, map[string]any{"on": s.store.ToggleEdit()})
+			return
+		}
 		edit := s.store.SetEdit(strings.HasSuffix(path, "/1"))
 		writeJSON(w, http.StatusOK, map[string]any{"on": edit})
 	case strings.HasPrefix(path, "/cmd/"):
@@ -342,6 +353,13 @@ func (s *Server) handlePostBody(w http.ResponseWriter, path, screen string, hasS
 	case path == "/input":
 		s.store.AddInput(body)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	case path == "/mask":
+		mask, status, msg := s.store.MaskPost(screen, hasScreen, body)
+		if status != 0 {
+			writeJSON(w, status, map[string]any{"error": msg})
+			return
+		}
+		writeJSON(w, http.StatusOK, mask)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
 	}

@@ -26,6 +26,7 @@ func fakeEnv(env map[string]string, present map[string]bool, network bool) Optio
 			return m, nil
 		},
 		Network: func() bool { return network },
+		HasPkg:  func([]string) bool { return present["pkg:qt-dev"] },
 	}
 }
 
@@ -136,6 +137,64 @@ func TestRecommendBackendIsKdeLegacy(t *testing.T) {
 	r := Detect(opts)
 	if r.Backend != "kde-legacy" {
 		t.Errorf("backend = %q", r.Backend)
+	}
+}
+
+// readyNative is a Plasma Wayland box with everything the native view needs.
+func readyNative() (map[string]string, map[string]bool) {
+	env := map[string]string{"XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE", "DISTRO_ID": "debian"}
+	present := map[string]bool{
+		"c++": true, "moc": true, "pkg-config": true, "pkg:qt-dev": true,
+		"/usr/lib/qt6/qml/QtWebEngine":        true,
+		"/usr/lib/qt6/qml/org/kde/layershell": true,
+	}
+	return env, present
+}
+
+func TestRecommendLayerShellWhenTheViewCanBuildAndLoad(t *testing.T) {
+	env, present := readyNative()
+	if r := Detect(fakeEnv(env, present, true)); r.Backend != "layer-shell" {
+		t.Errorf("backend = %q, checks %+v", r.Backend, r.Checks)
+	}
+}
+
+func TestDesktopSessionAloneAgreesWithTheRecommendation(t *testing.T) {
+	env, present := readyNative()
+	delete(env, "XDG_CURRENT_DESKTOP")
+	env["DESKTOP_SESSION"] = "sway"
+	r := Detect(fakeEnv(env, present, true))
+	if got := checkNamed(t, r, "layer-shell").Status; got != Found {
+		t.Errorf("layer-shell row = %q, want found", got)
+	}
+	if r.Backend != "layer-shell" {
+		t.Errorf("backend = %q, want layer-shell to match the row", r.Backend)
+	}
+}
+
+func TestNoLayerShellWithoutTheQtDevelopmentModules(t *testing.T) {
+	// The tools are on PATH but pkg-config cannot resolve Qt6WebEngineQuick, so
+	// setup's build would fail.
+	env, present := readyNative()
+	delete(present, "pkg:qt-dev")
+	r := Detect(fakeEnv(env, present, true))
+	if r.Backend != "kde-legacy" {
+		t.Errorf("backend = %q, want kde-legacy", r.Backend)
+	}
+	c := checkNamed(t, r, "view build toolchain")
+	if c.Status != Missing || !strings.Contains(c.Detail, "Qt development modules") {
+		t.Errorf("toolchain check = %+v", c)
+	}
+}
+
+func TestNoLayerShellWithoutTheLayerShellQMLModule(t *testing.T) {
+	env, present := readyNative()
+	delete(present, "/usr/lib/qt6/qml/org/kde/layershell")
+	r := Detect(fakeEnv(env, present, true))
+	if r.Backend != "kde-legacy" {
+		t.Errorf("backend = %q, want kde-legacy", r.Backend)
+	}
+	if c := checkNamed(t, r, "layer-shell QML module"); c.Status != Missing || !strings.Contains(c.Package, "layer-shell-qt") {
+		t.Errorf("QML module check = %+v", c)
 	}
 }
 

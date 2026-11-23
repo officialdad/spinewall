@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/officialdad/spinewall/internal/view"
 )
 
 // Status is one row's result.
@@ -58,6 +60,9 @@ type Options struct {
 	// WaylandGlobals is a file listing the compositor's Wayland globals, as
 	// wayland-info prints them. Empty falls back to the known desktops.
 	WaylandGlobals string
+	// HasPkg reports whether the named pkg-config modules resolve. Nil runs
+	// pkg-config itself.
+	HasPkg func([]string) bool
 }
 
 // Detect runs every check and returns a report.
@@ -93,9 +98,19 @@ func Detect(opts Options) Report {
 		Check{Name: "desktop", Status: foundOrMissing(r.Desktop != "unknown" && r.Desktop != ""), Detail: r.Desktop, Needed: true},
 	)
 
+	// internal/view owns the native view checks, so the rows below and the
+	// recommendation always read the same answers.
+	native := view.Detect(view.Options{
+		Getenv:         getenv,
+		LookPath:       lookPath,
+		Exists:         exists,
+		WaylandGlobals: opts.WaylandGlobals,
+		HasPkg:         opts.HasPkg,
+	})
+
 	// Layer-shell is offered by the compositor. On Wayland read the globals a
 	// probe would see; off Wayland it is simply not available.
-	r.LayerShell = detectLayerShell(getenv, opts.WaylandGlobals, r.Desktop)
+	r.LayerShell = layerShellStatus(native)
 	r.Checks = append(r.Checks, Check{
 		Name:   "layer-shell",
 		Status: r.LayerShell,
@@ -122,6 +137,22 @@ func Detect(opts Options) Report {
 		r.Checks = append(r.Checks, Check{Name: "plasmashell", Status: Found, Detail: "KDE Plasma session"})
 	}
 
+	// The C++ toolchain and Qt development files the native view launcher needs,
+	// and the layer-shell QML module it loads. It builds on the user's machine
+	// because QtWebEngine cannot link into a static Go binary.
+	r.Checks = append(r.Checks, Check{
+		Name:    "view build toolchain",
+		Status:  foundOrMissing(native.Buildable),
+		Detail:  buildDetail(native),
+		Package: toolchainPackage(r.Distro, release["ID_LIKE"]),
+	})
+	r.Checks = append(r.Checks, Check{
+		Name:    "layer-shell QML module",
+		Status:  foundOrMissing(native.LayerShellQML),
+		Detail:  layerShellQMLDetail(native.LayerShellQML),
+		Package: r.PackageCmd,
+	})
+
 	// systemd user session.
 	r.SystemdUser = detectSystemdUser(lookPath, exists)
 	r.Checks = append(r.Checks, Check{
@@ -144,9 +175,34 @@ func Detect(opts Options) Report {
 		Package: "",
 	})
 
-	// Only the KDE legacy backend is installable in this phase.
-	r.Backend = "kde-legacy"
+	// Both backends are reported. internal/view alone decides whether the native
+	// layer-shell view can build and load here; kde-legacy needs Plasma and the
+	// webwallpaper plugin. setup preselects the recommended one.
+	r.Backend = nativeRecommendation(native)
 	return r
+}
+
+// nativeRecommendation picks the backend this machine should run. The native
+// layer-shell view is preferred when the whole chain is present. The KDE legacy
+// backend is the fallback for Plasma users until the cutover, and the default
+// elsewhere, because it is the only backend this release ships for them.
+func nativeRecommendation(native view.DetectResult) string {
+	if native.Ready() {
+		return "layer-shell"
+	}
+	return "kde-legacy"
+}
+
+// Backends lists the backends a user may pick, recommended first. The native
+// view is offered only when this machine can run it; the legacy backend is
+// always offered as the Plasma fallback.
+func (r Report) Backends() []string {
+	out := []string{}
+	if r.Backend == "layer-shell" {
+		out = append(out, "layer-shell")
+	}
+	out = append(out, "kde-legacy")
+	return out
 }
 
 // Missing lists the checks that are missing and needed.
@@ -177,29 +233,12 @@ func (r Report) PackageHints() []string {
 
 // ---- detection helpers ----
 
-// layerShellDesktops offer zwlr_layer_shell_v1. GNOME is the common Wayland
-// desktop that does not.
-var layerShellDesktops = []string{"kde", "sway", "hyprland", "river", "wayfire", "labwc", "niri"}
-
-func detectLayerShell(getenv func(string) string, globalsFile, desktop string) Status {
-	if getenv("XDG_SESSION_TYPE") != "wayland" {
+func layerShellStatus(native view.DetectResult) Status {
+	switch {
+	case native.LayerShell:
+		return Found
+	case native.LayerShellKnown:
 		return Missing
-	}
-	if globalsFile != "" {
-		if data, err := os.ReadFile(globalsFile); err == nil {
-			return foundOrMissing(strings.Contains(string(data), "zwlr_layer_shell_v1"))
-		}
-	}
-	// No probe ran, so only a desktop known either way gives an answer.
-	for _, name := range strings.Split(strings.ToLower(desktop), ":") {
-		if name == "gnome" {
-			return Missing
-		}
-		for _, known := range layerShellDesktops {
-			if name == known {
-				return Found
-			}
-		}
 	}
 	return Unknown
 }
@@ -251,20 +290,9 @@ func gpuVendor(id string) string {
 	}
 }
 
-// qtWebEngineModules are where distros put the QtWebEngine QML module, which
-// the KDE backend and the planned layer-shell view load.
-var qtWebEngineModules = []string{
-	"/usr/lib/qt6/qml/QtWebEngine",
-	"/usr/lib64/qt6/qml/QtWebEngine",
-	"/usr/lib/x86_64-linux-gnu/qt6/qml/QtWebEngine",
-	"/usr/lib/aarch64-linux-gnu/qt6/qml/QtWebEngine",
-}
-
 func detectWebEngine(lookPath func(string) (string, error), exists func(string) bool, pkgCmd string) (Status, string, string) {
-	for _, dir := range qtWebEngineModules {
-		if exists(dir) {
-			return Found, "Qt WebEngine (" + dir + ")", ""
-		}
+	if dir := view.QtWebEngineDir(exists); dir != "" {
+		return Found, "Qt WebEngine (" + dir + ")", ""
 	}
 	for _, browser := range []string{"chromium", "google-chrome-stable", "firefox"} {
 		if _, err := lookPath(browser); err == nil {
@@ -272,6 +300,42 @@ func detectWebEngine(lookPath func(string) (string, error), exists func(string) 
 		}
 	}
 	return Missing, "no Qt WebEngine or browser", pkgCmd
+}
+
+// buildDetail names what the native view launcher build is missing.
+func buildDetail(native view.DetectResult) string {
+	if native.Buildable {
+		return "can build the layer-shell view"
+	}
+	return "missing " + strings.Join(native.BuildMissing, ", ")
+}
+
+func layerShellQMLDetail(found bool) string {
+	if found {
+		return "org.kde.layershell for the layer-shell view"
+	}
+	return "no org.kde.layershell QML module (layer-shell-qt)"
+}
+
+// toolchainPackages is the build toolchain package command per distro family.
+var toolchainPackages = map[string]string{
+	"arch":     "sudo pacman -S base-devel qt6-base qt6-webengine",
+	"debian":   "sudo apt install build-essential qt6-base-dev-tools qt6-webengine-dev qt6-declarative-dev pkg-config",
+	"fedora":   "sudo dnf install gcc-c++ qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtdeclarative-devel pkgconf",
+	"opensuse": "sudo zypper install gcc-c++ qt6-base-devel qt6-webengine-devel qt6-declarative-devel pkg-config",
+	"alpine":   "sudo apk add build-base qt6-qtbase-dev qt6-qtwebengine-dev qt6-qtdeclarative-dev pkgconf",
+	"void":     "sudo xbps-install -S base-devel qt6-base-devel qt6-webengine-devel qt6-declarative-devel pkgconf",
+}
+
+// toolchainPackage maps a distro id, then its ID_LIKE family, to the toolchain
+// install command.
+func toolchainPackage(id, idLike string) string {
+	for _, name := range append([]string{strings.ToLower(id)}, strings.Fields(strings.ToLower(idLike))...) {
+		if family, ok := distroFamilies[name]; ok {
+			return toolchainPackages[family]
+		}
+	}
+	return ""
 }
 
 func detectSystemdUser(lookPath func(string) (string, error), exists func(string) bool) bool {
