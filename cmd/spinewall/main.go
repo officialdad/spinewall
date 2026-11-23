@@ -133,7 +133,7 @@ func serve(args []string) error {
 		PrefsFile:       envOrDefault("SPINEWALL_PREFS", homePath(".local/state/spinewall/prefs.json")),
 		LayoutFile:      envOrDefault("SPINEWALL_LAYOUT", homePath(".local/state/spinewall/layout.json")),
 		ScreensFile:     envOrDefault("SPINEWALL_SCREENS", homePath(".local/state/spinewall/screens.json")),
-		ThumbDir:        envOrDefault("SPINEWALL_THUMBS", homePath(".cache/spinewall/thumbs")),
+		ThumbDir:        envOrDefault("SPINEWALL_THUMBS", filepath.Join(filepath.Dir(runtime.DefaultDir()), "thumbs")),
 		LegacyStateFile: homePath(".local/state/spinewall.json"),
 	}
 

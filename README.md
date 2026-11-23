@@ -151,7 +151,7 @@ Prefer another way:
 
 1. `spinewall doctor` shows what the machine has and names the exact package command for your distro. It never runs a package manager.
 2. The Spine licence notice, with a consent prompt.
-3. Fetches the Spine runtimes into `~/.cache/spinewall/runtime`, checking each download against a pinned sha256.
+3. Fetches the Spine runtimes into `~/.cache/spinewall/runtime` (under `$XDG_CACHE_HOME` when set), checking each download against a pinned sha256.
 4. Asks for the models folder, kept in `~/.config/spinewall/config.json`.
 5. Chooses a backend. KDE Plasma legacy installs today.
 6. Installs the files, an XDG autostart entry, and optionally a systemd user unit, then starts the server and verifies it with `/info`. The install links the fetched players into the theme folder (`~/.local/share/webwallpaper/themes/spinewall`), because the KDE backend opens the page from `file://` and the page loads each player by relative URL. A refetch or `spinewall runtime fetch` relinks them. The opt-in systemd unit mounts the theme folder read-only, so a server under it cannot relink the players and logs that once. Run `spinewall runtime fetch` or `spinewall setup` to relink them. A `--runtime-dir` or `SPINEWALL_RUNTIME_DIR` that is not the default cache, and not the one the theme links to, never touches the installed theme or its manifest.
@@ -325,7 +325,7 @@ Spinewall is a viewer. It includes no Spine runtime. The only models are the few
 | `SPINEWALL_PREFS` | `~/.local/state/spinewall/prefs.json` | Favorites, recents, sort, filters, presets. |
 | `SPINEWALL_LAYOUT` | `~/.local/state/spinewall/layout.json` | Several-character layout. |
 | `SPINEWALL_SCREENS` | `~/.local/state/spinewall/screens.json` | Layout and last preset of each monitor. |
-| `SPINEWALL_THUMBS` | `~/.cache/spinewall/thumbs` | Thumbnail cache. |
+| `SPINEWALL_THUMBS` | `$XDG_CACHE_HOME/spinewall/thumbs`, `~/.cache/spinewall/thumbs` when unset | Thumbnail cache. |
 | `SPINEWALL_RUNTIME_DIR` | `$XDG_CACHE_HOME/spinewall/runtime`, `~/.cache/spinewall/runtime` when unset | Fetched Spine players and the cache manifest. |
 | `SPINEWALL_OFFLINE` | unset | Set to `1` to refuse every runtime fetch and use only the cache. |
 
@@ -347,7 +347,7 @@ The server listens on `127.0.0.1` only and rejects requests with another `Host` 
 spinewall uninstall
 ```
 
-The installer records every file it writes in `~/.local/state/spinewall/install-manifest.json` with its sha256. `spinewall uninstall` removes exactly those files, stops the server, and asks before it touches `~/.local/state/spinewall` and `~/.cache/spinewall`, which hold your prefs and the runtime cache. It never touches the models directory.
+The installer records every file it writes in `~/.local/state/spinewall/install-manifest.json` with its sha256. `spinewall uninstall` removes exactly those files, stops the server, and asks before it touches `~/.local/state/spinewall` and `~/.cache/spinewall` (under `$XDG_CACHE_HOME` when set), which hold your prefs, the thumbnails, and the runtime cache. It never touches the models directory.
 
 - `spinewall uninstall --yes` removes state and cache too, which returns a fresh install to its starting home.
 - `spinewall uninstall --purge` removes state and cache without asking.

@@ -106,7 +106,8 @@ func New(opts Options) *Manager {
 	}
 }
 
-// DefaultDir is the per-user runtime cache: ~/.cache/spinewall/runtime.
+// DefaultDir is the per-user runtime cache: $XDG_CACHE_HOME/spinewall/runtime,
+// ~/.cache/spinewall/runtime when XDG_CACHE_HOME is unset.
 func DefaultDir() string {
 	cache, err := os.UserCacheDir()
 	if err != nil {
