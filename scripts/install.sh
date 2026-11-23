@@ -1,103 +1,121 @@
-#!/usr/bin/env bash
-# Installs spinewall user-local. Run from any directory.
-# The Spine runtime is fetched from npm because its license forbids redistribution.
-# Runtime fetching is now owned by `spinewall runtime fetch`; this block stays as
-# a shim for the legacy KDE install and the page tests until the installer phase
-# removes it.
-set -euo pipefail
+#!/bin/sh
+# spinewall bootstrap. Downloads the release binary, verifies it, installs it to
+# ~/.local/bin, then runs `spinewall setup`.
+#
+# One command:
+#   curl -fsSL https://github.com/officialdad/spinewall/releases/latest/download/install.sh | sh
+#
+# It needs only sh, curl or wget, and sha256sum or shasum. minisign is used when
+# it is installed for a real signature check; otherwise the SHA256SUMS check
+# still catches a corrupt download.
+#
+# The Spine runtimes are never in the release: their licence forbids
+# redistribution. `spinewall setup` fetches them on this machine.
+set -eu
 
-# --build-theme DIR only builds the theme into DIR. package-windows.py uses it so the runtime pins stay in this file.
-build_only=""
-if [ "${1:-}" = "--build-theme" ]; then
-  build_only="${2:?error: --build-theme needs a directory.}"
-fi
+REPO="officialdad/spinewall"
+# Public minisign key for the release signature. PLACEHOLDER: the captain must
+# replace this with the real key and add the secret key to the release workflow
+# before the first signed release. While it is the placeholder, the signature
+# step prints a clear message instead of failing.
+MINISIGN_PUBLIC_KEY="RWSPINEWALLPLACEHOLDERKEYREPLACETHISWITHTHEREALKEY00000000000000000="
 
-tools=(npm curl sha256sum tar sed)
-[ -z "$build_only" ] && tools+=(python3 systemctl)
-for tool in "${tools[@]}"; do
-  command -v "$tool" >/dev/null || { echo "error: $tool is required and was not found on PATH." >&2; exit 1; }
-done
+say() { printf '%s\n' "$*" >&2; }
+die() { say "error: $*"; exit 1; }
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-theme_dir="$HOME/.local/share/webwallpaper/themes/spinewall"
-models_dir="$HOME/.local/share/spinewall/models"
-state_dir="$HOME/.local/state/spinewall"
-cache_dir="$HOME/.cache/spinewall"
-bin_dir="$HOME/.local/bin"
-work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
-# Files are built here first, so a failed check never leaves a half-installed theme.
-stage="$work/theme"
-mkdir -p "$stage"
-
-# Spine 4.0, 4.1 and 4.2 binaries are not compatible, so the theme loads one player per minor version.
-# Each tarball is pinned by sha256, so a changed registry copy stops the install.
-fetch_runtime() {
-  local version="$1" global="$2" sha256="$3"
-  local tarball="$work/esotericsoftware-spine-player-$version.tgz"
-  (cd "$work" && npm pack "@esotericsoftware/spine-player@$version" --silent >/dev/null)
-  echo "$sha256  $tarball" | sha256sum -c --quiet
-  local dir="$work/$global"
-  mkdir -p "$dir"
-  tar xzf "$tarball" -C "$dir"
-  # Both players define the global `spine`, so rename it to keep them apart.
-  sed "s/^var spine = /var $global = /" "$dir/package/dist/iife/spine-player.js" \
-    > "$stage/spine-player${global#spine}.js"
-  grep -q "^var $global = " "$stage/spine-player${global#spine}.js" \
-    || { echo "error: the $version player has no 'var spine = ' line to rename. Update this script." >&2; exit 1; }
-  cp "$dir/package/dist/spine-player.css" "$stage/spine-player.css"
-}
-
-# The 3.7 and 3.8 players are not on npm. Each comes from a pinned commit of the official runtimes repo.
-# The player refers to the global `spine` internally, so a rename with sed breaks it.
-# A function scope keeps the global private and exposes it as `spine37` or `spine38`.
-fetch_runtime_legacy() {
-  local global="$1" commit="$2" sha256="$3"
-  local file="spine-player${global#spine}.js"
-  local url="https://raw.githubusercontent.com/EsotericSoftware/spine-runtimes/$commit/spine-ts/build/spine-player.js"
-  curl -fsSL "$url" -o "$work/$file"
-  echo "$sha256  $work/$file" | sha256sum -c --quiet
-  { echo "var $global = (function () {"; cat "$work/$file"; printf '\nreturn spine;\n})();\n'; } \
-    > "$stage/$file"
-  grep -q "^var $global = " "$stage/$file"
-}
-
-fetch_runtime 4.0.31 spine40 db13daf8219b1de211785ed6bf70588b66879168cd9b7406aa62b30cef56d8b1
-fetch_runtime 4.1.56 spine41 5c6d530857d6eb18d8bb5f8b10e4ba62fed42e887bf874088e91fe57f2307a80
-fetch_runtime 4.2.120 spine42 f553d60910e6069b121555d4575c60f31c65d6fd2a3e349328ba9d2882dd79f1
-fetch_runtime_legacy spine38 8b4844bd4b193ba9e54487ed397a777993cbad56 3f335337a8fa9c51c6502a7557ea44cd2bcb4f22483adae275e4ecf5ec69faec
-fetch_runtime_legacy spine37 9639bcc81722d7178fd9d1cdc1a3d55a4c91f989 7e94ec3760c98013b2eb4449fc9ad0fe84b7a3cbe9c4368e326c7339628a3feb
-cp "$root/theme/index.html" "$root/theme/local-host.js" "$root/theme/spinewall.theme" "$stage/"
-
-if [ -n "$build_only" ]; then
-  mkdir -p "$build_only"
-  cp "$stage"/* "$build_only/"
-  exit 0
-fi
-
-# The CLI is the Go binary. Resolve it before the home directory is touched, so
-# a machine with neither Go nor a prebuilt binary fails loudly instead of
-# getting a CLI that cannot run.
-if command -v go >/dev/null 2>&1; then
-  cli_bin="$work/spinewall"
-  (cd "$root" && CGO_ENABLED=0 go build -o "$cli_bin" ./cmd/spinewall)
-elif [ -x "$root/spinewall" ]; then
-  cli_bin="$root/spinewall"
+# --- download helpers: curl or wget ---
+if command -v curl >/dev/null 2>&1; then
+  fetch() { curl -fsSL "$1"; }
+  fetch_to() { curl -fsSL -o "$2" "$1"; }
+elif command -v wget >/dev/null 2>&1; then
+  fetch() { wget -qO- "$1"; }
+  fetch_to() { wget -qO "$2" "$1"; }
 else
-  echo "error: no Go toolchain and no prebuilt binary at $root/spinewall. Install Go or place a built spinewall there." >&2
-  exit 1
+  die "curl or wget is required."
 fi
 
-# Everything checked. Only now does the install touch the home directory.
-mkdir -p "$theme_dir" "$models_dir" "$state_dir" "$cache_dir" "$bin_dir" "$HOME/.config/systemd/user"
-cp "$stage"/* "$theme_dir/"
+# --- checksum helper: sha256sum or shasum ---
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256() { sha256sum "$1" | awk '{print $1}'; }
+elif command -v shasum >/dev/null 2>&1; then
+  sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
+else
+  die "sha256sum or shasum is required."
+fi
 
-install -m 755 "$root/server/spinewall-server.py" "$bin_dir/spinewall-server"
-install -m 755 "$cli_bin" "$bin_dir/spinewall"
-cp "$root/systemd/spinewall.service" "$HOME/.config/systemd/user/"
-systemctl --user daemon-reload
-systemctl --user enable spinewall.service
-systemctl --user restart spinewall.service
+# --- arch ---
+case "$(uname -m)" in
+  x86_64 | amd64) arch=amd64 ;;
+  aarch64 | arm64) arch=arm64 ;;
+  *) die "unsupported architecture: $(uname -m). Build from source with: go install github.com/$REPO/cmd/spinewall@latest" ;;
+esac
 
-echo "Installed. Put models in $models_dir (see docs/assets.md)."
-echo "Next: run scripts/patch-plasmoid.sh, then select the spinewall theme in the WebWallpaper config."
+# --- latest release tag, and the base URL for that release ---
+tag="${SPINEWALL_VERSION:-}"
+if [ -z "$tag" ]; then
+  latest_url="https://api.github.com/repos/$REPO/releases/latest"
+  tag="$(fetch "$latest_url" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)"
+fi
+[ -n "$tag" ] || die "could not find the latest release. Set SPINEWALL_VERSION=vX.Y.Z to pick one."
+version="${tag#v}"
+base="https://github.com/$REPO/releases/download/$tag"
+
+binary="spinewall-$version-linux-$arch"
+url="$base/$binary"
+sums_url="$base/SHA256SUMS"
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT INT TERM
+
+say "spinewall $version ($arch)"
+say "downloading $binary"
+fetch_to "$url" "$work/$binary" || die "download failed: $url"
+fetch_to "$sums_url" "$work/SHA256SUMS" || die "download failed: $sums_url"
+
+# --- checksum ---
+want="$(awk -v f="$binary" '$2 == f {print $1}' "$work/SHA256SUMS")"
+[ -n "$want" ] || die "$binary is not listed in SHA256SUMS. The release is incomplete."
+got="$(sha256 "$work/$binary")"
+[ "$want" = "$got" ] || die "checksum mismatch for $binary: expected $want, got $got"
+say "checksum ok"
+
+# --- signature (minisign when present) ---
+sig_url="$base/SHA256SUMS.minisig"
+if fetch_to "$sig_url" "$work/SHA256SUMS.minisig" 2>/dev/null; then
+  if command -v minisign >/dev/null 2>&1; then
+    if [ "${MINISIGN_PUBLIC_KEY#RWSPINEWALLPLACEHOLDER}" != "$MINISIGN_PUBLIC_KEY" ]; then
+      say "note: this build has a placeholder signature key, so the signature is not verified."
+      say "      the SHA256SUMS check above was still run. Check the release page for the key."
+    else
+      printf '%s\n' "$MINISIGN_PUBLIC_KEY" > "$work/minisign.pub"
+      minisign -Vm "$work/SHA256SUMS" -p "$work/minisign.pub" \
+        || die "signature check failed for SHA256SUMS"
+      say "signature ok"
+    fi
+  else
+    say "note: minisign is not installed, so only the SHA256SUMS check was run."
+    say "      install minisign to verify the release signature."
+  fi
+else
+  say "note: no signature file in this release; only the SHA256SUMS check was run."
+fi
+
+# --- install ---
+bin_dir="$HOME/.local/bin"
+mkdir -p "$bin_dir"
+cp "$work/$binary" "$bin_dir/spinewall"
+chmod 755 "$bin_dir/spinewall"
+say "installed $bin_dir/spinewall"
+
+# --- put ~/.local/bin on PATH for this run, so `spinewall setup` resolves ---
+PATH="$bin_dir:$PATH"
+export PATH
+
+# --- run the wizard ---
+# Not exec: the exit trap must still clear the download directory. The setup
+# exit code is the bootstrap's exit code.
+spinewall setup "$@"
+status=$?
+trap - EXIT INT TERM
+rm -rf "$work"
+exit "$status"

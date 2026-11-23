@@ -74,7 +74,10 @@ class Syntax(unittest.TestCase):
         self.assertTrue(files)
         for path in files:
             with self.subTest(path=path.relative_to(ROOT)):
-                done = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
+                # A POSIX sh script is checked by sh, so a bash-only construct is
+                # caught in the dialect it actually runs in.
+                shell = "sh" if path.read_text().startswith("#!/bin/sh") else "bash"
+                done = subprocess.run([shell, "-n", str(path)], capture_output=True, text=True)
                 self.assertEqual(done.returncode, 0, done.stderr)
 
     def test_bash_scripts_are_executable(self):
@@ -87,7 +90,12 @@ class Syntax(unittest.TestCase):
         for path in bash_scripts():
             if path.parent.name in ("scripts", "bin"):
                 with self.subTest(path=path.relative_to(ROOT)):
-                    self.assertIn("set -euo pipefail", path.read_text())
+                    text = path.read_text()
+                    # A POSIX sh script cannot use `pipefail`, so it declares -eu.
+                    if text.startswith("#!/bin/sh"):
+                        self.assertIn("set -eu", text)
+                    else:
+                        self.assertIn("set -euo pipefail", text)
 
     def test_server_has_a_python_shebang_and_is_executable(self):
         server = ROOT / "server/spinewall-server.py"
@@ -105,10 +113,17 @@ class Shellcheck(unittest.TestCase):
         tool = shutil.which("shellcheck")
         if not tool:
             self.skipTest("shellcheck is not installed")
-        files = [str(p) for p in bash_scripts() if p.parent.name in ("scripts", "bin")]
+        files = [p for p in bash_scripts() if p.parent.name in ("scripts", "bin")]
         self.assertTrue(files)
-        done = subprocess.run([tool, *files], capture_output=True, text=True, cwd=ROOT)
-        self.assertEqual(done.returncode, 0, done.stdout)
+        for path in files:
+            with self.subTest(path=path.relative_to(ROOT)):
+                # Tell shellcheck the dialect from the shebang, so a POSIX sh
+                # bootstrap is not flagged for bash-only rules.
+                dialect = "sh" if path.read_text().startswith("#!/bin/sh") else "bash"
+                done = subprocess.run(
+                    [tool, "-s", dialect, str(path)], capture_output=True, text=True, cwd=ROOT
+                )
+                self.assertEqual(done.returncode, 0, done.stdout)
 
 
 class NoForbiddenContent(unittest.TestCase):

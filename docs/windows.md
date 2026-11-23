@@ -10,7 +10,7 @@ The Windows build runs the page in local mode. It needs no server and no Python 
 |---|---|
 | Spine license | Each end user needs a Spine Editor license. The runtime license forbids sharing the built package. |
 | Models | You must have the right to use each model. |
-| Build machine | Linux, macOS, or Windows with Git Bash. It needs `python3`, `npm`, `curl`, `sha256sum`, `tar`, and `sed`. |
+| Build machine | Linux, macOS, or Windows with Git Bash. It needs `python3`, `go`, `curl`, `sha256sum`, and `tar`. The runtime is fetched by `spinewall build-theme`. |
 | Host app | [Lively Wallpaper](https://github.com/rocksdanister/lively) or Wallpaper Engine. |
 
 ## Step 1 - get models

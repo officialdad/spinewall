@@ -17,9 +17,13 @@ import (
 	"github.com/officialdad/spinewall/theme"
 )
 
+// version is set at build time with -X main.version.
+var version = "dev"
+
 func main() {
-	// A first argument of serve or runtime is the server. Anything else is a
-	// client command against the running server, including no argument (info).
+	// A first argument of serve, runtime, doctor, setup, install or uninstall is
+	// a local command. Anything else is a client command against the running
+	// server, including no argument (info).
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "serve":
@@ -33,6 +37,39 @@ func main() {
 				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
 				os.Exit(1)
 			}
+			return
+		case "doctor":
+			if err := runDoctor(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "setup":
+			if err := runSetup(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "install":
+			if err := runInstall(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "uninstall":
+			if err := runUninstall(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "build-theme":
+			if err := runBuildTheme(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		case "version", "--version":
+			fmt.Println(version)
 			return
 		}
 	}
@@ -126,8 +163,20 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	// Record the pid so `spinewall uninstall` can stop this process. A failure to
+	// write it is not fatal: the port check in StopServer is the backstop.
+	writePidFile(filepath.Dir(paths.StateFile))
 	server := &http.Server{Handler: srv}
 	return server.Serve(listener)
+}
+
+// writePidFile records the process id beside the server state.
+func writePidFile(stateDir string) {
+	pidFile := filepath.Join(stateDir, "server.pid")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644)
 }
 
 // neededRuntimes returns the distinct runtime globals the scanned models use.

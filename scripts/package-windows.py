@@ -71,7 +71,26 @@ def import_zip(archive, models_dir):
 
 
 def build_theme(destination):
-    subprocess.run(["bash", str(ROOT / "scripts/install.sh"), "--build-theme", str(destination)], check=True)
+    # The Go binary builds the theme, so the runtime pins stay in one place and no
+    # npm or shell script is needed.
+    binary = find_binary()
+    subprocess.run([binary, "build-theme", str(destination)], check=True)
+
+
+def find_binary():
+    """Return a spinewall binary: one in the repo root, else build one."""
+    local = ROOT / "spinewall"
+    if local.is_file() and os.access(local, os.X_OK):
+        return str(local)
+    scratch = Path(tempfile.mkdtemp(prefix="spinewall-build-theme-"))
+    out = scratch / "spinewall"
+    subprocess.run(
+        ["go", "build", "-o", str(out), "./cmd/spinewall"],
+        cwd=ROOT,
+        check=True,
+        env=dict(os.environ, CGO_ENABLED="0"),
+    )
+    return str(out)
 
 
 def write_page(theme, out):

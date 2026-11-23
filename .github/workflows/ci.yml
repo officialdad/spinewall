@@ -21,7 +21,9 @@ jobs:
       - name: Python compiles
         run: python3 -I -m py_compile server/spinewall-server.py
       - name: Shell syntax
-        run: bash -n scripts/install.sh scripts/patch-plasmoid.sh bin/spinewall
+        run: |
+          sh -n scripts/install.sh
+          bash -n scripts/patch-plasmoid.sh bin/spinewall
       - name: Shell lint
         run: shellcheck scripts/*.sh bin/spinewall tests/page/setup.sh
       - name: No assets or runtimes tracked
@@ -74,6 +76,8 @@ jobs:
         env:
           SPINEWALL_BIN: ${{ github.workspace }}/spinewall
         run: python3 -I -m unittest discover -s tests -t . -v
+      - name: Installer end-to-end (setup, doctor, uninstall, pty)
+        run: python3 -I -m unittest discover -s tests -t . -p 'test_setup.py' -v
       - name: Differential parity, Python server vs Go server
         run: |
           work="$(mktemp -d)"

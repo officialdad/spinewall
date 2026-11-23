@@ -96,7 +96,7 @@ A model with `.moc3` files will not load. Many viewers and games call their Spin
 
 - The `webwallpaper-kde` plugin shows a web page as the desktop background.
 - The `spinewall` theme is that page. It draws the model with the Spine WebGL player.
-- A local Python server on `127.0.0.1:8777` holds the state: model, animation, zoom, position.
+- A local server in the `spinewall` binary on `127.0.0.1:8777` holds the state: model, animation, zoom, position.
 - The page polls the server. The `spinewall` CLI and global shortcuts send commands to it.
 
 ## Input
@@ -120,8 +120,8 @@ Enter edit mode from the Plasma desktop menu: right-click the desktop, then choo
 ## Requirements
 
 - KDE Plasma 6 on Wayland or X11. Tested on Plasma 6.8.1, Wayland.
-- [`webwallpaper-kde`](https://github.com/ekoputrapratama/webwallpaper-kde), installed and working.
-- `python3`, `npm`, `curl`, `patch`, `systemd` (user session).
+- [`webwallpaper-kde`](https://github.com/ekoputrapratama/webwallpaper-kde), installed and working. This is the only backend that installs today; a desktop-agnostic layer-shell backend is planned.
+- `curl` or `wget` for the one-line install, and `patch` for the desktop containment. The server, the CLI, and the runtime fetch need no Python or npm: they are in one static Go binary.
 - Spine models. See [docs/assets.md](docs/assets.md).
 
 ## Supported versions
@@ -134,15 +134,38 @@ Enter edit mode from the Plasma desktop menu: right-click the desktop, then choo
 
 ## Install
 
-Download the latest `spinewall-X.Y.Z.tar.gz` and `SHA256SUMS` from the [releases page](https://github.com/officialdad/spinewall/releases). Run `sha256sum -c SHA256SUMS`, extract the archive, and run the steps below from the extracted directory. A git clone works too.
+One command downloads the release binary, verifies it, and starts a setup wizard:
 
-1. Install `webwallpaper-kde` and restart plasmashell. Follow its README.
-2. Run `scripts/install.sh`. It fetches the Spine runtimes (npm for 4.x, a pinned `spine-runtimes` commit for 3.7 and 3.8), installs the theme, the server, the CLI, and the user service.
-3. Run `scripts/patch-plasmoid.sh`. It lets left clicks reach the wallpaper. See the warning below.
-4. Restart plasmashell: `systemctl --user restart plasma-plasmashell.service`.
-5. Put models in `~/.local/share/spinewall/models/`. See [docs/assets.md](docs/assets.md).
-6. Restart the server: `systemctl --user restart spinewall.service`.
-7. Right-click the desktop, open "Configure Desktop and Wallpaper", choose "WebWallpaper", and pick the `spinewall` theme.
+```
+curl -fsSL https://github.com/officialdad/spinewall/releases/latest/download/install.sh | sh
+```
+
+The bootstrap downloads `spinewall-<version>-linux-<arch>` and `SHA256SUMS`, checks the hash, and verifies the release signature with `minisign` when it is installed. It then installs the binary to `~/.local/bin/spinewall` and runs `spinewall setup`.
+
+Prefer another way:
+
+- **Go:** `go install github.com/officialdad/spinewall/cmd/spinewall@latest`, then run `spinewall setup`.
+- **Tarball:** download `spinewall-X.Y.Z.tar.gz` and `SHA256SUMS` from the [releases page](https://github.com/officialdad/spinewall/releases). Run `sha256sum -c SHA256SUMS`, extract the archive, and run `go build -o spinewall ./cmd/spinewall`, then `./spinewall setup`.
+
+`spinewall setup` is a terminal wizard. Run it yourself to see each step, or `spinewall setup --yes` for a non-interactive run with defaults. Each step is skippable and safe to run again:
+
+1. `spinewall doctor` shows what the machine has and names the exact package command for your distro. It never runs a package manager.
+2. The Spine licence notice, with a consent prompt.
+3. Fetches the Spine runtimes into `~/.cache/spinewall/runtime`, checking each download against a pinned sha256.
+4. Asks for the models folder, kept in `~/.config/spinewall/config.json`.
+5. Chooses a backend. KDE Plasma legacy installs today.
+6. Installs the files, an XDG autostart entry, and optionally a systemd user unit, then starts the server and verifies it with `/info`.
+
+Run `spinewall doctor` on its own at any time, and paste its table into a bug report.
+
+Then finish the Plasma side:
+
+1. Run `scripts/patch-plasmoid.sh`. It lets left clicks reach the wallpaper. See the warning below.
+2. Restart plasmashell: `systemctl --user restart plasma-plasmashell.service`.
+3. Put models in `~/.local/share/spinewall/models/` (or the folder you chose), then run `spinewall rescan`. See [docs/assets.md](docs/assets.md).
+4. Right-click the desktop, open "Configure Desktop and Wallpaper", choose "WebWallpaper", and pick the `spinewall` theme.
+
+**Autostart.** The wizard writes `~/.config/autostart/spinewall.desktop`, which starts the server at login on any XDG desktop. If a systemd user session is detected it offers `~/.config/systemd/user/spinewall.service` as an opt-in. On sway, Hyprland, or river, add `exec-once = ~/.local/bin/spinewall serve` to your compositor config. Spinewall never edits a compositor config for you.
 
 ## CLI
 
@@ -174,19 +197,22 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | `theme/local-host.js` | Local mode. Runs the server's state logic in the page, with `localStorage` for state and prefs. |
 | `theme/embed.go` | Embeds the page and local host into the Go binary. Never embeds the Spine players. |
 | `server/spinewall-server.py` | Local HTTP server. State, model scan, prefs, layout, thumbnails. |
-| `cmd/spinewall` | The one binary. `spinewall serve` is a drop-in for the Python server. `spinewall runtime fetch\|verify` manages the players. Any other argument is a client command against a running server. |
+| `cmd/spinewall` | The one binary. `spinewall serve` is a drop-in for the Python server. `spinewall setup`, `doctor`, `install`, `uninstall`, and `build-theme` manage an install; `spinewall runtime fetch\|verify` manages the players. Any other argument is a client command against a running server. |
 | `internal/cli` | The client commands. Percent-encoding, the 3-argument limit, the shortcut log, and `--screen current` over D-Bus on KDE. |
 | `internal/api` | Go HTTP handlers, guards, body caps, model file serving. |
 | `internal/state` | Go stage, characters, presets and prefs logic. |
 | `internal/runtime` | Pins the Spine players by sha256, fetches and verifies them into `SPINEWALL_RUNTIME_DIR` (default under the user cache), and serves them. Never embeds them. |
 | `internal/scan` | Go model scan, version sniff, atlas regions, kind detection. |
 | `internal/jx` | Go JSON decoder that matches Python `json.loads`, so both servers read a body the same way. |
+| `internal/doctor` | Detects session, desktop, layer-shell, GPU, web engine, systemd, and network, and names the distro package command. Never runs a package manager. |
+| `internal/install` | The install manifest, install and uninstall, the XDG autostart entry, the opt-in systemd unit, and the legacy uninstall. |
+| `internal/tui` | The `setup` wizard: huh and bubbletea forms that run the doctor, the licence consent, the runtime fetch, the install, and the start-and-verify. |
 | `bin/spinewall` | Deprecated shim. Runs a built `spinewall` binary when one is next to it, so the legacy installer keeps working until the installer phase. It holds no CLI logic. |
 | `scripts/build-demo.py` | Builds the Pages demo from `theme/index.html` in local mode. |
 | `scripts/package-windows.py` | Builds the Lively zip and Wallpaper Engine files for Windows. See [docs/windows.md](docs/windows.md). Unconfirmed on Windows. |
-| `scripts/install.sh` | Installs theme, server, CLI, and user service. Fetches the runtimes. |
+| `scripts/install.sh` | The POSIX bootstrap: downloads the release binary, verifies it, and runs `spinewall setup`. |
 | `scripts/patch-plasmoid.sh` | Applies `plasma/desktopcontainment.patch`. |
-| `systemd/spinewall.service` | User service for the server. |
+| `systemd/spinewall.service` | The hardened user unit the wizard can generate as an opt-in. |
 | `docs/assets.md` | Model layout and `model.json` keys. |
 | `docs/credits.md` | Sources, tools, and test models. |
 
@@ -278,7 +304,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT
 
 ## Legal notice
 
-Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `scripts/install.sh` fetches the runtimes from Esoteric Software. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters (Chisato and Takina) belong to their rights holders. SHIFT UP Corporation made the demo models and owns the related art and models. Spinewall is a fan project. Neither SHIFT UP nor those rights holders sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
+Spinewall is a viewer. It includes no Spine runtime. The only models are the few samples for the live demo, shown as samples only under `docs/demo/models/`, and removed on request from their owners. `spinewall setup` fetches the runtimes from Esoteric Software on your machine. Each user needs their own Spine Editor license under the Spine Runtimes License. The demo characters (Chisato and Takina) belong to their rights holders. SHIFT UP Corporation made the demo models and owns the related art and models. Spinewall is a fan project. Neither SHIFT UP nor those rights holders sponsor, endorse, or affiliate with it. Other game characters and art belong to their owners, and Spinewall has no affiliation with them. Use only models you own or have the right to use, for personal non-commercial use. The MIT license covers this repository's code only.
 
 ## Configuration
 
@@ -292,6 +318,8 @@ Spinewall is a viewer. It includes no Spine runtime. The only models are the few
 | `SPINEWALL_LAYOUT` | `~/.local/state/spinewall/layout.json` | Several-character layout. |
 | `SPINEWALL_SCREENS` | `~/.local/state/spinewall/screens.json` | Layout and last preset of each monitor. |
 | `SPINEWALL_THUMBS` | `~/.cache/spinewall/thumbs` | Thumbnail cache. |
+| `SPINEWALL_RUNTIME_DIR` | `~/.cache/spinewall/runtime` | Fetched Spine players and the cache manifest. |
+| `SPINEWALL_OFFLINE` | unset | Set to `1` to refuse every runtime fetch and use only the cache. |
 
 The server listens on `127.0.0.1` only and rejects requests with another `Host` header. It has no login. Any local user can send it commands.
 
@@ -307,17 +335,22 @@ The server listens on `127.0.0.1` only and rejects requests with another `Host` 
 
 ## Uninstall
 
-1. Run `systemctl --user disable --now spinewall.service`.
-2. Remove `~/.local/bin/spinewall`, `~/.local/bin/spinewall-server`, and `~/.config/systemd/user/spinewall.service`.
-3. Remove `~/.local/share/webwallpaper/themes/spinewall`.
-4. Remove `~/.local/share/plasma/plasmoids/org.kde.desktopcontainment`.
-5. Remove `~/.local/state/spinewall` and `~/.cache/spinewall` if you want to drop your prefs.
-6. Restart plasmashell.
+```
+spinewall uninstall
+```
+
+The installer records every file it writes in `~/.local/state/spinewall/install-manifest.json` with its sha256. `spinewall uninstall` removes exactly those files, stops the server, and asks before it touches `~/.local/state/spinewall` and `~/.cache/spinewall`, which hold your prefs and the runtime cache. It never touches the models directory.
+
+- `spinewall uninstall --yes` removes state and cache too, which returns a fresh install to its starting home.
+- `spinewall uninstall --keep-state` keeps your prefs and the runtime cache.
+- `spinewall uninstall --legacy` also removes an old Python install (`~/.local/bin/spinewall-server`, the old unit, the theme under `~/.local/share/webwallpaper/themes/spinewall`, and the patched containment copy, restoring its `.bak` when present).
+
+Then restart plasmashell if you removed the containment patch.
 
 ## Not included
 
 - Spine models. You supply them. Use only models you have the right to use.
-- The Spine runtime. `scripts/install.sh` fetches it from npm. Its license is the Spine Runtimes License, so you need a Spine license to use it in your own product.
+- The Spine runtime. `spinewall setup` fetches it from npm and a pinned `spine-runtimes` commit on your machine. Its license is the Spine Runtimes License, so you need a Spine license to use it in your own product.
 
 ## Status
 

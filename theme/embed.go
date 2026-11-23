@@ -13,3 +13,9 @@ var IndexHTML []byte
 //
 //go:embed local-host.js
 var LocalHostJS []byte
+
+// ThemeManifest is theme/spinewall.theme, the legacy webwallpaper theme manifest
+// the KDE backend reads.
+//
+//go:embed spinewall.theme
+var ThemeManifest []byte
