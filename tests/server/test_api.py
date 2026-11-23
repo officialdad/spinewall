@@ -653,6 +653,12 @@ class NativeView(ServerCase):
         other = self.get(f"/mask?screen={screen}").json
         self.assertIs(other["full"], True, "a new screen inherited another's mask")
 
+    def test_mask_post_caps_new_screens_like_go(self):
+        self.assertEqual(self.post("/mask", {"full": True}).status, 200)
+        statuses = [self.post(f"/mask?screen=K{i}", {"full": True}).status for i in range(1, 18)]
+        self.assertEqual(statuses[:16], [200] * 16)
+        self.assertEqual(statuses[16], 400, "a screen past the cap got a mask")
+
     def test_edit_toggle_flips_the_flag(self):
         self.assertEqual(self.get("/edit/0").json["on"], 0)
         self.assertEqual(self.get("/edit/toggle").json["on"], 1)

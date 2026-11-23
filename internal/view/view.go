@@ -30,7 +30,7 @@ type Options struct {
 	HasPkg func([]string) bool
 }
 
-// DetectResult reports whether this machine can run the native view and why.
+// DetectResult reports whether this machine can run the native view.
 type DetectResult struct {
 	// LayerShell is true when the compositor offers zwlr_layer_shell_v1.
 	LayerShell bool
@@ -44,8 +44,6 @@ type DetectResult struct {
 	Buildable bool
 	// BuildMissing names each build requirement that is missing.
 	BuildMissing []string
-	// Reasons names each missing piece, empty when the native view can run.
-	Reasons []string
 }
 
 // layerShellDesktops offer zwlr_layer_shell_v1. GNOME is the common Wayland
@@ -92,7 +90,6 @@ func Detect(opts Options) DetectResult {
 
 	var r DetectResult
 	if runtime.GOOS != "linux" {
-		r.Reasons = append(r.Reasons, "the native view runs on Linux only")
 		return r
 	}
 
@@ -103,30 +100,17 @@ func Detect(opts Options) DetectResult {
 	pkgModules := hasPkg(launcherPkgs)
 	r.Buildable = compiler && moc && pkgOK && pkgModules
 
-	if !r.LayerShell {
-		r.Reasons = append(r.Reasons, "the compositor does not offer zwlr_layer_shell_v1")
-	}
-	if !r.WebEngine {
-		r.Reasons = append(r.Reasons, "the Qt WebEngine QML module is missing")
-	}
-	if !r.LayerShellQML {
-		r.Reasons = append(r.Reasons, "the org.kde.layershell QML module is missing (install layer-shell-qt)")
-	}
 	if !compiler {
 		r.BuildMissing = append(r.BuildMissing, "C++ compiler")
-		r.Reasons = append(r.Reasons, "no C++ compiler (install a C++ toolchain)")
 	}
 	if !moc {
 		r.BuildMissing = append(r.BuildMissing, "moc")
-		r.Reasons = append(r.Reasons, "no moc (install the Qt base development package)")
 	}
 	if !pkgOK {
 		r.BuildMissing = append(r.BuildMissing, "pkg-config")
-		r.Reasons = append(r.Reasons, "no pkg-config (install pkgconf)")
 	}
 	if !pkgModules {
 		r.BuildMissing = append(r.BuildMissing, "Qt development modules")
-		r.Reasons = append(r.Reasons, "missing Qt development modules: "+strings.Join(launcherPkgs, " "))
 	}
 
 	return r

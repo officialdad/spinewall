@@ -40,13 +40,13 @@ func TestDetectIsReadyWhenProven(t *testing.T) {
 	})
 	r := Detect(opts)
 	if !r.Ready() {
-		t.Errorf("not ready (reasons: %v)", r.Reasons)
+		t.Errorf("not ready: %+v", r)
 	}
 	if !r.LayerShell || !r.WebEngine || !r.LayerShellQML || !r.Buildable {
 		t.Errorf("detect = %+v", r)
 	}
-	if len(r.Reasons) != 0 {
-		t.Errorf("reasons on a ready box: %v", r.Reasons)
+	if len(r.BuildMissing) != 0 {
+		t.Errorf("build pieces missing on a ready box: %v", r.BuildMissing)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestDetectWithoutACompilerIsNotReady(t *testing.T) {
 	if r.Buildable {
 		t.Error("buildable with no compiler")
 	}
-	assertReason(t, r.Reasons, "C++ compiler")
+	assertReason(t, r.BuildMissing, "C++ compiler")
 }
 
 func TestDetectGNOMENeedsNoLayerShell(t *testing.T) {
@@ -79,7 +79,6 @@ func TestDetectGNOMENeedsNoLayerShell(t *testing.T) {
 	if r.Ready() {
 		t.Error("the native view is ready on GNOME, which has no layer-shell")
 	}
-	assertReason(t, r.Reasons, "zwlr_layer_shell_v1")
 }
 
 func TestDetectX11HasNoLayerShell(t *testing.T) {
@@ -119,7 +118,6 @@ func TestDetectWithoutTheLayerShellQMLModuleIsNotReady(t *testing.T) {
 	if !r.Buildable || r.LayerShellQML || r.Ready() {
 		t.Errorf("detect = %+v", r)
 	}
-	assertReason(t, r.Reasons, "org.kde.layershell")
 }
 
 func TestPageURLNamesTheMonitorAndTheNativeView(t *testing.T) {

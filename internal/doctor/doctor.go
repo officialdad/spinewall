@@ -48,13 +48,6 @@ type Report struct {
 	Network       bool
 	LayerShell    Status
 	WebEngineName string
-	// Buildable is true when the C++ toolchain, moc, pkg-config and the Qt
-	// development modules can build the native view launcher. The layer-shell
-	// backend needs it.
-	Buildable bool
-	// LayerShellQML is true when the org.kde.layershell QML module the native
-	// view loads is present. The layer-shell backend needs it.
-	LayerShellQML bool
 }
 
 // Options let tests replace the detection sources.
@@ -145,14 +138,12 @@ func Detect(opts Options) Report {
 		WaylandGlobals: opts.WaylandGlobals,
 		HasPkg:         opts.HasPkg,
 	})
-	r.Buildable = native.Buildable
 	r.Checks = append(r.Checks, Check{
 		Name:    "view build toolchain",
 		Status:  foundOrMissing(native.Buildable),
 		Detail:  buildDetail(native),
 		Package: toolchainPackage(r.Distro, release["ID_LIKE"]),
 	})
-	r.LayerShellQML = native.LayerShellQML
 	r.Checks = append(r.Checks, Check{
 		Name:    "layer-shell QML module",
 		Status:  foundOrMissing(native.LayerShellQML),
@@ -182,11 +173,10 @@ func Detect(opts Options) Report {
 		Package: "",
 	})
 
-	// Both backends are reported. The native layer-shell view needs a layer-shell
-	// compositor, Qt WebEngine, the layer-shell QML module and the build
-	// toolchain; kde-legacy needs Plasma
-	// and the webwallpaper plugin. setup preselects the recommended one.
-	r.Backend = nativeRecommendation(r)
+	// Both backends are reported. internal/view alone decides whether the native
+	// layer-shell view can build and load here; kde-legacy needs Plasma and the
+	// webwallpaper plugin. setup preselects the recommended one.
+	r.Backend = nativeRecommendation(native)
 	return r
 }
 
@@ -194,10 +184,8 @@ func Detect(opts Options) Report {
 // layer-shell view is preferred when the whole chain is present. The KDE legacy
 // backend is the fallback for Plasma users until the cutover, and the default
 // elsewhere, because it is the only backend this release ships for them.
-func nativeRecommendation(r Report) string {
-	if r.LayerShell == Found && r.WebEngineName != "" && !strings.HasPrefix(r.WebEngineName, "chromium") &&
-		!strings.HasPrefix(r.WebEngineName, "firefox") && !strings.HasPrefix(r.WebEngineName, "google") &&
-		r.Buildable && r.LayerShellQML {
+func nativeRecommendation(native view.DetectResult) string {
+	if native.Ready() {
 		return "layer-shell"
 	}
 	return "kde-legacy"
