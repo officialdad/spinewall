@@ -135,26 +135,8 @@ func Detect(opts Options) DetectResult {
 	return r
 }
 
-// Available lists the backends this machine could run, recommended first.
-func (r DetectResult) Available() []Backend {
-	var out []Backend
-	if r.Recommended == BackendLayerShell {
-		out = append(out, BackendLayerShell)
-	}
-	if isKDEFromReport(r) || r.Recommended == BackendKDELegacy {
-		out = append(out, BackendKDELegacy)
-	} else if r.Recommended != BackendLayerShell {
-		// The legacy backend is KDE only, but doctor still names it as the
-		// fallback the user can pick explicitly.
-		out = append(out, BackendKDELegacy)
-	}
-	return out
-}
-
-// isKDEFromReport is a best-effort hint; detection already put availabay into
-// Recommended, so callers prefer that.
-func isKDEFromReport(r DetectResult) bool { return false }
-
+// isKDE reports whether this is a KDE Plasma session, which decides the
+// fallback backend the reason names.
 func isKDE(getenv func(string) string) bool {
 	desktop := strings.ToLower(getenv("XDG_CURRENT_DESKTOP") + ":" + getenv("DESKTOP_SESSION"))
 	for _, name := range strings.Split(desktop, ":") {
