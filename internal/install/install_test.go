@@ -382,3 +382,28 @@ func TestLegacyUninstallRemovesTheOldUnitAndTheme(t *testing.T) {
 		}
 	}
 }
+
+func TestLegacyUninstallRemovesALegacyThemeTheNewInstallFound(t *testing.T) {
+	paths := testPaths(t)
+	writeLegacy(t, paths, false)
+	if err := os.MkdirAll(paths.ThemeDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"index.html", "local-host.js", "spinewall.theme", "spine40.js"} {
+		if err := os.WriteFile(filepath.Join(paths.ThemeDir(), name), []byte("old"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := Install(Options{Paths: paths, Executable: fakeBinary(t)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := LegacyUninstall(paths, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Uninstall(UninstallOptions{Paths: paths}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(paths.ThemeDir()); err == nil {
+		t.Error("the legacy theme, with its Spine player, was left behind")
+	}
+}

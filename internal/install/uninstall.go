@@ -152,10 +152,11 @@ func legacyPythonPaths(paths Paths) []string {
 	return found
 }
 
-// manifestHasUnder reports whether the install manifest records a file inside dir.
+// manifestHasUnder reports whether this install created a file inside dir. A
+// file it found already there predates it, so it does not count.
 func manifestHasUnder(m Manifest, dir string) bool {
 	for _, e := range m.Files {
-		if strings.HasPrefix(e.Path, dir+string(filepath.Separator)) {
+		if e.Created && strings.HasPrefix(e.Path, dir+string(filepath.Separator)) {
 			return true
 		}
 	}

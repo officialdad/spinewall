@@ -149,8 +149,10 @@ func runUninstall(args []string) error {
 	if !opts.RemoveState {
 		fmt.Println("state and cache were kept. Run 'spinewall uninstall --purge' to remove them.")
 	}
-	if legacy {
+	if legacy && len(res.KeptFiles) == 0 {
 		fmt.Println("The old Python install and this install are both removed. Run 'spinewall setup' to install spinewall again.")
+	} else if legacy {
+		fmt.Println("The old Python install is removed. Some files of this install were kept. Run 'spinewall setup' to install spinewall again.")
 	}
 	return nil
 }
