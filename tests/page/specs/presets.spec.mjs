@@ -211,8 +211,12 @@ test("a long preset list scrolls inside the pane and a search narrows it", async
   expect(box.height).toBeGreaterThan(300);
   expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
   // Two columns or more, so the list is not one long column.
-  const first = await cards(page).nth(0).boundingBox(), second = await cards(page).nth(1).boundingBox();
-  expect(second.y).toBe(first.y);
+  // The list rebuilds its cards when prefs arrive, so a box read can hit a card that was just replaced. Poll until it settles.
+  await expect(cards(page)).toHaveCount(61);
+  await expect.poll(async () => {
+    const first = await cards(page).nth(0).boundingBox(), second = await cards(page).nth(1).boundingBox();
+    return first && second ? second.y - first.y : null;
+  }).toBe(0);
 
   await pane(page).getByRole("searchbox", { name: "Search presets" }).fill("sunset");
   await expect(cards(page)).toHaveText(["Sunset walk1 character"]);

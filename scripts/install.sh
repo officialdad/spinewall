@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Installs spinewall user-local. Run from any directory.
 # The Spine runtime is fetched from npm because its license forbids redistribution.
+# Runtime fetching is now owned by `spinewall runtime fetch`; this block stays as
+# a shim for the legacy KDE install and the page tests until the installer phase
+# removes it.
 set -euo pipefail
 
 # --build-theme DIR only builds the theme into DIR. package-windows.py uses it so the runtime pins stay in this file.

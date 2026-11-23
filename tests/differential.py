@@ -98,6 +98,10 @@ class Server:
             "SPINEWALL_SCREENS": os.path.join(self.state_dir, "screens.json"),
             "SPINEWALL_THUMBS": os.path.join(self.state_dir, "thumbs"),
             "SPINEWALL_CONFIG": os.path.join(self.state_dir, "config.json"),
+            # The Go server fetches runtimes on first run. The differential stays
+            # offline with an empty temp cache; the API comparison needs no players.
+            "SPINEWALL_RUNTIME_DIR": os.path.join(home, "runtime"),
+            "SPINEWALL_OFFLINE": "1",
         }
 
     def start(self, home):

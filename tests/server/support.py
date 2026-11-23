@@ -189,6 +189,11 @@ class ServerProcess:
             "SPINEWALL_SCREENS": str(self.state_dir / "screens.json"),
             "SPINEWALL_THUMBS": str(self.thumbs),
         }
+        if GO_BIN:
+            # The Go server fetches runtimes on first run. Tests stay offline with
+            # an empty temp cache, so no download is attempted in the suite.
+            env["SPINEWALL_RUNTIME_DIR"] = str(self.root / "runtime")
+            env["SPINEWALL_OFFLINE"] = "1"
         env.update(self.extra_env)
         return env
 
