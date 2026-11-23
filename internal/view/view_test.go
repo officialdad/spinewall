@@ -133,7 +133,7 @@ func TestReadyX11NeedsNoLayerShellQML(t *testing.T) {
 func TestBrowserCommandRunsOnItsOwnProfile(t *testing.T) {
 	cases := map[string][]string{
 		"firefox":  {"--new-instance", "--profile", "/p/kiosk", "--kiosk", "http://x/index.html"},
-		"chromium": {"--user-data-dir=/p/kiosk", "--kiosk", "http://x/index.html"},
+		"chromium": {"--user-data-dir=/p/kiosk", "--no-first-run", "--no-default-browser-check", "--kiosk", "http://x/index.html"},
 	}
 	for browser, want := range cases {
 		got, err := BrowserCommand("http://x/index.html", "/p/kiosk", func(name string) (string, error) {

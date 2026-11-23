@@ -134,7 +134,7 @@ func Run(opts Options) (Result, error) {
 		args := "serve"
 		switch backend {
 		case string(install.BackendLayerShell):
-			args = "serve --with-view"
+			args = "serve --with-view --view-backend layer-shell"
 		case string(install.BackendX11):
 			args = "serve --with-view --view-backend x11"
 		}

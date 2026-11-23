@@ -171,7 +171,7 @@ Run `spinewall doctor` on its own at any time, and paste its table into a bug re
 
 Then finish the desktop side for your backend:
 
-**Native layer-shell view.** setup writes the launcher source to `~/.cache/spinewall/view` and builds it. The autostart entry runs `spinewall serve --with-view`, which serves the page and draws one layer-shell window per monitor. Nothing else is needed: no plugin, no patch. Click a character to change its animation. Enter edit mode from the Edit button in the corner, or bind `spinewall edit` to a shortcut. A click on the character reaches the page and a click elsewhere reaches the desktop, because the launcher keeps the window's input mask around the characters. See [docs/native-view.md](docs/native-view.md).
+**Native layer-shell view.** setup writes the launcher source to `~/.cache/spinewall/view` and builds it. The autostart entry runs `spinewall serve --with-view --view-backend layer-shell`, which serves the page and draws one layer-shell window per monitor. Nothing else is needed: no plugin, no patch. Click a character to change its animation. Enter edit mode from the Edit button in the corner, or bind `spinewall edit` to a shortcut. A click on the character reaches the page and a click elsewhere reaches the desktop, because the launcher keeps the window's input mask around the characters. See [docs/native-view.md](docs/native-view.md).
 
 **Native X11 view** (best effort, unverified). On a real X11 session setup writes the same launcher and an autostart entry that runs `spinewall serve --with-view --view-backend x11`, which draws one desktop-type window per monitor. Run it once by hand to try it: `spinewall view --backend x11`. See [docs/desktops.md](docs/desktops.md) for the window-manager caveats.
 
@@ -184,13 +184,13 @@ Then finish the desktop side for your backend:
 3. Put models in `~/.local/share/spinewall/models/` (or the folder you chose), then run `spinewall rescan`. See [docs/assets.md](docs/assets.md).
 4. Right-click the desktop, open "Configure Desktop and Wallpaper", choose "WebWallpaper", and pick the `spinewall` theme.
 
-**Autostart.** The wizard writes `~/.config/autostart/spinewall.desktop`. The native layer-shell backend runs `spinewall serve --with-view`; the X11 backend pins its surface with `--view-backend x11`; the KDE legacy backend runs `spinewall serve`. If a systemd user session is detected it offers `~/.config/systemd/user/spinewall.service` as an opt-in. sway, Hyprland, and river do not run XDG autostart entries, so the wizard prints the line for yours. Spinewall never edits a compositor config for you.
+**Autostart.** The wizard writes `~/.config/autostart/spinewall.desktop`. The native layer-shell backend runs `spinewall serve --with-view --view-backend layer-shell`; the X11 backend pins its surface with `--view-backend x11`; the KDE legacy backend runs `spinewall serve`. If a systemd user session is detected it offers `~/.config/systemd/user/spinewall.service` as an opt-in. sway, Hyprland, and river do not run XDG autostart entries, so the wizard prints the line for yours. Spinewall never edits a compositor config for you.
 
 | Compositor | File | Line |
 |---|---|---|
-| sway | `~/.config/sway/config` | `exec ~/.local/bin/spinewall serve --with-view` |
-| Hyprland | `~/.config/hypr/hyprland.conf` | `exec-once = ~/.local/bin/spinewall serve --with-view` |
-| river | `~/.config/river/init` | `riverctl spawn "~/.local/bin/spinewall serve --with-view"` |
+| sway | `~/.config/sway/config` | `exec ~/.local/bin/spinewall serve --with-view --view-backend layer-shell` |
+| Hyprland | `~/.config/hypr/hyprland.conf` | `exec-once = ~/.local/bin/spinewall serve --with-view --view-backend layer-shell` |
+| river | `~/.config/river/init` | `riverctl spawn "~/.local/bin/spinewall serve --with-view --view-backend layer-shell"` |
 
 **Old Python install.** `spinewall setup` and `spinewall doctor` warn when `~/.local/bin/spinewall-server` or its systemd unit is still present. setup then writes no autostart entry or unit and starts no server, because both servers use one port. Run `spinewall uninstall --legacy`, then `spinewall setup` again. `--alongside-legacy` installs autostart anyway.
 

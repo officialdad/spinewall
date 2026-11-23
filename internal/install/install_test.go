@@ -224,8 +224,8 @@ func TestLayerShellBackendWritesTheViewAndStartsWithIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "serve --with-view") {
-		t.Errorf("autostart does not start the view:\n%s", data)
+	if !strings.Contains(string(data), "serve --with-view --view-backend layer-shell") {
+		t.Errorf("autostart does not pin the layer-shell surface:\n%s", data)
 	}
 	// The view files are in the manifest, so uninstall removes them.
 	recorded := false

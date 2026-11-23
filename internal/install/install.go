@@ -136,12 +136,10 @@ func Install(opts Options) (Result, error) {
 			return Result{}, err
 		}
 		themeDir = viewDir
-		autostartCommand = []string{"serve", "--with-view"}
-		if opts.Backend == BackendX11 {
-			// Pin the surface: a Wayland login on the same machine must not
-			// switch the autostart entry to a layer-shell surface that cannot load.
-			autostartCommand = append(autostartCommand, "--view-backend", "x11")
-		}
+		// Pin the surface: a login of the other session type on the same machine
+		// must not switch the autostart entry to a surface the user did not pick,
+		// and an unverified surface must never replace a verified one.
+		autostartCommand = []string{"serve", "--with-view", "--view-backend", string(opts.Backend)}
 		logf("backend: " + string(opts.Backend) + " view (" + viewDir + ")")
 	default:
 		// The KDE legacy backend is the webwallpaper theme directory the plugin reads.

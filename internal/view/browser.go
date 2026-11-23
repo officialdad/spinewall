@@ -57,7 +57,7 @@ func BrowserCommand(url, profileDir string, lookPath func(string) (string, error
 		if c.firefox {
 			return Browser{Name: name, Args: []string{"--new-instance", "--profile", profileDir, "--kiosk", url}}, nil
 		}
-		return Browser{Name: name, Args: []string{"--user-data-dir=" + profileDir, "--kiosk", url}}, nil
+		return Browser{Name: name, Args: []string{"--user-data-dir=" + profileDir, "--no-first-run", "--no-default-browser-check", "--kiosk", url}}, nil
 	}
 	return Browser{}, fmt.Errorf("no kiosk browser found: install chromium or firefox, or use the native view")
 }

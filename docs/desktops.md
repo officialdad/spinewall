@@ -7,7 +7,16 @@ Plasma 6 Wayland; see [native-view.md](native-view.md). Report results on
 [issue #2](https://github.com/officialdad/spinewall/issues/2).
 
 `spinewall doctor` prints what this machine offers and names the line to run.
-The lines below are what it prints for the unverified parts.
+It marks the unverified parts with these lines. The providers line appears only
+in a Hyprland or sway session. On a GNOME session the last line is the first
+GNOME form, elsewhere the second:
+
+```text
+Unverified backends: x11, kiosk (best effort, not confirmed on real hardware; see docs/desktops.md)
+Unverified --screen current providers: hyprland, sway
+GNOME: unsupported, and no layer-shell backend is offered (see docs/desktops.md)
+GNOME: unsupported (no layer-shell; see docs/desktops.md)
+```
 
 ## What is proven, and what is not
 
