@@ -124,7 +124,8 @@ test("arrow keys move the highlight and Enter plays", async ({ open, page }) => 
   await pickerOpen(open, page);
   const search = page.getByRole("combobox", { name: "Search models" });
   await search.fill("Solo");
-  await expect(cells(page)).toHaveCount(Object.keys(SOLO).length);
+  // The list draws only the rows near its viewport, so the match count comes from the listbox label.
+  await expect(page.getByRole("listbox", { name: `Models, ${Object.keys(SOLO).length} shown` })).toBeVisible();
   await search.press("ArrowDown");
   await search.press("ArrowDown");
   const active = page.locator("#list .cell.active");
