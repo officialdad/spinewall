@@ -1,7 +1,7 @@
 """scripts/install.sh with stub npm, curl, systemctl, and sha256sum, so no network is used.
 
 The stub sha256sum stands in for the pinned hashes, which only match the real packages.
-A run against the real registry and the real hashes is gated by SPINEWALL_TEST_NETWORK=1.
+The real-network pin check now lives in the Go runtime tests, gated by SPINEWALL_TEST_NETWORK=1.
 """
 
 import os
@@ -231,17 +231,6 @@ class Pins(unittest.TestCase):
             self.assertIn(name, page)
         for global_name in ("spine37", "spine38", "spine40", "spine41", "spine42"):
             self.assertIn(global_name, page)
-
-
-@unittest.skipUnless(os.environ.get("SPINEWALL_TEST_NETWORK") == "1", "set SPINEWALL_TEST_NETWORK=1 to run against the real registry")
-class RealNetwork(ScriptCase):
-    def test_real_install_matches_every_pinned_hash(self):
-        write_stub(self.stubs, "systemctl", 'echo "$*" >> "$STUB_LOG"')
-        done = self.run_script(SCRIPTS / "install.sh", env_extra={"STUB_LOG": str(self.tmp / "log")})
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        theme = self.home / ".local/share/webwallpaper/themes/spinewall"
-        for name in ("spine-player37.js", "spine-player38.js", "spine-player40.js", "spine-player41.js", "spine-player42.js"):
-            self.assertGreater((theme / name).stat().st_size, 10000, name)
 
 
 if __name__ == "__main__":

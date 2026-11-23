@@ -3,7 +3,7 @@
 import json
 import unittest
 
-from tests.server.support import SharedServerCase, ServerCase, ServerProcess, make_model
+from tests.server.support import GO_BIN, SharedServerCase, ServerCase, ServerProcess, make_model
 
 
 class HostAndOrigin(SharedServerCase):
@@ -176,11 +176,18 @@ class FileServing(ServerCase):
         self.assertEqual(self.get("/named/model.json?x=1").status, 404)
 
     def test_no_directory_listing(self):
-        for path in ("/", "/alpha", "/alpha/"):
+        for path in ("/alpha", "/alpha/"):
             with self.subTest(path=path):
                 resp = self.get(path)
                 self.assertEqual(resp.status, 404)
                 self.assertNotIn(b"alpha.skel", resp.body)
+        # The Go binary serves the embedded page at /; the Python reference does not.
+        root = self.get("/")
+        if GO_BIN:
+            self.assertEqual(root.status, 200)
+            self.assertIn(b"<html", root.body.lower())
+        else:
+            self.assertEqual(root.status, 404)
 
     def test_other_extensions_are_not_served(self):
         (self.server.models / "alpha" / "secret.sh").write_text("x")

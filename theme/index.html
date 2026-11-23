@@ -321,7 +321,11 @@ html.bar-on{--bar-h:64px}
   <button id="barBrowse" type="button" aria-label="Browse models and presets" aria-controls="picker" aria-expanded="false" title="Browse models and presets">Browse</button>
 </div>
 <script>
-const API = "http://127.0.0.1:8777";
+// The binary serves this page itself, so an HTTP origin is the API origin. A
+// file:// page falls back to the default port.
+const API = location.protocol === "http:" || location.protocol === "https:"
+  ? location.origin
+  : "http://127.0.0.1:8777";
 // Local mode runs without the Spinewall server. A host page sets `window.SPINEWALL_LOCAL = {modelsUrl}`,
 // or a browser opens this page with `?local=<models index url>`. The index lists the models, and the
 // model folders sit beside it.

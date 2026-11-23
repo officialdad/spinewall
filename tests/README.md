@@ -49,7 +49,7 @@ How it works:
 
 Known gaps:
 
-- The `install.sh` happy path uses a stub `sha256sum`, so the pinned hashes are not checked offline. Run the real install check with `SPINEWALL_TEST_NETWORK=1`.
+- The `install.sh` happy path uses a stub `sha256sum`, so the pinned hashes are not checked offline. The real runtime check is the Go test, gated by `SPINEWALL_TEST_NETWORK=1` (`go test ./internal/runtime`).
 - The patch is tested against files rebuilt from its own old side. It is not tested against a real `plasma-desktop` 6.8.1 tree.
 - shellcheck tests skip when `shellcheck` is not on PATH.
 

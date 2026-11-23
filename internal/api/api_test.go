@@ -255,22 +255,63 @@ func TestModelFileServedAndHidden(t *testing.T) {
 
 func TestThemeServed(t *testing.T) {
 	s, _ := newTestServer(t)
-	page := do(t, s, http.MethodGet, "/index.html", nil, nil)
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "<html>") {
-		t.Fatalf("page status %d body %q", page.Code, page.Body.String())
+	for _, path := range []string{"/", "/index.html"} {
+		page := do(t, s, http.MethodGet, path, nil, nil)
+		if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "<html>") {
+			t.Fatalf("%s status %d body %q", path, page.Code, page.Body.String())
+		}
 	}
 	js := do(t, s, http.MethodGet, "/local-host.js", nil, nil)
 	if js.Code != http.StatusOK || js.Body.String() != "js" {
 		t.Fatalf("js status %d body %q", js.Code, js.Body.String())
 	}
-	if rec := do(t, s, http.MethodGet, "/", nil, nil); rec.Code != http.StatusNotFound {
-		t.Fatalf("root status %d", rec.Code)
+}
+
+type fakeRuntime map[string][]byte
+
+func (f fakeRuntime) File(name string) ([]byte, bool) {
+	data, ok := f[name]
+	return data, ok
+}
+
+func TestRuntimeFilesServed(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.theme.Runtime = fakeRuntime{
+		"spine-player41.js": []byte("var spine41 = {};"),
+		"spine-player.css":  []byte(".spine-player{}"),
+	}
+	js := do(t, s, http.MethodGet, "/spine-player41.js", nil, nil)
+	if js.Code != http.StatusOK || js.Body.String() != "var spine41 = {};" {
+		t.Fatalf("js status %d body %q", js.Code, js.Body.String())
+	}
+	if ct := js.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/javascript") {
+		t.Fatalf("js content type %q", ct)
+	}
+	css := do(t, s, http.MethodGet, "/spine-player.css", nil, nil)
+	if css.Code != http.StatusOK || !strings.HasPrefix(css.Header().Get("Content-Type"), "text/css") {
+		t.Fatalf("css status %d ct %q", css.Code, css.Header().Get("Content-Type"))
+	}
+	// A known runtime the cache has not validated answers 404, never empty bytes.
+	if rec := do(t, s, http.MethodGet, "/spine-player37.js", nil, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("uncached runtime status %d", rec.Code)
+	}
+	// An unknown player name is not a runtime path at all.
+	if rec := do(t, s, http.MethodGet, "/spine-player99.js", nil, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown runtime status %d", rec.Code)
+	}
+}
+
+func TestRuntimeNotInstalledWithoutAProvider(t *testing.T) {
+	s, _ := newTestServer(t)
+	rec := do(t, s, http.MethodGet, "/spine-player41.js", nil, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status %d", rec.Code)
 	}
 }
 
 func TestNoDirectoryListing(t *testing.T) {
 	s, _ := newTestServer(t)
-	for _, path := range []string{"/", "/alpha", "/alpha/"} {
+	for _, path := range []string{"/alpha", "/alpha/"} {
 		rec := do(t, s, http.MethodGet, path, nil, nil)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("%s status %d", path, rec.Code)

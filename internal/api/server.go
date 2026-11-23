@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/officialdad/spinewall/internal/jx"
+	"github.com/officialdad/spinewall/internal/runtime"
 	"github.com/officialdad/spinewall/internal/state"
 )
 
@@ -43,10 +44,17 @@ type Server struct {
 	theme Theme
 }
 
-// Theme holds the embedded page bytes.
+// RuntimeProvider serves a validated runtime file, such as spine-player41.js.
+// It is the internal/runtime.Manager in production and a stub in tests.
+type RuntimeProvider interface {
+	File(name string) ([]byte, bool)
+}
+
+// Theme holds the embedded page bytes and the runtime file provider.
 type Theme struct {
 	Page      []byte
 	LocalHost []byte
+	Runtime   RuntimeProvider
 }
 
 // New builds a Server.
@@ -180,17 +188,38 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"on": edit})
 	case strings.HasPrefix(path, "/cmd/"):
 		s.handleCommand(w, path[5:], screen, hasScreen)
-	case path == "/index.html":
+	case path == "/" || path == "/index.html":
 		s.serveBytes(w, "text/html; charset=utf-8", s.theme.Page)
 	case path == "/local-host.js":
 		s.serveBytes(w, "text/javascript; charset=utf-8", s.theme.LocalHost)
+	case runtime.IsRuntimeFile(strings.TrimPrefix(path, "/")):
+		s.serveRuntimeFile(w, strings.TrimPrefix(path, "/"))
 	default:
 		s.handleModelFile(w, path)
 	}
 }
 
-// serveBytes answers with embedded theme bytes. Only two exact paths serve the
-// page, so "/" and a directory path still answer 404 as the file rules require.
+// serveRuntimeFile answers a cached Spine player or stylesheet. A file the
+// manager has not validated is a 404, never corrupt bytes.
+func (s *Server) serveRuntimeFile(w http.ResponseWriter, name string) {
+	if s.theme.Runtime == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "runtime not installed"})
+		return
+	}
+	data, ok := s.theme.Runtime.File(name)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "runtime not installed"})
+		return
+	}
+	contentType := "text/javascript; charset=utf-8"
+	if strings.HasSuffix(name, ".css") {
+		contentType = "text/css; charset=utf-8"
+	}
+	s.serveBytes(w, contentType, data)
+}
+
+// serveBytes answers with embedded theme bytes. Only the page and local host
+// paths serve, so a directory path still answers 404 as the file rules require.
 func (s *Server) serveBytes(w http.ResponseWriter, contentType string, data []byte) {
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
