@@ -49,6 +49,8 @@ func Print(w io.Writer, r Report) {
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "Recommended backend: %s (all requirements found)\n", r.Backend)
 	}
+	// Name every backend the user may pick, so a bug report shows the choice.
+	fmt.Fprintf(w, "Backends available: %s\n", strings.Join(r.Backends(), ", "))
 }
 
 // Summary is a one-line form for logs.

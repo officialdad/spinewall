@@ -68,7 +68,18 @@ COMMANDS = [
     ("bogus", ["arg"]),
 ]
 
-READ_ENDPOINTS = ["/state", "/models", "/prefs", "/presets", "/screens", "/info"]
+READ_ENDPOINTS = ["/state", "/models", "/prefs", "/presets", "/screens", "/info", "/mask"]
+
+# The edit paths and a mask report must agree too. The mask POST is given the
+# same body on both servers and the reply compared, so the region logic matches.
+EDIT_PATHS = ["/edit/1", "/edit/0", "/edit/toggle", "/edit/toggle", "/edit/0"]
+MASK_POSTS = [
+    {"rects": [{"x": 10, "y": 20, "w": 100, "h": 200}]},
+    {"rects": [{"x": 0, "y": 0, "w": 0, "h": 50}, {"x": 5, "y": 5, "w": 20, "h": 30}]},
+    {"rects": []},
+    {"full": True},
+    {"bad": "body"},
+]
 
 
 def free_port():
@@ -134,6 +145,17 @@ class Server:
         url = f"http://127.0.0.1:{self.port}{path}"
         try:
             with urllib.request.urlopen(url, timeout=30) as resp:
+                return resp.status, resp.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode("utf-8", "replace")
+
+    def post(self, path, body):
+        """POST a JSON body, mirroring the app's Content-Type guard."""
+        url = f"http://127.0.0.1:{self.port}{path}"
+        data = json.dumps(body).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 return resp.status, resp.read().decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode("utf-8", "replace")
@@ -284,6 +306,19 @@ def main():
             compare(f"status {path}", py_status, go_status, failures)
             if name not in ("random-model", "random-anim"):
                 compare(f"body {path}", decode(py_body), decode(go_body), failures)
+
+        # The native view edits mode and reports its click mask through the same
+        # server, so those replies must match too.
+        for path in EDIT_PATHS:
+            py_status, py_body = python_server.get(path)
+            go_status, go_body = go_server.get(path)
+            compare(f"status {path}", py_status, go_status, failures)
+            compare(f"body {path}", decode(py_body), decode(go_body), failures)
+        for body in MASK_POSTS:
+            py_status, py_body = python_server.post("/mask", body)
+            go_status, go_body = go_server.post("/mask", body)
+            compare(f"status POST /mask {body}", py_status, go_status, failures)
+            compare(f"body POST /mask {body}", decode(py_body), decode(go_body), failures)
 
         for path in READ_ENDPOINTS:
             py_status, py_body = python_server.get(path)

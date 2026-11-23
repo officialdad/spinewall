@@ -179,6 +179,9 @@ func (s *Store) screenStage(key string, create bool) *Stage {
 	}
 	if create && len(s.screens) < screenMax {
 		stage := s.lastChosen.clone()
+		// The mask belongs to one window. A copied stage gets a new window, so it
+		// must start full or the new window would inherit another's click region.
+		stage.mask = nil
 		s.screens[key] = stage
 		s.screenOrder = append(s.screenOrder, key)
 		s.saveScreens()

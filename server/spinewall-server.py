@@ -298,6 +298,69 @@ IDS = [m["id"] for m in MODELS]
 ANIMS = {}
 EDIT = {"on": 0}
 INPUT = dict.fromkeys(INPUT_KEYS, 0)
+# The input region a native-view window accepts clicks in, in window pixels.
+# It belongs to one window, which is one screen's stage, and never reaches disk.
+# Keyed by screen key ("" is the default stage), so it is stable for the life of
+# the process. It starts full so a page that has not reported yet keeps every
+# click.
+MASKS = {}
+MASK_RECTS_MAX = 64
+
+
+def full_mask():
+    return {"full": True, "rects": [], "rev": 0}
+
+
+def stage_mask(key):
+    """The stored mask for a screen key, creating the full one on first use."""
+    mask = MASKS.get(key)
+    if mask is None:
+        mask = full_mask()
+        MASKS[key] = mask
+    return mask
+
+
+def set_mask(key, full=False, rects=None):
+    """Store a screen's window input region. Bumps rev only when the region changed."""
+    mask = stage_mask(key)
+    clean = [] if full else list(rects or [])[:MASK_RECTS_MAX]
+    if mask["full"] == bool(full) and mask["rects"] == clean:
+        return mask
+    mask.update({"full": bool(full), "rects": clean, "rev": mask["rev"] + 1})
+    return mask
+
+
+def _mask_int(value):
+    """An int field, defaulting to 0. A bool or float reads as 0, as plainInt does in Go."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return value
+
+
+def post_mask(key, body):
+    """Apply a page's mask report to a screen. Returns (mask, None) or (None, error message)."""
+    if body.get("full") is True:
+        return set_mask(key, full=True), None
+    raw = body.get("rects")
+    if not isinstance(raw, list):
+        if "full" in body:
+            return set_mask(key, rects=[]), None
+        return None, "bad mask"
+    rects = []
+    for item in raw:
+        if not isinstance(item, dict):
+            return None, "bad mask"
+        rect = {
+            "x": _mask_int(item.get("x")),
+            "y": _mask_int(item.get("y")),
+            "w": _mask_int(item.get("w")),
+            "h": _mask_int(item.get("h")),
+        }
+        if rect["w"] <= 0 or rect["h"] <= 0:
+            continue
+        rects.append(rect)
+    return set_mask(key, rects=rects), None
+
 
 
 def read_json_dict(path):
@@ -1160,8 +1223,14 @@ class Handler(SimpleHTTPRequestHandler):
                 }
             )
         elif path.startswith("/edit/"):
-            EDIT["on"] = 1 if path.endswith("/1") else 0
+            EDIT["on"] = (1 - EDIT["on"]) if path.endswith("/toggle") else (1 if path.endswith("/1") else 0)
             self.send_json(EDIT)
+        elif path == "/mask":
+            # A page may create its stage, so the key resolves the same way /state does.
+            stage = self.stage_param(create=True)
+            if stage is None:
+                return True
+            self.send_json(stage_mask(self.screen or ""))
         elif path.startswith("/cmd/"):
             name, _, raw_arg = path[5:].partition("/")
             if name == "rename-preset":
@@ -1252,6 +1321,11 @@ class Handler(SimpleHTTPRequestHandler):
                 step = max(0, min(INPUT_STEP_MAX, plain_int(body.get(key))))
                 INPUT[key] = min(INPUT_TOTAL_MAX, INPUT[key] + step)
             return self.send_json({"ok": True})
+        if path == "/mask":
+            mask, error = post_mask(self.screen or "", body)
+            if error is not None:
+                return self.send_json({"error": error}, 400)
+            return self.send_json(mask)
         self.send_json({"error": "not found"}, 404)
 
 

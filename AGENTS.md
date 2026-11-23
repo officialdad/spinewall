@@ -1,6 +1,6 @@
 # spinewall
 
-Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubism is not supported. Any Spine 3.7 (JSON export only), 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs. One exception: `docs/windows.md` and `docs/credits.md` link the community model pack and name its publisher. The user approved that on 2026-11-01. Add nothing else. A second exception: `README.md` names the characters Chisato and Takina in its example images and captions. The user approved that on 2026-11-08. Name no game.
+Live 2D wallpaper for the Linux desktop, played with the Spine runtimes. KDE Plasma 6 is the proven target; the native layer-shell backend runs on any Wayland compositor that offers `zwlr_layer_shell_v1`. Live2D Cubism is not supported. Any Spine 3.7 (JSON export only), 3.8, 4.0, 4.1, or 4.2 model works. Do not add game-specific code or names. Test models and credits are in `README.md` and `docs/credits.md`. Never name a game in code or docs. One exception: `docs/windows.md` and `docs/credits.md` link the community model pack and name its publisher. The user approved that on 2026-11-01. Add nothing else. A second exception: `README.md` names the characters Chisato and Takina in its example images and captions. The user approved that on 2026-11-08. Name no game.
 
 ## Layout
 
@@ -10,14 +10,16 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 | `theme/local-host.js` | Local mode. Mirrors the server state logic in the page. Change it together with `server/spinewall-server.py` and `internal/state`. |
 | `theme/embed.go` | Embeds `theme/index.html` and `theme/local-host.js` into the Go binary. Never embeds the Spine players. |
 | `server/spinewall-server.py` | Local HTTP server on `127.0.0.1:8777`. Holds state, scans models, serves model files. |
-| `cmd/spinewall` | Go binary. `spinewall serve` is a drop-in for the Python server (phase 1 of the portable plan). Any other argument is a client command (phase 3). Standard library plus `godbus` for `--screen current`, `CGO_ENABLED=0`. |
+| `cmd/spinewall` | Go binary. `spinewall serve` is a drop-in for the Python server (phase 1 of the portable plan); `serve --with-view` also runs the native view. `view` runs the launcher alone. Any other argument is a client command (phase 3), including `edit [on\|off]` and `mask`. Standard library plus `godbus` for `--screen current`, `CGO_ENABLED=0`. |
 | `internal/api` | Go HTTP handlers, guards (Host and Origin allowlists, `Sec-Fetch-Site`), body caps, model file serving. |
 | `internal/state` | Go stage, characters, presets and prefs. One lock, no global state swap. |
 | `internal/runtime` | Go runtime pins, fetch, verify and serve. Never embeds the players. |
 | `internal/cli` | Go client commands: percent-encoding, 3-argument limit, exit codes, shortcut log, `--screen current` over D-Bus on KDE. |
 | `internal/scan` | Go model scan, version sniff, atlas regions, kind detection. |
 | `internal/doctor` | `spinewall doctor`: session, desktop, layer-shell, GPU, web engine, systemd and network detection, with the distro package command. Never runs a package manager. |
-| `internal/install` | `spinewall install` and `uninstall`: the install manifest with a sha256 per file, the XDG autostart entry, the opt-in systemd unit, and `uninstall --legacy`. |
+| `internal/install` | `spinewall install` and `uninstall`: the install manifest with a sha256 per file, the XDG autostart entry, the opt-in systemd unit, and `uninstall --legacy`. Prepares either backend: the webwallpaper theme, or the native view. |
+| `internal/view` | Native layer-shell backend: detects the compositor and toolchain, embeds `launcher.cpp` and `view.qml`, builds the launcher on the user's machine (`CGO_ENABLED=0`, QtWebEngine must not be linked into the Go binary), and runs one window per monitor. Sets the input mask and reloads on resume. |
+| `docs/native-view.md` | How the native backend works: the launcher, the input mask, per-monitor windows, and the reload on resume. |
 | `internal/tui` | `spinewall setup`: the huh and bubbletea wizard. Doctor, licence consent, runtime fetch, models folder, backend choice, install, start and verify. `--yes` runs it non-interactively. |
 | `tests/differential.py` | Starts the Python and Go servers on one state copy and compares decoded JSON for the read endpoints and every `/cmd/*`. |
 | `bin/spinewall` | Deprecated shim. Runs a built `spinewall` binary next to it. The CLI is the Go binary; the installer phase removes the shim. |
@@ -41,7 +43,8 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 2. The server changes `STATE` and bumps `rev` (model, animation) or `vrev` (view).
 3. The page polls `/state` every 700 ms and applies the change when a revision differs.
 4. The page reports the animation list to `POST /report` after each model load.
-5. The patched containment calls `GET /edit/0|1` when edit mode changes. The page reads `edit` from `/state`.
+5. Edit mode has three entry points to the same server API: the patched containment calls `GET /edit/0|1`, the native view's page shows an Edit button, and `spinewall edit [on|off]` toggles it (`GET /edit/toggle`). The page reads `edit` from `/state`.
+6. In the native view the page reports its click region to `POST /mask` (one rectangle per character in normal mode, `{full:true}` in edit mode). The launcher polls `GET /mask` and calls `QWindow::setMask`, so a click on a character reaches the page and a click elsewhere reaches the desktop. The mask is per screen, in memory only, and starts full.
 
 ## Rules
 
@@ -66,6 +69,7 @@ Live 2D wallpaper for KDE Plasma 6, played with the Spine runtimes. Live2D Cubis
 - Position `x` and `y` are fractions of the window size. Scale ranges from 0.3 to 8.
 - In multi mode, edit-mode drag and wheel move the selected character. A press on a character selects it.
 - Normal mode takes left click only. Edit mode takes drag, wheel, and a short left click. A click moves under 30 px, so a drag never counts as one.
+- The native view input mask (`GET/POST /mask`) lives on the stage in `internal/state` and in a module map in the Python server, keyed by screen. It is in memory only, starts full, and a new screen starts full rather than copying another screen's region. `POST /mask` takes `{rects:[{x,y,w,h}]}` or `{full:true}`; an empty or negative rectangle is dropped, and a body that is neither is a 400. `GET /edit/toggle` flips the flag for a bare `spinewall edit`. Keep the Python server and `internal/state` in step for both.
 
 ## Security rules
 

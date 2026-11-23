@@ -71,6 +71,10 @@ func (r *run) exec(argv []string) int {
 	if len(positional) > 0 {
 		command = positional[0]
 	}
+	if command == "edit" && len(positional) > 2 {
+		fmt.Fprintln(r.stderr, "error: edit takes at most one argument, on or off")
+		return 2
+	}
 	path, hasScreen := routePath(command, positional)
 	defaultStage := false
 	if hasScreen && screen == "current" {
@@ -140,6 +144,10 @@ func routePath(command string, positional []string) (path string, hasScreen bool
 		return "/presets", false
 	case "screens":
 		return "/screens", false
+	case "mask":
+		return "/mask", false
+	case "edit":
+		return editPath(positional[1:]), false
 	}
 	path = "/cmd/" + quote(command)
 	// set-char-anim and set-char-model carry a uid and a value, which the server
@@ -148,6 +156,21 @@ func routePath(command string, positional []string) (path string, hasScreen bool
 		path += "/" + quote(value)
 	}
 	return path, true
+}
+
+// editPath turns the optional on/off argument of `spinewall edit` into an edit
+// path. A bare `edit` toggles server-side, so a shortcut bound to it flips the
+// flag whichever way it currently is.
+func editPath(args []string) string {
+	if len(args) > 0 {
+		switch args[0] {
+		case "off", "0", "false":
+			return "/edit/0"
+		case "on", "1", "true":
+			return "/edit/1"
+		}
+	}
+	return "/edit/toggle"
 }
 
 // fail records the exit like the shell's ERR trap: a shortcut with no terminal

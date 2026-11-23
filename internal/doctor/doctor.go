@@ -46,6 +46,9 @@ type Report struct {
 	Network       bool
 	LayerShell    Status
 	WebEngineName string
+	// Buildable is true when the C++ toolchain, moc and pkg-config can build the
+	// native view launcher. The layer-shell backend needs it.
+	Buildable bool
 }
 
 // Options let tests replace the detection sources.
@@ -122,6 +125,18 @@ func Detect(opts Options) Report {
 		r.Checks = append(r.Checks, Check{Name: "plasmashell", Status: Found, Detail: "KDE Plasma session"})
 	}
 
+	// The C++ toolchain and Qt development files the native view launcher needs.
+	// It builds on the user's machine because QtWebEngine cannot link into a
+	// static Go binary.
+	buildable, buildDetail := detectBuildToolchain(lookPath)
+	r.Buildable = buildable
+	r.Checks = append(r.Checks, Check{
+		Name:    "view build toolchain",
+		Status:  foundOrMissing(buildable),
+		Detail:  buildDetail,
+		Package: toolchainPackage(r.Distro, release["ID_LIKE"]),
+	})
+
 	// systemd user session.
 	r.SystemdUser = detectSystemdUser(lookPath, exists)
 	r.Checks = append(r.Checks, Check{
@@ -144,9 +159,36 @@ func Detect(opts Options) Report {
 		Package: "",
 	})
 
-	// Only the KDE legacy backend is installable in this phase.
-	r.Backend = "kde-legacy"
+	// Both backends are reported. The native layer-shell view needs a layer-shell
+	// compositor, Qt WebEngine and the build toolchain; kde-legacy needs Plasma
+	// and the webwallpaper plugin. setup preselects the recommended one.
+	r.Backend = nativeRecommendation(r)
 	return r
+}
+
+// nativeRecommendation picks the backend this machine should run. The native
+// layer-shell view is preferred when the whole chain is present. The KDE legacy
+// backend is the fallback for Plasma users until the cutover, and the default
+// elsewhere, because it is the only backend this release ships for them.
+func nativeRecommendation(r Report) string {
+	if r.LayerShell == Found && r.WebEngineName != "" && !strings.HasPrefix(r.WebEngineName, "chromium") &&
+		!strings.HasPrefix(r.WebEngineName, "firefox") && !strings.HasPrefix(r.WebEngineName, "google") &&
+		r.Buildable {
+		return "layer-shell"
+	}
+	return "kde-legacy"
+}
+
+// Backends lists the backends a user may pick, recommended first. The native
+// view is offered only when this machine can run it; the legacy backend is
+// always offered as the Plasma fallback.
+func (r Report) Backends() []string {
+	out := []string{}
+	if r.Backend == "layer-shell" {
+		out = append(out, "layer-shell")
+	}
+	out = append(out, "kde-legacy")
+	return out
 }
 
 // Missing lists the checks that are missing and needed.
@@ -272,6 +314,55 @@ func detectWebEngine(lookPath func(string) (string, error), exists func(string) 
 		}
 	}
 	return Missing, "no Qt WebEngine or browser", pkgCmd
+}
+
+// detectBuildToolchain reports whether the native view launcher can be built:
+// a C++ compiler, moc and pkg-config. It returns a human detail and no error.
+func detectBuildToolchain(lookPath func(string) (string, error)) (bool, string) {
+	compiler := ""
+	for _, name := range []string{"c++", "g++", "clang++"} {
+		if _, err := lookPath(name); err == nil {
+			compiler = name
+			break
+		}
+	}
+	_, mocErr := lookPath("moc")
+	_, pkgErr := lookPath("pkg-config")
+	var missing []string
+	if compiler == "" {
+		missing = append(missing, "C++ compiler")
+	}
+	if mocErr != nil {
+		missing = append(missing, "moc")
+	}
+	if pkgErr != nil {
+		missing = append(missing, "pkg-config")
+	}
+	if len(missing) > 0 {
+		return false, "missing " + strings.Join(missing, ", ")
+	}
+	return true, "can build the layer-shell view"
+}
+
+// toolchainPackages is the build toolchain package command per distro family.
+var toolchainPackages = map[string]string{
+	"arch":     "sudo pacman -S base-devel qt6-base",
+	"debian":   "sudo apt install build-essential qt6-base-dev-tools pkg-config",
+	"fedora":   "sudo dnf install gcc-c++ qt6-qtbase-devel pkgconf",
+	"opensuse": "sudo zypper install gcc-c++ qt6-base-devel pkg-config",
+	"alpine":   "sudo apk add build-base qt6-qtbase-dev pkgconf",
+	"void":     "sudo xbps-install -S base-devel qt6-base-devel pkgconf",
+}
+
+// toolchainPackage maps a distro id, then its ID_LIKE family, to the toolchain
+// install command.
+func toolchainPackage(id, idLike string) string {
+	for _, name := range append([]string{strings.ToLower(id)}, strings.Fields(strings.ToLower(idLike))...) {
+		if family, ok := distroFamilies[name]; ok {
+			return toolchainPackages[family]
+		}
+	}
+	return ""
 }
 
 func detectSystemdUser(lookPath func(string) (string, error), exists func(string) bool) bool {

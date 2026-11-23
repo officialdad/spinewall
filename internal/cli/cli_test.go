@@ -242,3 +242,58 @@ func TestEmptyScreensFallsBackToDefaultStage(t *testing.T) {
 		t.Fatalf("server saw %v", seen)
 	}
 }
+
+func TestEditWithoutArgumentToggles(t *testing.T) {
+	srv, seen := collectServer(t)
+	var out, errOut strings.Builder
+	r := newRunnable(srv.URL, &out, &errOut)
+	if code := r.exec([]string{"edit"}); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errOut.String())
+	}
+	if len(*seen) != 1 || (*seen)[0] != "/edit/toggle?" {
+		t.Fatalf("server saw %v, want the toggle path", *seen)
+	}
+}
+
+func TestEditOnAndOffSetTheFlag(t *testing.T) {
+	srv, seen := collectServer(t)
+	var out, errOut strings.Builder
+	r := newRunnable(srv.URL, &out, &errOut)
+	cases := map[string]string{"on": "/edit/1?", "off": "/edit/0?"}
+	for arg, want := range cases {
+		*seen = nil
+		if code := r.exec([]string{"edit", arg}); code != 0 {
+			t.Fatalf("edit %s exit %d: %s", arg, code, errOut.String())
+		}
+		if len(*seen) != 1 || (*seen)[0] != want {
+			t.Errorf("edit %s: server saw %v, want %s", arg, *seen, want)
+		}
+	}
+}
+
+func TestEditWithTwoArgumentsIsUsageError(t *testing.T) {
+	srv, seen := collectServer(t)
+	var out, errOut strings.Builder
+	r := newRunnable(srv.URL, &out, &errOut)
+	if code := r.exec([]string{"edit", "on", "extra"}); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if len(*seen) != 0 {
+		t.Errorf("sent a request: %v", *seen)
+	}
+	if !strings.Contains(errOut.String(), "at most one argument") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+}
+
+func TestMaskReadsTheMaskPath(t *testing.T) {
+	srv, seen := collectServer(t)
+	var out, errOut strings.Builder
+	r := newRunnable(srv.URL, &out, &errOut)
+	if code := r.exec([]string{"mask"}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if len(*seen) != 1 || (*seen)[0] != "/mask?" {
+		t.Fatalf("server saw %v", *seen)
+	}
+}

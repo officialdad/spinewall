@@ -334,6 +334,10 @@ const MODEL_ROOT = LOCAL ? new URL(".", new URL(LOCAL.modelsUrl, location.href))
 const SCREEN = LOCAL ? "" : (new URLSearchParams(location.search).get("screen")
   ?? (screen.isExtended ? `${screen.width}x${screen.height}+${screen.availLeft ?? 0}+${screen.availTop ?? 0}` : ""));
 if (SCREEN) console.log("spinewall screen:", SCREEN);
+// The native layer-shell view has no containment patch and no webwallpaper plugin. It needs two things from the
+// page: an Edit button (there is no right-click desktop menu to enter edit mode), and a click mask, so a click on
+// the character reaches the page and a click elsewhere falls through to the desktop. `?view=native` turns both on.
+const NATIVE = !LOCAL && new URLSearchParams(location.search).get("view") === "native";
 const POLL_MS = 700;
 const CLICK_MAX_MS = 500;
 const CLICK_MAX_PX = 30;
@@ -355,6 +359,9 @@ const RUNTIMES = {
 };
 
 let models = [], player = null, anims = [];
+// The single player's frame, cached at load so the native view mask can follow the character without re-sampling
+// the skeleton each poll. Null until a model loads.
+let singleFrame = null;
 // Several characters share one stage. `layout` mirrors the server list, and an empty list means the single player.
 let multi = false, layout = [], selectedUid = null, crev = -1, layoutPending = false;
 const WARN_ABOVE = 25;
@@ -504,9 +511,10 @@ addEventListener("pointermove", e => {
 
 const picker = document.getElementById("picker");
 
-// Plasma flips edit mode through the containment patch. A local host has none, so the page offers a button.
+// Plasma flips edit mode through the containment patch. A local host and the native view have none, so the page
+// offers a button. The native view also needs the button to leave edit mode again.
 const editToggle = document.getElementById("editToggle");
-if (LOCAL) {
+if (LOCAL || NATIVE) {
   editToggle.hidden = false;
   editToggle.addEventListener("click", () => api(`/edit/${editMode ? 0 : 1}`));
   ["pointerdown", "pointerup", "pointermove", "wheel"].forEach(type => editToggle.addEventListener(type, e => e.stopPropagation()));
@@ -1974,6 +1982,7 @@ function disposePlayer() {
   try { player.dispose(); } catch (e) {}
   player = null;
   anims = [];
+  singleFrame = null;
   document.getElementById("p").innerHTML = "";
   setTimeout(() => { disposing = false; }, 1000);
 }
@@ -2569,6 +2578,8 @@ function load(modelId, animation) {
         p.animationState.setAnimation(0, pick, true);
         p.play();
       }
+      // The native view mask frames the character, not the square canvas, so cache its bounds here.
+      singleFrame = frameOf(runtime, p.skeleton.data, model, pick || anims[0]);
       post("/report", {model: model.id, animations: anims, playing: pick});
       // The server learns the playing animation from this report and bumps no revision, so mark it here.
       state.animation = pick;
@@ -2630,6 +2641,54 @@ async function fetchModels() {
     }
   }
 }
+
+// ---- Native view input mask ----
+// The layer-shell window takes a click only inside its mask; everywhere else the click reaches the desktop. The
+// page must therefore report where its clickable characters are, so a click on a character reaches the page and a
+// click on empty wallpaper reaches Plasma. Each rectangle is in window pixels. In edit mode the whole window is
+// clickable, because the dock and the drag handle need it. A page with no character to point at reports no
+// rectangles, which lets every click through.
+const maskRegions = () => {
+  if (editMode) return null; // null means full window
+  const rects = [];
+  const add = (x, y, w, h) => {
+    const l = Math.max(0, Math.floor(x)), t = Math.max(0, Math.floor(y));
+    const r = Math.min(innerWidth, Math.ceil(x + w)), b = Math.min(innerHeight, Math.ceil(y + h));
+    if (r - l > 0 && b - t > 0) rects.push({x: l, y: t, w: r - l, h: b - t});
+  };
+  if (multi) {
+    const sequence = drawSequence();
+    for (const {c, e} of sequence) {
+      if (c.model.kind === "scene") continue;
+      const k = fitScale(c, e);
+      const w = c.frame.w * k, h = c.frame.h * k;
+      add(fit.ox + (screenX(e) - w / 2) * fit.s, fit.oy + (screenY(e) - h / 2) * fit.s, w * fit.s, h * fit.s);
+    }
+  } else if (player && singleFrame) {
+    // The single player frames the character the same way the stage does: as tall as the window scaled by the view.
+    // Its center sits at the window center shifted by the view, matching #p's transform.
+    const k = innerHeight / (Math.max(singleFrame.w, singleFrame.h) * FIT_PADDING) * view.scale;
+    const w = singleFrame.w * k, h = singleFrame.h * k;
+    const cx = innerWidth / 2 + view.x * innerWidth, cy = innerHeight / 2 + view.y * innerHeight;
+    add(cx - w / 2, cy - h / 2, w, h);
+  }
+  return rects;
+};
+
+let lastMaskSignature = "";
+function reportMask() {
+  if (!NATIVE) return;
+  const regions = maskRegions();
+  const body = regions === null ? {full: true} : {rects: regions};
+  // Only a change is worth sending: the geometry moves by fractions every frame.
+  const sig = JSON.stringify(body);
+  if (sig === lastMaskSignature) return;
+  lastMaskSignature = sig;
+  post("/mask", body);
+}
+// A frame loop keeps the mask in step with an animating character, which moves its bounds. It is cheap because
+// reportMask only sends on a real change.
+if (NATIVE) setInterval(reportMask, 250);
 
 poll();
 fetchModels();

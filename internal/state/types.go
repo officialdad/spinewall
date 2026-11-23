@@ -59,6 +59,9 @@ type Stage struct {
 	Preset     *string     `json:"preset"`
 	Characters []Character `json:"characters"`
 	Crev       int         `json:"crev"`
+	// mask holds the native-view input region for this stage's window. It is
+	// never written to disk; see mask.go. Nil reads as the full mask.
+	mask *Mask
 }
 
 // StateReply is /state: a stage plus the current edit-mode flag.
@@ -77,6 +80,10 @@ func (s *Stage) clone() *Stage {
 	for i, c := range s.Characters {
 		out.Characters[i] = c
 		out.Characters[i].Animation = cloneStr(c.Animation)
+	}
+	if s.mask != nil {
+		m := s.mask.clone()
+		out.mask = &m
 	}
 	return &out
 }

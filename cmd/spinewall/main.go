@@ -15,6 +15,7 @@ import (
 	"github.com/officialdad/spinewall/internal/install"
 	"github.com/officialdad/spinewall/internal/runtime"
 	"github.com/officialdad/spinewall/internal/state"
+	"github.com/officialdad/spinewall/internal/view"
 	"github.com/officialdad/spinewall/theme"
 )
 
@@ -69,6 +70,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "view":
+			if err := runViewCommand(os.Args[2:]); err != nil {
+				fmt.Fprintf(os.Stderr, "spinewall: %v\n", err)
+				os.Exit(1)
+			}
+			return
 		case "version", "--version":
 			fmt.Println(version)
 			return
@@ -104,6 +111,8 @@ func homePath(rel string) string {
 func serve(args []string) error {
 	offline := envBool("SPINEWALL_OFFLINE")
 	runtimeDirFlag := ""
+	withView := false
+	viewLayer := "bottom"
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--offline":
@@ -114,6 +123,14 @@ func serve(args []string) error {
 			}
 			i++
 			runtimeDirFlag = args[i]
+		case "--with-view":
+			withView = true
+		case "--view-layer":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--view-layer needs bottom or background")
+			}
+			i++
+			viewLayer = args[i]
 		default:
 			return fmt.Errorf("unknown flag %q", args[i])
 		}
@@ -176,6 +193,27 @@ func serve(args []string) error {
 	// Record the pid so `spinewall uninstall` can stop this process. A failure to
 	// write it is not fatal: the port check in StopServer is the backstop.
 	writePidFile(filepath.Dir(paths.StateFile))
+
+	// With a native view, one process owns both halves: the server serves the
+	// page and the launcher draws it. The view waits for the listener above, so
+	// its first page load reaches a live server. A build failure is not fatal to
+	// the server; the page is still there for a browser or the KDE legacy backend.
+	if withView {
+		stop := make(chan struct{})
+		go func() {
+			logf := func(line string) { fmt.Fprintln(os.Stderr, line) }
+			bin, err := view.Build(viewDir(), logf)
+			if err != nil {
+				logf("spinewall: native view unavailable: " + err.Error())
+				return
+			}
+			if err := launchView(bin, apiBase(), viewLayer, logf, stop); err != nil {
+				logf("spinewall: native view stopped: " + err.Error())
+			}
+		}()
+		defer close(stop)
+	}
+
 	server := &http.Server{Handler: srv}
 	return server.Serve(listener)
 }

@@ -141,6 +141,19 @@ func (s *Store) SetEdit(on bool) int {
 	return s.edit
 }
 
+// ToggleEdit flips the edit-mode flag and returns the new value, so a bare
+// `spinewall edit` on a shortcut works whether the flag is on or off.
+func (s *Store) ToggleEdit() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.edit == 0 {
+		s.edit = 1
+	} else {
+		s.edit = 0
+	}
+	return s.edit
+}
+
 // AddInput adds the input counters from a body, capped at the per-step and total limits.
 func (s *Store) AddInput(body map[string]any) {
 	s.mu.Lock()
