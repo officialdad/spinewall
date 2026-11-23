@@ -44,13 +44,14 @@ replaces the Plasma containment patch: a click on a character reaches the page,
 and a click on empty wallpaper reaches Plasma, so desktop icons and the desktop
 menu keep working.
 
-- In normal mode the page reports one rectangle per on-screen character, in window
-  pixels, to `POST /mask`. The launcher polls `GET /mask` four times a second and
+- In normal mode the page reports one rectangle per on-screen character, plus one
+  for the Edit button, in window pixels, to `POST /mask`. The Edit button is the way
+  into edit mode, so a click on it must never fall through to the desktop. The launcher polls `GET /mask` four times a second and
   calls `QWindow::setMask` only when the region's `rev` changed.
 - In edit mode the page reports `{full: true}`, so the whole window takes clicks and
   the dock, the chip bar, and the drag handle work.
-- A page with no character on screen reports no rectangles, which lets every click
-  through. The mask starts full, so a page that has not reported yet never loses a
+- A page with no character on screen reports only the Edit button, which lets every
+  other click through. The mask starts full, so a page that has not reported yet never loses a
   click.
 
 The mask is stored per screen, never written to disk, and reset to full when a
