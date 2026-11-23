@@ -31,17 +31,15 @@ func quote(s string) string {
 }
 
 // newGet builds a GET for base at an already-encoded path, with an optional
-// encoded query value for the screen key. The path goes into URL.Opaque so net/http
+// raw query. The path goes into URL.Opaque so net/http
 // sends the percent escapes as written: a decoded Path would re-split a %2F and
 // the server reads EscapedPath, which must keep a name's slash inside one segment.
-func newGet(base, path, screenQuery string) (*http.Request, error) {
+func newGet(base, path, rawQuery string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, base, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.URL.Opaque = path
-	if screenQuery != "" {
-		req.URL.RawQuery = "screen=" + screenQuery
-	}
+	req.URL.RawQuery = rawQuery
 	return req, nil
 }

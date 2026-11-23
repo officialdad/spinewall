@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+// Exit codes keep curl's, which the old shell wrapper passed through.
+const (
+	exitConnect = 7
+	exitHTTP    = 22
+)
+
 // run holds one invocation. Tests build it directly with a stand-in base URL.
 type run struct {
 	base     string
@@ -66,6 +72,7 @@ func (r *run) exec(argv []string) int {
 		command = positional[0]
 	}
 	path, hasScreen := routePath(command, positional)
+	defaultStage := false
 	if hasScreen && screen == "current" {
 		resolved, err := r.resolver(r)
 		switch {
@@ -74,6 +81,7 @@ func (r *run) exec(argv []string) int {
 		case errors.Is(err, errScreenUnsupported):
 			fmt.Fprintln(r.stderr, "spinewall: --screen current is not supported on this desktop, using the default stage.")
 			screen = ""
+			defaultStage = true
 		default:
 			fmt.Fprintf(r.stderr, "error: %v\n", err)
 			return r.fail(positional, screen, 1)
@@ -81,17 +89,17 @@ func (r *run) exec(argv []string) int {
 	}
 
 	query := ""
-	if hasScreen && screen != "" {
-		query = quote(screen)
+	if hasScreen && (screen != "" || defaultStage) {
+		query = "screen=" + quote(screen)
 	}
 	status, body, err := r.get(path, query)
 	if err != nil {
 		fmt.Fprintf(r.stderr, "error: %v\n", err)
-		return r.fail(positional, screen, 1)
+		return r.fail(positional, screen, exitConnect)
 	}
 	if status < 200 || status >= 300 {
 		fmt.Fprintf(r.stderr, "error: the server answered %d %s\n", status, http.StatusText(status))
-		return r.fail(positional, screen, 1)
+		return r.fail(positional, screen, exitHTTP)
 	}
 	_, _ = r.stdout.Write(body)
 	fmt.Fprintln(r.stdout)
@@ -156,8 +164,8 @@ func (r *run) fail(positional []string, screen string, code int) int {
 }
 
 // get sends one GET and returns the status and body.
-func (r *run) get(path, screenQuery string) (int, []byte, error) {
-	req, err := newGet(r.base, path, screenQuery)
+func (r *run) get(path, rawQuery string) (int, []byte, error) {
+	req, err := newGet(r.base, path, rawQuery)
 	if err != nil {
 		return 0, nil, err
 	}

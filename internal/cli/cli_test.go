@@ -161,7 +161,7 @@ func TestUnsupportedScreenFallsBackToDefault(t *testing.T) {
 	if code := r.exec([]string{"--screen", "current", "next-preset"}); code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errOut.String())
 	}
-	if len(*seen) != 1 || (*seen)[0] != "/cmd/next-preset?" {
+	if len(*seen) != 1 || (*seen)[0] != "/cmd/next-preset?screen=" {
 		t.Fatalf("server saw %v, want a default-stage call", *seen)
 	}
 	if !strings.Contains(errOut.String(), "not supported on this desktop") {
@@ -201,8 +201,8 @@ func TestServerErrorIsNonzero(t *testing.T) {
 	defer srv.Close()
 	var out, errOut strings.Builder
 	r := newRunnable(srv.URL, &out, &errOut)
-	if code := r.exec([]string{"next-preset", "--screen", "nope"}); code != 1 {
-		t.Fatalf("exit %d, want 1", code)
+	if code := r.exec([]string{"next-preset", "--screen", "nope"}); code != 22 {
+		t.Fatalf("exit %d, want 22", code)
 	}
 	if !strings.Contains(errOut.String(), "404") {
 		t.Errorf("stderr = %q", errOut.String())
@@ -218,7 +218,27 @@ func TestDeadServerIsNonzero(t *testing.T) {
 		client:   http.DefaultClient,
 		resolver: func(*run) (string, error) { return "", nil },
 	}
-	if code := r.exec([]string{"info"}); code == 0 {
-		t.Fatalf("exit 0 against a dead server")
+	if code := r.exec([]string{"info"}); code != 7 {
+		t.Fatalf("exit %d against a dead server, want 7", code)
+	}
+}
+
+func TestEmptyScreensFallsBackToDefaultStage(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		seen = append(seen, req.URL.EscapedPath()+"?"+req.URL.RawQuery)
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	var out, errOut strings.Builder
+	r := newRunnable(srv.URL, &out, &errOut)
+	r.resolver = func(*run) (string, error) {
+		return pickCurrentScreen("DP-2", nil, nil)
+	}
+	if code := r.exec([]string{"--screen", "current", "next-preset"}); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errOut.String())
+	}
+	if len(seen) != 1 || seen[0] != "/cmd/next-preset?screen=" {
+		t.Fatalf("server saw %v", seen)
 	}
 }
