@@ -350,8 +350,9 @@ spinewall uninstall
 The installer records every file it writes in `~/.local/state/spinewall/install-manifest.json` with its sha256. `spinewall uninstall` removes exactly those files, stops the server, and asks before it touches `~/.local/state/spinewall` and `~/.cache/spinewall`, which hold your prefs and the runtime cache. It never touches the models directory.
 
 - `spinewall uninstall --yes` removes state and cache too, which returns a fresh install to its starting home.
+- `spinewall uninstall --purge` removes state and cache without asking.
 - `spinewall uninstall --keep-state` keeps your prefs and the runtime cache.
-- `spinewall uninstall --legacy` also removes an old Python install (`~/.local/bin/spinewall-server`, the old unit, the theme under `~/.local/share/webwallpaper/themes/spinewall`, and the patched containment copy, restoring its `.bak` when present). It leaves a unit or theme the new install wrote to the normal uninstall. Run `spinewall setup` again afterwards.
+- `spinewall uninstall --legacy` removes an old Python install (`~/.local/bin/spinewall-server`, the old unit, and the patched containment copy, restoring its `.bak` when present), then this install too. While any old install file is present it removes the whole theme under `~/.local/share/webwallpaper/themes/spinewall`, which still holds the old Spine players. Run `spinewall setup` again afterwards.
 
 Then restart plasmashell if you removed the containment patch.
 
