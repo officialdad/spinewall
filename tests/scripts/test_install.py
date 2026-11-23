@@ -65,6 +65,12 @@ class InstallCase(ScriptCase):
 
     def install(self, **env):
         env.setdefault("STUB_LOG", str(self.log))
+        # The installer builds the CLI. Go would otherwise create ~/go and a build cache under the throwaway
+        # HOME, and would refetch modules, so point it at the caches of the real toolchain.
+        for name in ("GOMODCACHE", "GOCACHE"):
+            found = subprocess.run(["go", "env", name], capture_output=True, text=True)
+            if found.returncode == 0 and found.stdout.strip():
+                env.setdefault(name, found.stdout.strip())
         return self.run_script(SCRIPTS / "install.sh", env_extra=env)
 
 
