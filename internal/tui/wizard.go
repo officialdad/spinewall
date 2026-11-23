@@ -130,6 +130,12 @@ func Run(opts Options) (Result, error) {
 		printCompositorLine(stdout, report.Desktop, inst.BinPath)
 	}
 
+	// The install linked the fetched players into the theme folder. Check that
+	// before starting: a page that cannot load them shows "runtime not installed".
+	if err := verifyThemeRuntime(opts.Paths); err != nil {
+		logf("theme check: " + err.Error())
+	}
+
 	// 7. Start and verify via /info. Next to the old Python install a second
 	// server would race it for the port, so setup stops before starting one.
 	if len(legacy) > 0 && !allowLegacy {

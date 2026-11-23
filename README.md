@@ -154,7 +154,7 @@ Prefer another way:
 3. Fetches the Spine runtimes into `~/.cache/spinewall/runtime`, checking each download against a pinned sha256.
 4. Asks for the models folder, kept in `~/.config/spinewall/config.json`.
 5. Chooses a backend. KDE Plasma legacy installs today.
-6. Installs the files, an XDG autostart entry, and optionally a systemd user unit, then starts the server and verifies it with `/info`.
+6. Installs the files, an XDG autostart entry, and optionally a systemd user unit, then starts the server and verifies it with `/info`. The install links the fetched players into the theme folder (`~/.local/share/webwallpaper/themes/spinewall`), because the KDE backend opens the page from `file://` and the page loads each player by relative URL. A refetch or `spinewall runtime fetch` relinks them.
 
 Run `spinewall doctor` on its own at any time, and paste its table into a bug report.
 
@@ -213,7 +213,7 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | `internal/scan` | Go model scan, version sniff, atlas regions, kind detection. |
 | `internal/jx` | Go JSON decoder that matches Python `json.loads`, so both servers read a body the same way. |
 | `internal/doctor` | Detects session, desktop, layer-shell, GPU, web engine, systemd, and network, and names the distro package command. Never runs a package manager. |
-| `internal/install` | The install manifest, install and uninstall, the XDG autostart entry, the opt-in systemd unit, and the legacy uninstall. |
+| `internal/install` | The install manifest, install and uninstall, the XDG autostart entry, the opt-in systemd unit, and the legacy uninstall. It links the cached Spine players into the theme folder, as symlinks into the cache or copies, so the `file://` page finds them, and records them so uninstall removes the links but not the cache. |
 | `internal/tui` | The `setup` wizard: huh and bubbletea forms that run the doctor, the licence consent, the runtime fetch, the install, and the start-and-verify. |
 | `bin/spinewall` | Deprecated shim. Runs a built `spinewall` binary when one is next to it, so the legacy installer keeps working until the installer phase. It holds no CLI logic. |
 | `scripts/build-demo.py` | Builds the Pages demo from `theme/index.html` in local mode. |

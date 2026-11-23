@@ -145,6 +145,17 @@ func Globals() []string {
 	return out
 }
 
+// ServedNames returns every file the cache serves: each pinned player and the
+// shared stylesheet, in pin order. The theme install links these into the
+// theme folder so the file:// page finds them.
+func ServedNames() []string {
+	out := make([]string, 0, len(Pins)+1)
+	for _, pin := range Pins {
+		out = append(out, FileName(pin.Global))
+	}
+	return append(out, cssName)
+}
+
 // File returns the validated bytes of a served runtime file. A file that is not
 // in the cache and validated at the last Ensure reports false.
 func (m *Manager) File(name string) ([]byte, bool) {

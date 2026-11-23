@@ -62,6 +62,17 @@ func (m Manifest) entry(path string) (Entry, bool) {
 	return Entry{}, false
 }
 
+// set replaces the entry for e.Path, or appends it when it is new.
+func (m *Manifest) set(e Entry) {
+	for i := range m.Files {
+		if m.Files[i].Path == e.Path {
+			m.Files[i] = e
+			return
+		}
+	}
+	m.Files = append(m.Files, e)
+}
+
 // sha256Hex hashes bytes the way the manifest records them.
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
