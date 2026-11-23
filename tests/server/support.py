@@ -24,11 +24,44 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVER = ROOT / "server" / "spinewall-server.py"
-CLI = ROOT / "bin" / "spinewall"
+SHIM = ROOT / "bin" / "spinewall"
 # SPINEWALL_BIN points the black-box server tests at the Go binary instead of the
 # Python server. The in-process unit tests stay Python only: they import the
 # Python module and check its functions directly.
 GO_BIN = os.environ.get("SPINEWALL_BIN")
+# SPINEWALL_CLI names the CLI binary under test, apart from SPINEWALL_BIN. That
+# lets the CLI run against the Python server, so one job proves the Go CLI and the
+# Python server agree. The CLI is the Go binary now; bin/spinewall is a shim that
+# runs a built binary when one is present.
+CLI_BIN = os.environ.get("SPINEWALL_CLI")
+
+
+def cli_binary():
+    """The CLI under test. Prefer an explicit path, then a built binary, then the shim."""
+    if CLI_BIN:
+        return Path(CLI_BIN)
+    if GO_BIN:
+        return Path(GO_BIN)
+    built = ROOT / "spinewall"
+    if built.is_file():
+        return built
+    return SHIM
+
+
+CLI = cli_binary()
+# The CLI is the Go binary now. A run with no built binary and no SPINEWALL_CLI
+# or SPINEWALL_BIN gets only the shim, which holds no logic, so the CLI tests skip
+# instead of failing. Both CI jobs build the binary, so the skip is a local-run
+# guard, never a gap in CI.
+CLI_AVAILABLE = CLI != SHIM
+
+
+def require_cli(case):
+    """Skip a CLI test when no Go CLI binary is available."""
+    if not CLI_AVAILABLE:
+        case.skipTest("no Go CLI built: run `go build -o spinewall ./cmd/spinewall` or set SPINEWALL_CLI")
+
+
 
 
 def server_command():

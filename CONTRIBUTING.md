@@ -20,6 +20,8 @@ Read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first. Report security problems th
 ## Run the tests
 
 ```bash
+CGO_ENABLED=0 go build -o spinewall ./cmd/spinewall
+go vet ./... && go test ./...
 python3 -I -m unittest discover -s tests -t . -v
 cd tests/page && npm install && npm test
 python3 -m py_compile server/spinewall-server.py

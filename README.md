@@ -174,13 +174,14 @@ Bind these to global shortcuts in System Settings, under Shortcuts, with a custo
 | `theme/local-host.js` | Local mode. Runs the server's state logic in the page, with `localStorage` for state and prefs. |
 | `theme/embed.go` | Embeds the page and local host into the Go binary. Never embeds the Spine players. |
 | `server/spinewall-server.py` | Local HTTP server. State, model scan, prefs, layout, thumbnails. |
-| `cmd/spinewall` | Go server. `spinewall serve` is a drop-in for the Python server. `spinewall runtime fetch\|verify` manages the players. |
+| `cmd/spinewall` | The one binary. `spinewall serve` is a drop-in for the Python server. `spinewall runtime fetch\|verify` manages the players. Any other argument is a client command against a running server. |
+| `internal/cli` | The client commands. Percent-encoding, the 3-argument limit, the shortcut log, and `--screen current` over D-Bus on KDE. |
 | `internal/api` | Go HTTP handlers, guards, body caps, model file serving. |
 | `internal/state` | Go stage, characters, presets and prefs logic. |
 | `internal/runtime` | Pins the Spine players by sha256, fetches and verifies them into `SPINEWALL_RUNTIME_DIR` (default under the user cache), and serves them. Never embeds them. |
 | `internal/scan` | Go model scan, version sniff, atlas regions, kind detection. |
 | `internal/jx` | Go JSON decoder that matches Python `json.loads`, so both servers read a body the same way. |
-| `bin/spinewall` | CLI. Thin `curl` wrapper over the server. |
+| `bin/spinewall` | Deprecated shim. Runs a built `spinewall` binary when one is next to it, so the legacy installer keeps working until the installer phase. It holds no CLI logic. |
 | `scripts/build-demo.py` | Builds the Pages demo from `theme/index.html` in local mode. |
 | `scripts/package-windows.py` | Builds the Lively zip and Wallpaper Engine files for Windows. See [docs/windows.md](docs/windows.md). Unconfirmed on Windows. |
 | `scripts/install.sh` | Installs theme, server, CLI, and user service. Fetches the runtimes. |

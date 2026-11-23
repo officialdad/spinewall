@@ -4,7 +4,7 @@ import json
 import subprocess
 import unittest
 
-from tests.server.support import CLI, ServerCase, cli_path
+from tests.server.support import CLI, ServerCase, cli_path, require_cli
 
 
 class AutoCycle(ServerCase):
@@ -123,6 +123,10 @@ class AutoCycle(ServerCase):
 
 
 class AutoCycleCli(ServerCase):
+    def setUp(self):
+        super().setUp()
+        require_cli(self)
+
     def run_cli(self, *args):
         env = {"PATH": cli_path(), "HOME": str(self.tmp), "SPINEWALL_PORT": str(self.server.port)}
         return subprocess.run([str(CLI), *args], env=env, capture_output=True, text=True, timeout=20)

@@ -75,12 +75,25 @@ if [ -n "$build_only" ]; then
   exit 0
 fi
 
+# The CLI is the Go binary. Resolve it before the home directory is touched, so
+# a machine with neither Go nor a prebuilt binary fails loudly instead of
+# getting a CLI that cannot run.
+if command -v go >/dev/null 2>&1; then
+  cli_bin="$work/spinewall"
+  (cd "$root" && CGO_ENABLED=0 go build -o "$cli_bin" ./cmd/spinewall)
+elif [ -x "$root/spinewall" ]; then
+  cli_bin="$root/spinewall"
+else
+  echo "error: no Go toolchain and no prebuilt binary at $root/spinewall. Install Go or place a built spinewall there." >&2
+  exit 1
+fi
+
 # Everything checked. Only now does the install touch the home directory.
 mkdir -p "$theme_dir" "$models_dir" "$state_dir" "$cache_dir" "$bin_dir" "$HOME/.config/systemd/user"
 cp "$stage"/* "$theme_dir/"
 
 install -m 755 "$root/server/spinewall-server.py" "$bin_dir/spinewall-server"
-install -m 755 "$root/bin/spinewall" "$bin_dir/spinewall"
+install -m 755 "$cli_bin" "$bin_dir/spinewall"
 cp "$root/systemd/spinewall.service" "$HOME/.config/systemd/user/"
 systemctl --user daemon-reload
 systemctl --user enable spinewall.service

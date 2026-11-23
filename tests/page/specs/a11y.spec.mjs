@@ -34,6 +34,8 @@ test("the list layout has no serious or critical WCAG AA violations", async ({ o
 
 test("a search with expanded variants has no serious or critical violations", async ({ open, page }) => {
   await openPicker(open, page);
+  // The list is only 150 px tall at 800 px, and font metrics shift that by tens of pixels between machines. The list draws rows within two list heights of the viewport, so a short list can leave every variant row undrawn. A taller window keeps the variant rows inside that range on any machine.
+  await page.setViewportSize({ width: 1280, height: 1200 });
   const search = page.getByRole("combobox", { name: "Search models" });
   await search.fill("Alice");
   await search.press("Shift+Enter");
