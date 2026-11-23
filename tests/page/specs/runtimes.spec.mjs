@@ -29,7 +29,7 @@ test("a missing runtime shows an on-page notice", async ({ open, page, context }
   await context.route("**/spine-player40.js", (r) => r.abort());
   await open({ model: SOLO["4.0"] });
   await expect(page.locator("#notice")).toContainText("runtime for");
-  await expect(page.locator("#notice")).toContainText("scripts/install.sh");
+  await expect(page.locator("#notice")).toContainText("spinewall setup");
 });
 
 test("webglcontextlost reloads the page", async ({ open, page }) => {

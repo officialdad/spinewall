@@ -129,6 +129,19 @@ func Install(opts Options) (Result, error) {
 			return Result{}, err
 		}
 	}
+	// The page loads the Spine players by relative URL over file://, so link the
+	// cached players into the theme folder. A cache that is still empty (an
+	// offline first run) gets its links on the next setup or fetch.
+	runtimeEntries, err := ThemeRuntimeEntries(paths, logf)
+	if err != nil {
+		return Result{}, err
+	}
+	for _, e := range runtimeEntries {
+		if prev, ok := w.prev.entry(e.Path); ok && prev.Created {
+			e.Created = true
+		}
+		w.files[e.Path] = e
+	}
 	logf("installed theme: " + themeDir)
 
 	// XDG autostart is the portable default, so the server runs at login without

@@ -2095,7 +2095,7 @@ async function createStageChar(entry) {
   const model = models.find(m => m.id === entry.model);
   if (!model) return;
   const rt = RUNTIMES[model.runtime];
-  if (!rt) { notice(`The Spine runtime for ${model.name} is not installed. Run scripts/install.sh.`); return; }
+  if (!rt) { notice(`The Spine runtime for ${model.name} is not installed. Run spinewall setup.`); return; }
   const layer = layers.get(model.runtime) || makeLayer(model.runtime);
   let loaded;
   try { loaded = await layerModel(layer, model); }
@@ -2533,7 +2533,7 @@ function load(modelId, animation) {
   if (!model) return;
   disposePlayer();
   const runtime = RUNTIMES[model.runtime];
-  if (!runtime) { notice(`The Spine runtime for ${model.name} is not installed. Run scripts/install.sh.`); return; }
+  if (!runtime) { notice(`The Spine runtime for ${model.name} is not installed. Run spinewall setup.`); return; }
   const base = `${MODEL_ROOT}/${encodeURIComponent(model.id)}`;
   player = new runtime.SpinePlayer("p", {
     // The player reads skelUrl as binary only, so a JSON skeleton needs jsonUrl.

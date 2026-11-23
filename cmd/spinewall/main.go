@@ -12,6 +12,7 @@ import (
 
 	"github.com/officialdad/spinewall/internal/api"
 	"github.com/officialdad/spinewall/internal/cli"
+	"github.com/officialdad/spinewall/internal/install"
 	"github.com/officialdad/spinewall/internal/runtime"
 	"github.com/officialdad/spinewall/internal/state"
 	"github.com/officialdad/spinewall/theme"
@@ -132,7 +133,7 @@ func serve(args []string) error {
 		PrefsFile:       envOrDefault("SPINEWALL_PREFS", homePath(".local/state/spinewall/prefs.json")),
 		LayoutFile:      envOrDefault("SPINEWALL_LAYOUT", homePath(".local/state/spinewall/layout.json")),
 		ScreensFile:     envOrDefault("SPINEWALL_SCREENS", homePath(".local/state/spinewall/screens.json")),
-		ThumbDir:        envOrDefault("SPINEWALL_THUMBS", homePath(".cache/spinewall/thumbs")),
+		ThumbDir:        envOrDefault("SPINEWALL_THUMBS", filepath.Join(filepath.Dir(runtime.DefaultDir()), "thumbs")),
 		LegacyStateFile: homePath(".local/state/spinewall.json"),
 	}
 
@@ -150,6 +151,15 @@ func serve(args []string) error {
 	manager := runtime.New(runtime.Options{Dir: runtimeDir, Offline: offline, Logf: logf})
 	if err := manager.Ensure(neededRuntimes(store)); err != nil {
 		logf("spinewall: " + err.Error())
+	}
+	// The page loads the players over file://, so keep the theme folder's links
+	// current with the cache. A missing theme folder is a no-op.
+	installPaths := install.DefaultPaths()
+	installPaths.Runtime = runtimeDir
+	if err := install.RefreshThemeRuntime(installPaths, logf); err != nil {
+		// The hardened systemd unit mounts the theme folder read-only, so the
+		// server cannot relink it. Say once how to fix it by hand.
+		logf("spinewall: cannot relink the theme folder " + installPaths.ThemeDir() + ": " + err.Error() + ". Run 'spinewall runtime fetch' or 'spinewall setup' to relink the players.")
 	}
 	if offline {
 		logf("spinewall: runtime offline, using the cache at " + runtimeDir)
@@ -216,10 +226,17 @@ func runtimeCommand(args []string) error {
 
 	logf := func(line string) { fmt.Fprintln(os.Stderr, line) }
 	manager := runtime.New(runtime.Options{Dir: dir, Offline: offline, Logf: logf})
+	// A --runtime-dir override means the links must read that cache, not the
+	// default one.
+	paths := install.DefaultPaths()
+	paths.Runtime = dir
 
 	switch action {
 	case "fetch":
 		if err := manager.FetchAll(); err != nil {
+			return err
+		}
+		if err := install.RefreshThemeRuntime(paths, logf); err != nil {
 			return err
 		}
 		man := manager.Manifest()
@@ -235,6 +252,9 @@ func runtimeCommand(args []string) error {
 		return nil
 	case "verify":
 		if err := manager.Verify(); err != nil {
+			return err
+		}
+		if err := install.RefreshThemeRuntime(paths, logf); err != nil {
 			return err
 		}
 		fmt.Printf("runtime cache ok: %s (%d files)\n", dir, len(manager.Manifest().Files))

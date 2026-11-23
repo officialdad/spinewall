@@ -176,6 +176,78 @@ func TestNoNetworkStillInstalls(t *testing.T) {
 	}
 }
 
+// TestSetupLinksFetchedPlayersIntoTheTheme is the end-to-end regression for the
+// wallpaper opening the theme from file:// and failing to find the players setup
+// fetched into the cache. With the cache already holding the players, setup must
+// leave every one loading from the theme folder by its relative URL.
+func TestSetupLinksFetchedPlayersIntoTheTheme(t *testing.T) {
+	paths := homePaths(t)
+	t.Setenv("SPINEWALL_PORT", freePort(t))
+
+	// Seed the cache the way a completed fetch leaves it, so the offline run has
+	// players to link. The offline fetch reports failure without removing them.
+	if err := os.MkdirAll(paths.Runtime, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	names := spanruntime.ServedNames()
+	files := map[string]string{}
+	for _, name := range names {
+		files[name] = hashBytes([]byte("/* " + name + " */\n"))
+		if err := os.WriteFile(filepath.Join(paths.Runtime, name), []byte("/* "+name+" */\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := Run(Options{
+		Paths:      paths,
+		Yes:        true,
+		Offline:    true,
+		Executable: buildTestBinary(t),
+		Doctor:     offlineDetect(),
+		Runtime:    spanruntime.New(spanruntime.Options{Dir: paths.Runtime, Offline: true}),
+	}); err != nil {
+		t.Fatalf("setup --yes: %v", err)
+	}
+	defer install.StopServer(paths, func(string) {})
+
+	for _, name := range names {
+		got, err := os.ReadFile(filepath.Join(paths.ThemeDir(), name))
+		if err != nil {
+			t.Errorf("theme cannot load %s after setup: %v", name, err)
+			continue
+		}
+		if hashBytes(got) != files[name] {
+			t.Errorf("theme %s does not match the cached player", name)
+		}
+	}
+}
+
+// TestVerifyThemeRuntimeNamesAMissingLink proves the setup check fails when a
+// cached player has no link in the theme folder, which is the state the bug left.
+func TestVerifyThemeRuntimeNamesAMissingLink(t *testing.T) {
+	paths := homePaths(t)
+	if err := os.MkdirAll(paths.Runtime, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(paths.ThemeDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range spanruntime.ServedNames() {
+		if err := os.WriteFile(filepath.Join(paths.Runtime, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := verifyThemeRuntime(paths); err == nil {
+		t.Fatal("a cache with no links passed the theme check")
+	}
+	if err := install.RefreshThemeRuntime(paths, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyThemeRuntime(paths); err != nil {
+		t.Fatalf("linked cache failed the theme check: %v", err)
+	}
+}
+
 // ---- helpers ----
 
 // manifestEntry mirrors install.Manifest's JSON so the test can read it without

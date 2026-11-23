@@ -10,7 +10,31 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/officialdad/spinewall/internal/install"
+	"github.com/officialdad/spinewall/internal/runtime"
 )
+
+// verifyThemeRuntime checks that every runtime file the cache holds is reachable
+// from the theme folder. The KDE backend opens the page from file:// and the page
+// links each player by relative URL, so a cache the theme folder cannot reach is
+// what the wallpaper reports as "runtime not installed". The fetch step already
+// reported an empty cache, so only a cached file with no link is a failure here.
+func verifyThemeRuntime(paths install.Paths) error {
+	var missing []string
+	for _, name := range runtime.ServedNames() {
+		if _, err := os.Stat(filepath.Join(paths.Runtime, name)); err != nil {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(paths.ThemeDir(), name)); err != nil {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("the theme folder %s cannot load %s. Run 'spinewall setup' again to relink them", paths.ThemeDir(), strings.Join(missing, ", "))
+	}
+	return nil
+}
 
 // LicenseNotice is the Spine licence consent text. It reuses the README Legal
 // notice wording so the wizard and the docs say the same thing.
