@@ -254,7 +254,7 @@ func matchScreen(name string, outputs []monitorInfo, known []string) (string, er
 		}
 	}
 	if found == nil || !found.enabled || !found.hasGeom {
-		return "", fmt.Errorf("KWin reports monitor %s, which the output list does not include. Name it with --screen KEY", name)
+		return "", fmt.Errorf("the desktop reports monitor %s, which the output list does not include. Name it with --screen KEY", name)
 	}
 	suffix := fmt.Sprintf("+%d+%d", found.x, found.y)
 	exact := fmt.Sprintf("%dx%d%s", found.w, found.h, suffix)

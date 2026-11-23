@@ -283,7 +283,12 @@ int main(int argc, char **argv) {
             std::fprintf(stderr, "SPVIEW mask %d rect(s) rev %d\n", int(rects.size()), rev);
         });
     });
-    timer->start(opt.pollMs > 0 ? opt.pollMs : 400);
+    // On xcb, QWindow::setMask sets the XShape bounding region, which clips what
+    // the window draws as well as its input. A desktop-type window has no desktop
+    // below it to pass clicks to, so X11 keeps the whole surface and takes no mask.
+    if (opt.backend != "x11") {
+        timer->start(opt.pollMs > 0 ? opt.pollMs : 400);
+    }
 
     // A lock, a suspend or a fullscreen client can leave the page's draw loop
     // dead while the surface stays mapped, so the window never sees a visibility

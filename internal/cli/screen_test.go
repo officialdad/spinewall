@@ -177,8 +177,12 @@ func TestMatchScreenAmbiguousIsError(t *testing.T) {
 
 func TestMatchScreenMissingMonitorIsError(t *testing.T) {
 	outputs := parseSupportInformation(sampleSupport)
-	if _, err := matchScreen("DP-9", outputs, []string{"3440x1440+0+0"}); err == nil {
+	_, err := matchScreen("DP-9", outputs, []string{"3440x1440+0+0"})
+	if err == nil {
 		t.Fatal("expected an error for an unknown monitor")
+	}
+	if strings.Contains(err.Error(), "KWin") {
+		t.Errorf("the shared error names one compositor: %v", err)
 	}
 }
 

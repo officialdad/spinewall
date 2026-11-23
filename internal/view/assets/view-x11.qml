@@ -5,7 +5,8 @@
 // the bottom that never takes focus. Qt.Desktop is not used: the xcb plugin
 // adopts the root window for it, so every monitor would share one surface. The
 // launcher marks the window _NET_WM_WINDOW_TYPE_DESKTOP before it maps, which is
-// why it starts hidden. The launcher passes the output's geometry in
+// why it starts hidden. It sets no input mask: on X11 that would clip the
+// drawing too, so the whole window takes clicks. The launcher passes the output's geometry in
 // targetX/targetY/targetWidth/targetHeight. This path is best effort and
 // unverified on real hardware; see docs/desktops.md.
 import QtQuick

@@ -34,9 +34,12 @@ X11 has no `zwlr_layer_shell_v1`, so the native view draws a desktop-type window
 instead: one per monitor, kept at the bottom and out of focus by the window
 manager. Each window is a normal frameless window that the launcher marks
 `_NET_WM_WINDOW_TYPE_DESKTOP` before it maps. Qt's own `Qt::Desktop` flag is not
-used, because it takes over the root window, so every monitor would share it. It is the same launcher and the same page as the layer-shell view, with
-a different QML surface (`view-x11.qml`). The click mask still works, because
-`QWindow::setMask` exists on X11 too.
+used, because it takes over the root window, so every monitor would share it.
+It is the same launcher and the same page as the layer-shell view, with a
+different QML surface (`view-x11.qml`). There is no click mask on X11: Qt sets
+the mask there as an XShape bounding region, which would clip the drawing to the
+characters as well. The whole window takes clicks instead, so a click beside a
+character does nothing rather than reaching the desktop.
 
 Try it against a running server:
 
