@@ -14,8 +14,12 @@ import (
 	"strings"
 )
 
-// Scope is the layer-shell scope name the surface registers under.
-const Scope = "spinewall"
+// Scope is the layer-shell scope name the surface registers under. KWin maps a
+// scope to a window type, and treats an unknown name as a normal window, which
+// Peek at Desktop (Meta+D) hides. "desktop" makes KWin classify the surface as a
+// desktop window, the same type plasmashell's wallpaper has, so Peek leaves it
+// shown. It must match LayerShell.Window.scope in assets/view.qml.
+const Scope = "desktop"
 
 // Backend names the native view surface the launcher draws.
 const (
