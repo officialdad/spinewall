@@ -107,9 +107,12 @@ test("a click still fires when only mouse events arrive, with no pointer events"
 test("a click on the Edit button or a picker cell is not a stage click", async ({ page, server }) => {
   await cmd(`set-model/${id}`);
   await get("/edit/0");
-  await page.goto(`${THEME_URL}?view=native&screen=1920x1080%2B0%2B0`);
+  // The page runs on its own screen stage, so read that stage, not the default one.
+  const screen = "screen=1920x1080%2B0%2B0";
+  const animation = async () => (await get(`/state?${screen}`)).animation;
+  await page.goto(`${THEME_URL}?view=native&${screen}`);
   await expect.poll(reported(id)).toBeTruthy();
-  const before = (await get("/state")).animation;
+  const before = await animation();
   const fired = (await input()).fired || 0;
 
   await page.locator("#editToggle").click();
@@ -119,6 +122,6 @@ test("a click on the Edit button or a picker cell is not a stage click", async (
   await star.click();
 
   await page.waitForTimeout(2500);
-  expect((await get("/state")).animation).toBe(before);
+  expect(await animation()).toBe(before);
   expect((await input()).fired || 0).toBe(fired);
 });
