@@ -540,17 +540,17 @@ const editToggle = document.getElementById("editToggle");
 if (LOCAL || NATIVE) {
   editToggle.hidden = false;
   editToggle.addEventListener("click", () => api(`/edit/${editMode ? 0 : 1}`));
-  ["pointerdown", "pointerup", "pointermove", "wheel"].forEach(type => editToggle.addEventListener(type, e => e.stopPropagation()));
+  ["pointerdown", "pointerup", "pointermove", "mousedown", "mouseup", "mousemove", "wheel"].forEach(type => editToggle.addEventListener(type, e => e.stopPropagation()));
 }
 
 // Edit mode owns drag and wheel on the window, so the panel must keep its events to itself.
 const dockFold = document.getElementById("dockFold");
-["pointerdown", "pointerup", "pointermove", "wheel"].forEach(type => {
+["pointerdown", "pointerup", "pointermove", "mousedown", "mouseup", "mousemove", "wheel"].forEach(type => {
   picker.addEventListener(type, e => e.stopPropagation());
   dockFold.addEventListener(type, e => e.stopPropagation());
 });
-dockFold.addEventListener("pointerup", () => { dragging = false; click = null; });
-picker.addEventListener("pointerup", () => { dragging = false; click = null; });
+["pointerup", "mouseup"].forEach(type => dockFold.addEventListener(type, () => { dragging = false; click = null; }));
+["pointerup", "mouseup"].forEach(type => picker.addEventListener(type, () => { dragging = false; click = null; }));
 
 // ---- Option C chrome: a chip bar and an on-canvas handle beside the selected character ----
 const handle = document.getElementById("handle");
@@ -561,10 +561,10 @@ const barAdd = document.getElementById("barAdd");
 const barBrowse = document.getElementById("barBrowse");
 
 // These controls float over the stage, so a press on them never reaches the drag and click handlers.
-[handle, bar].forEach(node => ["pointerdown", "pointerup", "pointermove", "wheel"]
+[handle, bar].forEach(node => ["pointerdown", "pointerup", "pointermove", "mousedown", "mouseup", "mousemove", "wheel"]
   .forEach(type => node.addEventListener(type, e => e.stopPropagation())));
-handle.addEventListener("pointerup", () => { dragging = false; click = null; });
-bar.addEventListener("pointerup", () => { dragging = false; click = null; });
+["pointerup", "mouseup"].forEach(type => handle.addEventListener(type, () => { dragging = false; click = null; }));
+["pointerup", "mouseup"].forEach(type => bar.addEventListener(type, () => { dragging = false; click = null; }));
 
 function stepSelectedAnim(step) {
   const e = selectedChar();

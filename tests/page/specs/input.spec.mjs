@@ -1,4 +1,4 @@
-import { test, expect, get, cmd, reported } from "../lib/fixture.mjs";
+import { test, expect, get, cmd, reported, THEME_URL } from "../lib/fixture.mjs";
 import { SOLO } from "../lib/models.mjs";
 
 const id = SOLO["4.0"];
@@ -99,4 +99,26 @@ test("a click still fires when only mouse events arrive, with no pointer events"
   await dispatchMouse(page, "mouseup", 640, 400);
   await expect.poll(async () => (await get("/state")).animation).not.toBe(before);
   await expect.poll(async () => (await input()).fired).toBeGreaterThan(0);
+});
+
+// A page control stops the pointer events of its press, so the first press on one
+// leaves the page with no pointer gesture seen yet. The mouse copy of that press
+// must stop at the control too, or it counts as a stage click behind the control.
+test("a click on the Edit button or a picker cell is not a stage click", async ({ page, server }) => {
+  await cmd(`set-model/${id}`);
+  await get("/edit/0");
+  await page.goto(`${THEME_URL}?view=native&screen=1920x1080%2B0%2B0`);
+  await expect.poll(reported(id)).toBeTruthy();
+  const before = (await get("/state")).animation;
+  const fired = (await input()).fired || 0;
+
+  await page.locator("#editToggle").click();
+  await expect.poll(async () => (await get("/state")).edit).toBe(1);
+  const star = page.locator('#list .cell[aria-current="true"] .star');
+  await expect(star).toBeVisible();
+  await star.click();
+
+  await page.waitForTimeout(2500);
+  expect((await get("/state")).animation).toBe(before);
+  expect((await input()).fired || 0).toBe(fired);
 });
