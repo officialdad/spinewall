@@ -13,7 +13,12 @@ Window {
     visible: true
     color: "#000000"
 
-    LayerShell.Window.scope: "spinewall"
+    // KWin derives a layer-shell surface's window type from its scope, and treats
+    // an unknown scope as a normal window, which Peek at Desktop (Meta+D) hides.
+    // The scope "desktop" makes KWin classify the surface as a desktop window,
+    // the same type plasmashell's wallpaper has, and Peek leaves desktop windows
+    // shown. This is why the old Plasma wallpaper backend never disappeared.
+    LayerShell.Window.scope: "desktop"
     LayerShell.Window.layer: shellLayer
     LayerShell.Window.anchors: LayerShell.Window.AnchorTop
                              | LayerShell.Window.AnchorBottom
