@@ -77,3 +77,26 @@ test("a drag of 30 px or more is not a click", async ({ open, page }) => {
   await page.waitForTimeout(800);
   expect((await get("/state")).animation).toBe(before);
 });
+
+// A host can forward mouse and wheel events without ever synthesizing Pointer
+// Events (the old webwallpaper host did this on the same Plasma the captain runs).
+// CSS :hover still highlights and the wheel still arrives, so the page looks
+// alive, yet a pointerdown-only listener counts every click as lost. Dispatch raw
+// MouseEvents, which carry no accompanying pointerdown, and expect the click to
+// still change the animation and raise input.fired.
+const dispatchMouse = (page, type, x, y) => page.evaluate(([type, x, y]) => {
+  document.dispatchEvent(new MouseEvent(type, {
+    bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: type === "mouseup" ? 0 : 1,
+  }));
+}, [type, x, y]);
+
+test("a click still fires when only mouse events arrive, with no pointer events", async ({ open, page }) => {
+  await open({ model: id });
+  await expect.poll(reported(id)).toBeTruthy();
+  const before = (await get("/state")).animation;
+  await dispatchMouse(page, "mousemove", 640, 400);
+  await dispatchMouse(page, "mousedown", 640, 400);
+  await dispatchMouse(page, "mouseup", 640, 400);
+  await expect.poll(async () => (await get("/state")).animation).not.toBe(before);
+  await expect.poll(async () => (await input()).fired).toBeGreaterThan(0);
+});

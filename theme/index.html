@@ -459,26 +459,40 @@ addEventListener("wheel", e => {
   applyView(); pushView();
 }, {passive: true});
 
-addEventListener("pointerdown", e => {
+// Input normally arrives as Pointer Events, but some hosts only send the older
+// Mouse Events. The old webwallpaper host was one: the wheel counter rose and
+// CSS :hover still highlighted, so the page looked alive, yet pointerdown stayed
+// 0 and every click was silently lost. The press, drag and click therefore share
+// one path fed by both families. A flag per family records which family this host
+// actually sends, so the duplicate copy of the same gesture is dropped and a
+// click never fires twice on the hosts (browser, native view) that send both.
+let hasPointerDown = false, hasPointerMove = false;
+
+function pressDown(x, y, button, fromPointer) {
+  if (fromPointer) hasPointerDown = true;
+  else if (hasPointerDown) return; // a real pointer gesture already handled this press
   counts.pointerdown++;
-  if (e.button !== 0) return;
+  if (button !== 0) return;
   if (editMode) dragging = true;
   if (multi && editMode) {
-    const hit = hitTest(e.clientX, e.clientY);
+    const hit = hitTest(x, y);
     if (hit) selectChar(hit.uid);
   }
-  click = {x: e.clientX, y: e.clientY, t: performance.now()};
-});
+  click = {x, y, t: performance.now()};
+}
 
-addEventListener("pointerup", e => {
+function pressUp(x, y, button, fromPointer) {
+  // A pointer gesture owns the press; the mouse copy of that same gesture is dropped.
+  if (fromPointer) hasPointerDown = true;
+  else if (hasPointerDown) return;
   counts.pointerup++;
-  if (e.button !== 0) return;
+  if (button !== 0) return;
   const isClick = click
     && performance.now() - click.t < CLICK_MAX_MS
-    && Math.hypot(e.clientX - click.x, e.clientY - click.y) < CLICK_MAX_PX;
+    && Math.hypot(x - click.x, y - click.y) < CLICK_MAX_PX;
   if (isClick && multi) {
     // Only the topmost character under the pointer reacts. Empty space does nothing.
-    const hit = hitTest(e.clientX, e.clientY);
+    const hit = hitTest(x, y);
     if (hit) {
       counts.fired++;
       cmd(`next-char-anim/${hit.uid}`);
@@ -489,25 +503,34 @@ addEventListener("pointerup", e => {
   }
   click = null;
   dragging = false;
-});
+}
 
-addEventListener("pointercancel", () => { click = null; dragging = false; });
-addEventListener("blur", () => { click = null; dragging = false; });
-
-addEventListener("pointermove", e => {
+function pressMove(x, y, dx, dy, buttons, fromPointer) {
+  if (fromPointer) hasPointerMove = true;
+  else if (hasPointerMove) return; // pointer moves already drive the drag
   counts.pointermove++;
-  // The picker swallows pointerup, so a release over it leaves no event here. A move with no button held ends the drag.
-  if (dragging && !(e.buttons & 1)) { dragging = false; click = null; }
+  // The picker swallows the release, so a move with no button held ends the drag.
+  if (dragging && !(buttons & 1)) { dragging = false; click = null; }
   if (!dragging || !editMode) return;
   if (multi) {
     const c = selectedChar();
-    if (c) { c.x += e.movementX / (innerWidth * fit.s); c.y += e.movementY / (innerHeight * fit.s); layoutMoved(); }
+    if (c) { c.x += dx / (innerWidth * fit.s); c.y += dy / (innerHeight * fit.s); layoutMoved(); }
     return;
   }
-  view.x += e.movementX / (innerWidth * fit.s);
-  view.y += e.movementY / (innerHeight * fit.s);
+  view.x += dx / (innerWidth * fit.s);
+  view.y += dy / (innerHeight * fit.s);
   applyView(); pushView();
-});
+}
+
+addEventListener("pointerdown", e => pressDown(e.clientX, e.clientY, e.button, true));
+addEventListener("mousedown", e => pressDown(e.clientX, e.clientY, e.button, false));
+addEventListener("pointerup", e => pressUp(e.clientX, e.clientY, e.button, true));
+addEventListener("mouseup", e => pressUp(e.clientX, e.clientY, e.button, false));
+addEventListener("pointermove", e => pressMove(e.clientX, e.clientY, e.movementX, e.movementY, e.buttons, true));
+addEventListener("mousemove", e => pressMove(e.clientX, e.clientY, e.movementX, e.movementY, e.buttons, false));
+
+addEventListener("pointercancel", () => { click = null; dragging = false; });
+addEventListener("blur", () => { click = null; dragging = false; });
 
 const picker = document.getElementById("picker");
 
