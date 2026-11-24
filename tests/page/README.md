@@ -7,7 +7,7 @@ Headless Playwright tests for `theme/index.html`. They run the real page in Chro
 | Spec | Covers |
 |---|---|
 | `specs/runtimes.spec.mjs` | Loads 3.7, 3.8, 4.0, 4.1, and 4.2 models. Model switch. Poll applies a change within 2 s. Missing-runtime notice. `webglcontextlost` reload. |
-| `specs/input.spec.mjs` | Normal-mode click and `input.fired`. Edit-mode drag and wheel. Scale clamp. The 30 px click rule. |
+| `specs/input.spec.mjs` | Normal-mode click and `input.fired`. Edit-mode drag and wheel. Scale clamp. The 30 px click rule. A click from mouse events alone. A click on the Edit button or a picker cell never clicks the stage. |
 | `specs/multi.spec.mjs` | Add and remove characters. Topmost hit test. Empty-space click. Scene order and click pass-through. Canvas z-order. |
 | `specs/picker.spec.mjs` | Windowed list, fuzzy search, kind filter, Alt+F favorite, variants, keyboard, `/models` retry when the server starts late. |
 | `specs/presets.spec.mjs` | Save, load, and delete a preset from the picker. Multi and single layouts. Reload keeps presets. |
