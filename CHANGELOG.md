@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/officialdad/spinewall/compare/v0.7.0...v0.7.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **view:** re-place wallpaper views when monitors change ([#38](https://github.com/officialdad/spinewall/issues/38)) ([a14c388](https://github.com/officialdad/spinewall/commit/a14c388bf84698387a21eaacbbf7a56a64cd971d))
+
 ## [0.7.0](https://github.com/officialdad/spinewall/compare/v0.6.0...v0.7.0) (2026-11-24)
 
 
