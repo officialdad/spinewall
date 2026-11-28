@@ -323,5 +323,17 @@ int main(int argc, char **argv) {
     session.connect(QString(), QString(), QStringLiteral("org.kde.screensaver"),
                     QStringLiteral("ActiveChanged"), reload, SLOT(start()));
 
+    // A display reconfigure can leave this surface orphaned on a vanished
+    // output, drawing nothing while the process stays alive, and a GPU context
+    // loss can stall the draw loop the same way. The supervisor re-creates a
+    // window when the output set itself changes; these in-process hooks reload
+    // the page for a reconfigure that does not, and for a dead scene graph, as
+    // the page already reloads on lock, resume and webglcontextlost.
+    QObject::connect(&app, &QGuiApplication::screenAdded, reload, [reload]() { reload->start(); });
+    QObject::connect(&app, &QGuiApplication::screenRemoved, reload, [reload]() { reload->start(); });
+    QObject::connect(&app, &QGuiApplication::primaryScreenChanged, reload, [reload]() { reload->start(); });
+    QObject::connect(window, &QQuickWindow::sceneGraphError, reload,
+                     [reload](QQuickWindow::SceneGraphError, const QString &) { reload->start(); });
+
     return app.exec();
 }

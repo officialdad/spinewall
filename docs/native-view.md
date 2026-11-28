@@ -24,7 +24,8 @@ providers are described in [desktops.md](desktops.md).
   click mask and to show an Edit button.
 - `spinewall serve --with-view` runs both in one process tree: the server in the
   foreground, the launcher windows in a supervisor that restarts a window that
-  exits on its own. The autostart entry uses this command.
+  exits on its own and re-places a window when its monitor changes. The autostart
+  entry uses this command.
 
 ## Why a C++ launcher, and why it builds on your machine
 
@@ -73,6 +74,11 @@ window anchors to all four edges with `exclusionZone: -1`, so it never reserves
 space on the desktop. The X11 surface instead places each window on its output's
 geometry through the window manager; see [desktops.md](desktops.md).
 
+The supervisor re-reads the compositor's outputs every ten seconds. When an output
+is added, removed or its geometry changes, it retires the affected window and starts
+it again on the new output, so a display reconfigure never leaves a surface orphaned
+on a vanished output drawing nothing.
+
 The launcher uses `LayerBottom`, proven on KDE Plasma 6 Wayland: the surface sits
 above Plasma's desktop windows and below normal windows. `--layer background` is
 available for a compositor that wants the wallpaper layer instead.
@@ -81,13 +87,15 @@ available for a compositor that wants the wallpaper layer instead.
 
 The old webwallpaper plugin paused on fullscreen windows and never restarted the
 draw loop, so the page reloaded on `webwallpaper:resume`. The native surface has no
-such pause: a fullscreen window hides it and it stays alive underneath. A lock, a suspend or
-a fullscreen client can still leave the draw loop dead without the window ever
-becoming invisible, so the launcher reloads the page on the session's own signals:
-logind `PrepareForSleep` and the session `Unlock`, and `ActiveChanged` from
-`org.freedesktop.ScreenSaver` or `org.kde.screensaver`. A burst of signals makes one
-reload, and the launcher logs `SPVIEW reload on resume`. The page still reloads on
-`webglcontextlost` as well.
+such pause: a fullscreen window hides it and it stays alive underneath. A lock, a suspend,
+a fullscreen client, a display reconfigure or a lost GPU context can still leave the draw
+loop dead without the window ever becoming invisible, so the launcher reloads the page on
+the session's own signals: logind `PrepareForSleep` and the session `Unlock`,
+`ActiveChanged` from `org.freedesktop.ScreenSaver` or `org.kde.screensaver`,
+`QGuiApplication` `screenAdded`, `screenRemoved` and `primaryScreenChanged`,
+`QQuickWindow` `sceneGraphError`, and a terminated render process. A burst of
+signals makes one reload, and the launcher logs `SPVIEW reload on resume`. The page
+still reloads on `webglcontextlost` as well.
 
 ## Edit mode without the patch
 
