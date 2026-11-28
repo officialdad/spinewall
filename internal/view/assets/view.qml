@@ -38,5 +38,9 @@ Window {
         settings.localContentCanAccessRemoteUrls: true
         settings.localStorageEnabled: true
         settings.playbackRequiresUserGesture: false
+        // A lost GPU context or a dead render process leaves the surface drawing
+        // nothing while the window stays mapped. Reload the page so the draw
+        // loop comes back, as the page already does on webglcontextlost.
+        onRenderProcessTerminated: reload()
     }
 }

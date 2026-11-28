@@ -3,11 +3,13 @@ package view
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // launcherPkgModules are the pkg-config modules the launcher links against. It
@@ -121,9 +123,11 @@ type Monitor struct {
 
 // ListMonitors asks the launcher for the compositor's outputs. It runs the
 // built binary in list mode, so the answer matches how it will place windows.
-func ListMonitors(bin string, env []string) ([]Monitor, error) {
-	cmd := exec.Command(bin, "--list-screens")
+// Cancelling ctx kills the list process.
+func ListMonitors(ctx context.Context, bin string, env []string) ([]Monitor, error) {
+	cmd := exec.CommandContext(ctx, bin, "--list-screens")
 	cmd.Env = env
+	cmd.WaitDelay = time.Second
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("list monitors: %w", err)

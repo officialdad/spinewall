@@ -185,6 +185,11 @@ int main(int argc, char **argv) {
             }
         }
     }
+    if (!screen && (!opt.output.isEmpty() || !opt.geometry.isEmpty())) {
+        std::fprintf(stderr, "SPVIEW error no screen for output %s geometry %s\n",
+                     opt.output.toLocal8Bit().constData(), opt.geometry.toLocal8Bit().constData());
+        return 1;
+    }
     if (!screen) {
         screen = QGuiApplication::primaryScreen();
     }
@@ -322,6 +327,29 @@ int main(int argc, char **argv) {
                     QStringLiteral("ActiveChanged"), reload, SLOT(start()));
     session.connect(QString(), QString(), QStringLiteral("org.kde.screensaver"),
                     QStringLiteral("ActiveChanged"), reload, SLOT(start()));
+
+    // A display reconfigure can leave this surface orphaned on a vanished
+    // output, drawing nothing while the process stays alive. A page reload does
+    // not re-create a layer-shell surface bound to a removed screen, so losing
+    // this window's own screen exits and the supervisor relaunches it on the
+    // current output. Another screen coming or going only reloads the page. A
+    // scene graph error leaves no context a reload can fix, so it exits too.
+    QObject::connect(&app, &QGuiApplication::screenAdded, reload, [reload]() { reload->start(); });
+    QObject::connect(&app, &QGuiApplication::screenRemoved, reload, [reload, screen](QScreen *removed) {
+        if (removed == screen) {
+            std::fprintf(stderr, "SPVIEW screen %s removed, exiting\n", removed->name().toLocal8Bit().constData());
+            QCoreApplication::exit(1);
+            return;
+        }
+        reload->start();
+    });
+    QObject::connect(&app, &QGuiApplication::primaryScreenChanged, reload, [reload]() { reload->start(); });
+    QObject::connect(window, &QQuickWindow::sceneGraphError, &app,
+                     [](QQuickWindow::SceneGraphError, const QString &message) {
+                         std::fprintf(stderr, "SPVIEW scene graph error %s, exiting\n",
+                                      message.toLocal8Bit().constData());
+                         QCoreApplication::exit(1);
+                     });
 
     return app.exec();
 }
