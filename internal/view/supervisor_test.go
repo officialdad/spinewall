@@ -322,6 +322,53 @@ func TestSupervisorStopsDuringHungMonitorList(t *testing.T) {
 	}
 }
 
+// TestSupervisorStartupReadHasNoDeadline proves the first monitor read gets no
+// timeout, so a slow cold start at login still brings the view up, while a
+// polled read is bounded and cannot block stop.
+func TestSupervisorStartupReadHasNoDeadline(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "spinewall-view")
+	script := "#!/bin/sh\ntrap 'exit 0' TERM\nwhile true; do sleep 0.2; done\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	type read struct{ deadline bool }
+	reads := make(chan read, 16)
+	list := func(ctx context.Context) ([]Monitor, error) {
+		_, ok := ctx.Deadline()
+		select {
+		case reads <- read{deadline: ok}:
+		default:
+		}
+		return []Monitor{{Name: "DP-2", Geometry: "3440x1440+0+0"}}, nil
+	}
+	sup := NewSupervisor(SuperviseOptions{
+		Binary:       fake,
+		APIBase:      "http://127.0.0.1:8777",
+		Env:          os.Environ(),
+		ListMonitors: list,
+		PollInterval: 20 * time.Millisecond,
+	})
+	stop := make(chan struct{})
+	done := make(chan error, 1)
+	go func() { done <- sup.Run(nil, stop) }()
+	defer func() {
+		close(stop)
+		<-done
+	}()
+
+	for i, want := range []bool{false, true} {
+		select {
+		case r := <-reads:
+			if r.deadline != want {
+				t.Errorf("read %d has deadline %v, want %v", i, r.deadline, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("read %d never happened", i)
+		}
+	}
+}
+
 // waitFor polls cond until it is true or the deadline passes.
 func waitFor(t *testing.T, timeout time.Duration, cond func() bool) bool {
 	t.Helper()

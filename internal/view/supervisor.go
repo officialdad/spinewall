@@ -22,7 +22,7 @@ const restartPause = 2 * time.Second
 // output goes away, and this poll catches an added output or a geometry move.
 const monitorPoll = 10 * time.Second
 
-// listTimeout bounds one monitor read. A Wayland client can stall during a
+// listTimeout bounds one polled monitor read. A Wayland client can stall during a
 // display reconfigure, and a hung read must not block stop.
 const listTimeout = 5 * time.Second
 
@@ -106,7 +106,7 @@ type window struct {
 func (s *Supervisor) Run(monitors []Monitor, stop <-chan struct{}) error {
 	if len(monitors) == 0 {
 		var err error
-		monitors, err = s.listMonitors(stop)
+		monitors, err = s.listMonitors(context.Background(), stop)
 		if err != nil {
 			return err
 		}
@@ -132,7 +132,9 @@ func (s *Supervisor) Run(monitors []Monitor, stop <-chan struct{}) error {
 		case <-stop:
 			return nil
 		case <-ticker.C:
-			next, err := s.listMonitors(stop)
+			pollCtx, cancelPoll := context.WithTimeout(context.Background(), listTimeout)
+			next, err := s.listMonitors(pollCtx, stop)
+			cancelPoll()
 			if err != nil {
 				s.logf("list monitors: " + err.Error())
 				continue
@@ -150,10 +152,11 @@ func (s *Supervisor) Run(monitors []Monitor, stop <-chan struct{}) error {
 	}
 }
 
-// listMonitors reads the monitors, giving up after listTimeout or when stop
-// closes.
-func (s *Supervisor) listMonitors(stop <-chan struct{}) ([]Monitor, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), listTimeout)
+// listMonitors reads the monitors, giving up when ctx ends or stop closes. The
+// startup read has no deadline, since a cold launcher start at login can be
+// slow and a failed first read leaves no view at all.
+func (s *Supervisor) listMonitors(parent context.Context, stop <-chan struct{}) ([]Monitor, error) {
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	go func() {
 		select {
