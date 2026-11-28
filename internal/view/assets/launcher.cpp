@@ -185,6 +185,11 @@ int main(int argc, char **argv) {
             }
         }
     }
+    if (!screen && (!opt.output.isEmpty() || !opt.geometry.isEmpty())) {
+        std::fprintf(stderr, "SPVIEW error no screen for output %s geometry %s\n",
+                     opt.output.toLocal8Bit().constData(), opt.geometry.toLocal8Bit().constData());
+        return 1;
+    }
     if (!screen) {
         screen = QGuiApplication::primaryScreen();
     }

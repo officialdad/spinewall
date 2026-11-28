@@ -369,6 +369,85 @@ func TestSupervisorStartupReadHasNoDeadline(t *testing.T) {
 	}
 }
 
+// TestSupervisorRetiresRefusedRelaunchForUnpluggedMonitor proves that a window
+// whose output is unplugged stops for good once the poll sees the output gone.
+// The fake launcher mimics the real one: it exits 1 when its own output goes,
+// and on relaunch it exits 1 at once because no screen matches its --output.
+// The supervisor relaunches it after the restart pause, the next poll retires
+// it, and it never runs again, while the surviving window keeps its single run.
+func TestSupervisorRetiresRefusedRelaunchForUnpluggedMonitor(t *testing.T) {
+	dir := t.TempDir()
+	record := filepath.Join(dir, "argv")
+	exits := filepath.Join(dir, "exits")
+	unplugged := filepath.Join(dir, "unplugged")
+	fake := filepath.Join(dir, "spinewall-view")
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' \"$*\" >> " + record + "\n" +
+		"case \"$*\" in *'--output HDMI-A-1 '*) gone=1;; *) gone=0;; esac\n" +
+		"trap 'exit 0' TERM\n" +
+		"while true; do\n" +
+		"  if [ $gone = 1 ] && [ -e " + unplugged + " ]; then printf 'exit\\n' >> " + exits + "; exit 1; fi\n" +
+		"  sleep 0.05\n" +
+		"done\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	monitors := []Monitor{
+		{Name: "DP-2", Geometry: "3440x1440+0+0"},
+		{Name: "HDMI-A-1", Geometry: "1920x1080+3440+236"},
+	}
+	list := func(context.Context) ([]Monitor, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]Monitor(nil), monitors...), nil
+	}
+	sup := NewSupervisor(SuperviseOptions{
+		Binary:       fake,
+		APIBase:      "http://127.0.0.1:8777",
+		Env:          os.Environ(),
+		ListMonitors: list,
+		PollInterval: 40 * time.Millisecond,
+	})
+	stop := make(chan struct{})
+	done := make(chan error, 1)
+	go func() { done <- sup.Run(nil, stop) }()
+	defer func() {
+		close(stop)
+		<-done
+	}()
+
+	if !waitFor(t, 5*time.Second, func() bool { return lines(t, record) >= 2 }) {
+		t.Fatalf("both windows did not start:\n%s", readAll(record))
+	}
+	// Unplug HDMI-A-1. The launcher sees it first; the compositor list still
+	// names it until the supervisor's relaunch has been refused.
+	if err := os.WriteFile(unplugged, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !waitFor(t, 5*time.Second, func() bool { return lines(t, exits) >= 2 }) {
+		t.Fatalf("gone window was not relaunched and refused:\nruns:\n%s", readAll(record))
+	}
+	mu.Lock()
+	monitors = monitors[:1]
+	mu.Unlock()
+
+	// Wait past a full restart pause: a window left unretired would relaunch.
+	time.Sleep(restartPause + 500*time.Millisecond)
+	gone := screencount(t, record, "1920x1080+3440+236")
+	if got := lines(t, exits); got != gone {
+		t.Errorf("gone window ran %d times but exited %d times, so one is still running", gone, got)
+	}
+	time.Sleep(restartPause + 500*time.Millisecond)
+	if got := screencount(t, record, "1920x1080+3440+236"); got != gone {
+		t.Errorf("gone window relaunched after retire: %d runs, then %d:\n%s", gone, got, readAll(record))
+	}
+	if got := screencount(t, record, "3440x1440+0+0"); got != 1 {
+		t.Errorf("surviving DP-2 window ran %d times, want 1:\n%s", got, readAll(record))
+	}
+}
+
 // waitFor polls cond until it is true or the deadline passes.
 func waitFor(t *testing.T, timeout time.Duration, cond func() bool) bool {
 	t.Helper()

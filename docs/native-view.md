@@ -99,7 +99,10 @@ reloads on a terminated render process and on `webglcontextlost` as well.
 A page reload cannot re-create a surface whose output is gone or a scene graph that
 failed. So when the window's own screen is removed, or `QQuickWindow` emits
 `sceneGraphError`, the launcher logs the cause and exits with status 1. The supervisor
-then relaunches the window on the current output after its two-second pause.
+then relaunches the window on the current output after its two-second pause. A launcher given
+`--output` or `--geometry` that matches no screen exits with status 1 rather than open on
+the primary screen, so a gone output never doubles a surface on another monitor. The
+supervisor's next poll retires that window.
 
 ## Edit mode without the patch
 
