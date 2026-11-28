@@ -88,14 +88,18 @@ available for a compositor that wants the wallpaper layer instead.
 The old webwallpaper plugin paused on fullscreen windows and never restarted the
 draw loop, so the page reloaded on `webwallpaper:resume`. The native surface has no
 such pause: a fullscreen window hides it and it stays alive underneath. A lock, a suspend,
-a fullscreen client, a display reconfigure or a lost GPU context can still leave the draw
-loop dead without the window ever becoming invisible, so the launcher reloads the page on
-the session's own signals: logind `PrepareForSleep` and the session `Unlock`,
-`ActiveChanged` from `org.freedesktop.ScreenSaver` or `org.kde.screensaver`,
-`QGuiApplication` `screenAdded`, `screenRemoved` and `primaryScreenChanged`,
-`QQuickWindow` `sceneGraphError`, and a terminated render process. A burst of
+a fullscreen client or a display reconfigure can still leave the draw loop dead without
+the window ever becoming invisible, so the launcher reloads the page on the session's own
+signals: logind `PrepareForSleep` and the session `Unlock`, `ActiveChanged` from
+`org.freedesktop.ScreenSaver` or `org.kde.screensaver`, and `QGuiApplication`
+`screenAdded`, `primaryScreenChanged` and `screenRemoved` for another screen. A burst of
 signals makes one reload, and the launcher logs `SPVIEW reload on resume`. The page
-still reloads on `webglcontextlost` as well.
+reloads on a terminated render process and on `webglcontextlost` as well.
+
+A page reload cannot re-create a surface whose output is gone or a scene graph that
+failed. So when the window's own screen is removed, or `QQuickWindow` emits
+`sceneGraphError`, the launcher logs the cause and exits with status 1. The supervisor
+then relaunches the window on the current output after its two-second pause.
 
 ## Edit mode without the patch
 

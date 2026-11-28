@@ -1,6 +1,7 @@
 package view
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,7 +144,7 @@ func TestSupervisorFollowsMonitorChange(t *testing.T) {
 		{Name: "DP-2", Geometry: "3440x1440+0+0"},
 		{Name: "HDMI-A-1", Geometry: "1920x1080+3440+236"},
 	}
-	list := func() ([]Monitor, error) {
+	list := func(context.Context) ([]Monitor, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]Monitor(nil), monitors...), nil
@@ -226,7 +227,7 @@ func TestSupervisorRemovesWindowForGoneMonitor(t *testing.T) {
 		{Name: "DP-2", Geometry: "3440x1440+0+0"},
 		{Name: "HDMI-A-1", Geometry: "1920x1080+3440+236"},
 	}
-	list := func() ([]Monitor, error) {
+	list := func(context.Context) ([]Monitor, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]Monitor(nil), monitors...), nil
@@ -274,6 +275,50 @@ func TestSupervisorRemovesWindowForGoneMonitor(t *testing.T) {
 	}
 	if got := screencount(t, record, "3440x1440+0+0"); got != 1 {
 		t.Errorf("surviving DP-2 window ran %d times, want 1:\n%s", got, readAll(record))
+	}
+}
+
+// TestSupervisorStopsDuringHungMonitorList proves a monitor read that never
+// returns on its own does not block stop. A Wayland client can stall during a
+// display reconfigure, and serve --with-view must still exit on SIGTERM.
+func TestSupervisorStopsDuringHungMonitorList(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "spinewall-view")
+	script := "#!/bin/sh\ntrap 'exit 0' TERM\nwhile true; do sleep 0.2; done\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	listing := make(chan struct{}, 1)
+	list := func(ctx context.Context) ([]Monitor, error) {
+		select {
+		case listing <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	sup := NewSupervisor(SuperviseOptions{
+		Binary:       fake,
+		APIBase:      "http://127.0.0.1:8777",
+		Env:          os.Environ(),
+		ListMonitors: list,
+		PollInterval: 20 * time.Millisecond,
+	})
+	stop := make(chan struct{})
+	done := make(chan error, 1)
+	go func() { done <- sup.Run([]Monitor{{Name: "DP-2", Geometry: "3440x1440+0+0"}}, stop) }()
+
+	select {
+	case <-listing:
+	case <-time.After(5 * time.Second):
+		close(stop)
+		t.Fatal("supervisor never polled the monitors")
+	}
+	close(stop)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervisor did not stop while a monitor read hung")
 	}
 }
 

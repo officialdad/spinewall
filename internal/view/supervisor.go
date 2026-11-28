@@ -1,6 +1,7 @@
 package view
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,9 +18,13 @@ const restartPause = 2 * time.Second
 // monitorPoll is how often the supervisor re-reads the compositor's monitors. A
 // display reconfigure does not kill a window, so the supervisor must notice the
 // new topology itself and re-place the affected windows. Reading the list starts
-// a short-lived Qt process, so this is a backstop: the launcher reloads in-process
-// on an output change and only an add, remove or rename needs this re-place.
+// a short-lived Qt process, so this is a backstop: the launcher exits when its own
+// output goes away, and this poll catches an added output or a geometry move.
 const monitorPoll = 10 * time.Second
+
+// listTimeout bounds one monitor read. A Wayland client can stall during a
+// display reconfigure, and a hung read must not block stop.
+const listTimeout = 5 * time.Second
 
 // Supervisor runs one launcher window per monitor and keeps them alive. It
 // re-reads the monitor list on a timer and re-places a window when its monitor
@@ -32,7 +37,7 @@ type Supervisor struct {
 	layer   string
 	backend string
 	logf    func(string)
-	list    func() ([]Monitor, error)
+	list    func(context.Context) ([]Monitor, error)
 	poll    time.Duration
 }
 
@@ -53,8 +58,8 @@ type SuperviseOptions struct {
 	Logf func(string)
 	// ListMonitors overrides how the supervisor reads the current monitors. Nil
 	// asks the launcher for them. A test sets it to change the topology without
-	// a real compositor.
-	ListMonitors func() ([]Monitor, error)
+	// a real compositor. The supervisor cancels ctx on a timeout or on stop.
+	ListMonitors func(ctx context.Context) ([]Monitor, error)
 	// PollInterval is how often to re-read the monitors. Zero uses monitorPoll.
 	PollInterval time.Duration
 }
@@ -75,7 +80,7 @@ func NewSupervisor(opts SuperviseOptions) *Supervisor {
 	}
 	list := opts.ListMonitors
 	if list == nil {
-		list = func() ([]Monitor, error) { return ListMonitors(opts.Binary, opts.Env) }
+		list = func(ctx context.Context) ([]Monitor, error) { return ListMonitors(ctx, opts.Binary, opts.Env) }
 	}
 	poll := opts.PollInterval
 	if poll <= 0 {
@@ -101,7 +106,7 @@ type window struct {
 func (s *Supervisor) Run(monitors []Monitor, stop <-chan struct{}) error {
 	if len(monitors) == 0 {
 		var err error
-		monitors, err = s.list()
+		monitors, err = s.listMonitors(stop)
 		if err != nil {
 			return err
 		}
@@ -127,7 +132,7 @@ func (s *Supervisor) Run(monitors []Monitor, stop <-chan struct{}) error {
 		case <-stop:
 			return nil
 		case <-ticker.C:
-			next, err := s.list()
+			next, err := s.listMonitors(stop)
 			if err != nil {
 				s.logf("list monitors: " + err.Error())
 				continue
@@ -143,6 +148,21 @@ func (s *Supervisor) Run(monitors []Monitor, stop <-chan struct{}) error {
 			s.reconcile(desired, running, stop)
 		}
 	}
+}
+
+// listMonitors reads the monitors, giving up after listTimeout or when stop
+// closes.
+func (s *Supervisor) listMonitors(stop <-chan struct{}) ([]Monitor, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), listTimeout)
+	defer cancel()
+	go func() {
+		select {
+		case <-stop:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return s.list(ctx)
 }
 
 // reconcile makes the running windows match the monitor list: it retires a

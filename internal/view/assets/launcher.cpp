@@ -324,16 +324,27 @@ int main(int argc, char **argv) {
                     QStringLiteral("ActiveChanged"), reload, SLOT(start()));
 
     // A display reconfigure can leave this surface orphaned on a vanished
-    // output, drawing nothing while the process stays alive, and a GPU context
-    // loss can stall the draw loop the same way. The supervisor re-creates a
-    // window when the output set itself changes; these in-process hooks reload
-    // the page for a reconfigure that does not, and for a dead scene graph, as
-    // the page already reloads on lock, resume and webglcontextlost.
+    // output, drawing nothing while the process stays alive. A page reload does
+    // not re-create a layer-shell surface bound to a removed screen, so losing
+    // this window's own screen exits and the supervisor relaunches it on the
+    // current output. Another screen coming or going only reloads the page. A
+    // scene graph error leaves no context a reload can fix, so it exits too.
     QObject::connect(&app, &QGuiApplication::screenAdded, reload, [reload]() { reload->start(); });
-    QObject::connect(&app, &QGuiApplication::screenRemoved, reload, [reload]() { reload->start(); });
+    QObject::connect(&app, &QGuiApplication::screenRemoved, reload, [reload, screen](QScreen *removed) {
+        if (removed == screen) {
+            std::fprintf(stderr, "SPVIEW screen %s removed, exiting\n", removed->name().toLocal8Bit().constData());
+            QCoreApplication::exit(1);
+            return;
+        }
+        reload->start();
+    });
     QObject::connect(&app, &QGuiApplication::primaryScreenChanged, reload, [reload]() { reload->start(); });
-    QObject::connect(window, &QQuickWindow::sceneGraphError, reload,
-                     [reload](QQuickWindow::SceneGraphError, const QString &) { reload->start(); });
+    QObject::connect(window, &QQuickWindow::sceneGraphError, &app,
+                     [](QQuickWindow::SceneGraphError, const QString &message) {
+                         std::fprintf(stderr, "SPVIEW scene graph error %s, exiting\n",
+                                      message.toLocal8Bit().constData());
+                         QCoreApplication::exit(1);
+                     });
 
     return app.exec();
 }

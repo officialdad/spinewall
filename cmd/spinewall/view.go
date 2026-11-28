@@ -102,7 +102,7 @@ func runViewCommand(args []string) error {
 		return err
 	}
 	if listOnly {
-		monitors, err := view.ListMonitors(bin, viewEnv(backend))
+		monitors, err := view.ListMonitors(context.Background(), bin, viewEnv(backend))
 		if err != nil {
 			return err
 		}
